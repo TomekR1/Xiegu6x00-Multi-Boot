@@ -30,6 +30,13 @@ SOURCES = [
                ("condoruy/X6100-CX8ANM", r"^Xiegu_X6100-CX8ANM_v[\d.]+\.img\.zip$")],
      "about": "CX8ANM: wydania 1.1.x (na bazie OpenX6X00) i wcześniejsze 1.0.x",
      "logo": "condoruy/X6100-CX8ANM/HEAD/boot/logo.png", "crop": (0.0, 0.0, 1.0, 0.70)},
+    {"id": "1ko125", "name": "1KO125",
+     "feeds": [("TheMurusTeam/x6100_gui", r"^sdcard-1KO125-[\w.\-]+\.img\.zip$")],
+     "about": "1KO125 (na bazie OpenX6100): WEFAX, SSTV, NAVTEX, DSC, FT8 CB; na razie wersje testowe"},
+    {"id": "iu1wxy", "name": "IU1WXY",
+     "feeds": [("IU1WXY/X6100-IU1WXY", r"^x6100-iu1wxy-[\d.]+-sdcard\.img$")],
+     "about": "IU1WXY (X6100 Link): oprogramowanie zamknięte, na warunkach autora (LICENSE w jego repo)",
+     "no_logo": True},
     {"id": "r1cbu", "name": "R1CBU",
      "feeds": [("gdyuldin/x6100_gui", r"^sdcard.*\.img\.zip$")],
      "about": "klasyczne oprogramowanie R1CBU (gdyuldin)",
@@ -132,9 +139,9 @@ RAW = "https://raw.githubusercontent.com/"
 
 def source_for(name):
     """The catalog source a system's name belongs to (CX8ANM before OpenX6X00: its 1.1.x is named
-    OpenX6X00-CX8ANM), or None"""
+    OpenX6X00-CX8ANM; 1KO125 and IU1WXY before the trees they come from), or None"""
     n = name.lower().replace(" ", "").replace("_", "").replace("-", "")
-    for sid in ("cx8anm", "openx6100", "openx6x00", "r1cbu"):
+    for sid in ("1ko125", "iu1wxy", "cx8anm", "openx6100", "openx6x00", "r1cbu"):
         if sid in n:
             return next(x for x in SOURCES if x["id"] == sid)
     if "x6100gui" in n or "aether" in n:
@@ -142,24 +149,62 @@ def source_for(name):
     return None
 
 
-def fetch_logo(source, cache_dir, timeout=10):
-    """The project's own logo (its boot screen picture, from its repository), cached; None offline"""
-    if not source or not source.get("logo"):
+# Where projects of this family keep their boot logo, tried in each of the source's repositories
+# when its own address does not answer (the project moved it, or none was set)
+LOGO_PATHS = ["boot/logo.png", "logo.png", "assets/logo.png", "images/logo.png", "docs/logo.png",
+              "br2_external/board/X6100/linux/logo.png", "board/X6100/linux/logo.png"]
+_missing = set()
+
+
+def _raw_png(path, timeout):
+    if path in _missing:
+        return None
+    try:
+        req = urllib.request.Request(RAW + path, headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = r.read(4 << 20)
+    except (urllib.error.URLError, OSError, ValueError):
+        _missing.add(path)
+        return None
+    if not data.startswith(b"\x89PNG"):
+        _missing.add(path)
+        return None
+    return data
+
+
+def logo_candidates(source):
+    """The addresses to try for a source's logo, its own first"""
+    if not source or source.get("no_logo"):
+        return []
+    out = [source["logo"]] if source.get("logo") else []
+    for repo, _ in source["feeds"]:
+        owner = repo.split("/")[0]
+        for p in LOGO_PATHS:
+            out.append("%s/HEAD/%s" % (repo, p))
+        # x6100_gui forks keep the boot logo in their buildroot tree
+        for p in LOGO_PATHS[-2:]:
+            out.append("%s/AetherX6100Buildroot/HEAD/%s" % (owner, p))
+    seen = set()
+    return [x for x in out if not (x in seen or seen.add(x))]
+
+
+def fetch_logo(source, cache_dir, timeout=8, fetch=None):
+    """The project's own logo (its boot screen picture, from its repository), cached; None when
+    there is none to be had (offline, nothing found, or a project whose terms keep its graphics)"""
+    cands = logo_candidates(source)
+    if not cands:
         return None
     d = os.path.join(cache_dir, "logos")
     os.makedirs(d, exist_ok=True)
     path = os.path.join(d, source["id"] + ".png")
     if os.path.exists(path) and os.path.getsize(path) > 0:
         return path
-    try:
-        req = urllib.request.Request(RAW + source["logo"], headers={"User-Agent": UA})
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            data = r.read(4 << 20)
-    except (urllib.error.URLError, OSError, ValueError):
-        return None
-    if not data.startswith(b"\x89PNG"):
-        return None
-    with open(path + ".part", "wb") as f:
-        f.write(data)
-    os.replace(path + ".part", path)
-    return path
+    get = fetch or (lambda p: _raw_png(p, timeout))
+    for c in cands:
+        data = get(c)
+        if data:
+            with open(path + ".part", "wb") as f:
+                f.write(data)
+            os.replace(path + ".part", path)
+            return path
+    return None

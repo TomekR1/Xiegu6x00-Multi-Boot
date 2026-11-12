@@ -58,7 +58,8 @@ def tile(entry):
     crop = None
     if logo:
         from . import catalog
-        crop = (catalog.source_for(entry["name"]) or {}).get("crop")
+        src = catalog.source_for(entry["name"]) or {}
+        crop = src.get("crop") if logo and src.get("logo") else None
     return {"name": entry["name"], "logo": logo, "crop": crop}
 
 

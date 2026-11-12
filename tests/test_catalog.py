@@ -36,6 +36,7 @@ class CatalogTest(unittest.TestCase):
 
     def test_other_sources_match_their_assets(self):
         names = {"openx6100": ["sdcard.v1.2.0.img.zip"], "r1cbu": ["sdcard.img.zip"],
+                 "1ko125": ["sdcard-1KO125-1.1-beta1.img.zip"], "iu1wxy": ["x6100-iu1wxy-0.2.1-sdcard.img"],
                  "cx8anm": ["OpenX6X00-CX8ANM-x6100-v1.1.5-sdcard.img.zip", "Xiegu_X6100-CX8ANM_v1.0.52.img.zip"]}
         for src in catalog.SOURCES[1:]:
             want = names[src["id"]]
@@ -66,6 +67,23 @@ class CatalogTest(unittest.TestCase):
         bad = dict(good, tag="v2", sha256="00" * 32)
         with self.assertRaises(catalog.CatalogError):
             catalog.download(src, bad, cache)
+
+
+    def test_logo_fallback(self):
+        d = tempfile.mkdtemp()
+        src = dict(catalog.SOURCES[0], logo="Guru-RF/OpenX6X00/HEAD/moved/away.png")
+        asked = []
+
+        def fetch(path):
+            asked.append(path)
+            return b"\x89PNG fake" if path.endswith("Guru-RF/OpenX6X00/HEAD/boot/logo.png") else None
+        p = catalog.fetch_logo(src, d, fetch=fetch)
+        self.assertTrue(p and p.endswith("openx6x00.png"))
+        self.assertEqual(asked[0], "Guru-RF/OpenX6X00/HEAD/moved/away.png")      # its own address first
+        iu = next(x for x in catalog.SOURCES if x["id"] == "iu1wxy")
+        self.assertIsNone(catalog.fetch_logo(iu, d, fetch=lambda p: b"\x89PNG"))  # its graphics are not taken
+        self.assertEqual(catalog.source_for("1KO125 v1.1-beta1")["id"], "1ko125")
+        self.assertEqual(catalog.source_for("OpenX6X00-CX8ANM 1.1.5")["id"], "cx8anm")
 
 
 if __name__ == "__main__":

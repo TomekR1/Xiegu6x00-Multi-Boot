@@ -114,6 +114,16 @@ zaznaczona). Po kliknięciu **Dodaj** aplikacja pobiera obraz, sprawdza rozmiar 
 | OpenX6100 (następca R1CBU) | [OpenX6100/x6100_gui](https://github.com/OpenX6100/x6100_gui) |
 | CX8ANM | [condoruy/OpenX6X00-CX8ANM](https://github.com/condoruy/OpenX6X00-CX8ANM) (1.1.x), [condoruy/X6100-CX8ANM](https://github.com/condoruy/X6100-CX8ANM) (1.0.x) |
 | R1CBU (klasyczny) | [gdyuldin/x6100_gui](https://github.com/gdyuldin/x6100_gui) |
+| 1KO125 | [TheMurusTeam/x6100_gui](https://github.com/TheMurusTeam/x6100_gui) (na razie wersje testowe) |
+| IU1WXY (X6100 Link) | [IU1WXY/X6100-IU1WXY](https://github.com/IU1WXY/X6100-IU1WXY): oprogramowanie zamknięte; aplikacja pobiera je z wydań autora i kopiuje na kartę bez zmian, nie używa jego grafiki (warunki w jego LICENSE) |
+
+Logo każdego systemu aplikacja pobiera z repozytorium projektu. Jeśli wpisany adres nie odpowiada,
+szuka w typowych miejscach (`boot/logo.png`, `logo.png`, `assets/logo.png`, logo jądra
+w `AetherX6100Buildroot`). Gdy nic nie znajdzie, rysuje kafelek z nazwą.
+
+Nie ma w katalogu: Debian ([agrif/debian-x6100](https://github.com/agrif/debian-x6100)), który nie
+publikuje gotowych obrazów, oraz WSPR ([sstjohn/x6100-wspr](https://github.com/sstjohn/x6100-wspr))
+i Armbian, które mają inny układ partycji startowej (na razie nieobsługiwany).
 
 W wierszu poleceń zamiast pliku można podać `openx6x00@latest`, `openx6100@v1.2.0`, `cx8anm@latest` itd.;
 `catalog` wypisuje dostępne wersje. Obraz Xiegu nie jest pobierany: system Xiegu startuje
