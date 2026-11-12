@@ -126,10 +126,12 @@ jobs:
           grep -q "'graphics': True" build.log
           rm -f "$RUNNER_TEMP/check.img"
 
+  # A release only from a tag (git tag v0.1.0 && git push origin v0.1.0): the apps and the menu's
+  # U-Boot. A push to main builds and checks everything, the apps stay as the run's artifacts.
   release:
     needs: [apps, live-check, uboot]
     # One app that did not build (GitHub's macOS queue) does not hold back the others
-    if: ${{ !cancelled() && needs.uboot.result == 'success' && needs.live-check.result == 'success' }}
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') && needs.uboot.result == 'success' && needs.live-check.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -138,32 +140,26 @@ jobs:
         run: ls art/Xiegu-Multi-Patcher* >/dev/null
       - uses: actions/download-artifact@v4
         with: {name: u-boot-x6100-menu, path: art}
-      - name: Replace the previous test build
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        env: {GH_TOKEN: "${{ github.token }}"}
-        run: gh release delete test-build --cleanup-tag --yes -R "${{ github.repository }}" || true
       - run: ls -la art
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'test-build' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Wersja testowa (z gałęzi main)' }}
-          prerelease: true
+          tag_name: ${{ github.ref_name }}
+          name: Xiegu Multi Patcher ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
           make_latest: true
           files: art/*
           body: |
-            **Wersja testowa, nie była jeszcze uruchamiana na radiu.**
+            Kilka systemów na jednej karcie SD dla Xiegu X6100, z menu na ekranie radia (F1–F5).
 
-            Aplikacje:
+            **Pobierz aplikację dla swojego komputera:**
             - Windows: `Xiegu-Multi-Patcher.exe`
-            - macOS: `Xiegu-Multi-Patcher-macOS.zip` (rozpakuj; przy pierwszym uruchomieniu prawy klik > Otwórz)
-            - Linux: `Xiegu-Multi-Patcher-Linux` (`chmod +x`, do zapisu karty potrzebny pkexec)
+            - macOS: `Xiegu-Multi-Patcher-macOS.zip` (rozpakuj; za pierwszym razem prawy klik → Otwórz)
+            - Linux: `Xiegu-Multi-Patcher-Linux` (`chmod +x`; do zapisu karty potrzebny pkexec)
 
-            Systemów nie ma w wydaniu: wybierasz je i pobierasz w aplikacji
-            (**+ Z internetu…**, najnowsze wersje prosto z wydań ich autorów).
+            Systemy radia (OpenX6X00, OpenX6100, CX8ANM, 1KO125, IU1WXY, R1CBU) pobierasz w aplikacji
+            przyciskiem **+ Z internetu…**, prosto z wydań ich autorów. Instrukcja: README w repozytorium.
 
             `u-boot-x6100-menu.bin`: U-Boot menu z obsługą ekranu X6100 (aplikacja ma go w sobie).
 
-            Aplikacja: SQ6RT, https://www.qrz.com/db/SQ6RT
-
-            Bez wciśnięcia klawisza po 5 s startuje F1.
+            Problemy zgłaszaj w Issues. Aplikacja: SQ6RT, https://www.qrz.com/db/SQ6RT

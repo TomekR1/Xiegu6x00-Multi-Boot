@@ -1,168 +1,148 @@
-# Xiegu6x00 Multi-Boot: Xiegu Multi Patcher
+# Xiegu Multi Patcher
+
+Kilka systemów na jednej karcie SD dla **Xiegu X6100**. Przy włączaniu radia na ekranie
+pojawia się menu z logo każdego systemu, a system wybierasz klawiszem **F1–F5** pod ekranem.
+Bez wciśnięcia klawisza po kilku sekundach startuje system domyślny. W menu może być też
+oryginalny **system Xiegu z pamięci radia (eMMC)**; aplikacja niczego w eMMC nie zmienia.
 
 Autor aplikacji: [SQ6RT](https://www.qrz.com/db/SQ6RT)
 
 ## Pobieranie
 
-Gotowe pliki są w zakładce **[Releases](../../releases)**:
+Najnowsza wersja jest w zakładce **[Releases](../../releases/latest)**:
 
-| Plik | Dla |
+| Plik | System |
 |---|---|
-| `Xiegu-Multi-Patcher.exe` | Windows 10/11 (poprosi o uprawnienia administratora) |
-| `Xiegu-Multi-Patcher-macOS.zip` | macOS (rozpakuj; za pierwszym razem prawy klik > Otwórz) |
-| `Xiegu-Multi-Patcher-Linux` | Linux x86-64 (`chmod +x`; do zapisu karty potrzebny `pkexec`) |
-| `u-boot-x6100-menu.bin` | sam U-Boot menu z obsługą ekranu |
+| `Xiegu-Multi-Patcher.exe` | Windows 10/11 |
+| `Xiegu-Multi-Patcher-macOS.zip` | macOS: rozpakuj, przy pierwszym uruchomieniu prawy klik → **Otwórz** |
+| `Xiegu-Multi-Patcher-Linux` | Linux x86-64: `chmod +x Xiegu-Multi-Patcher-Linux`; do zapisu karty potrzebny `pkexec` |
 
-Instalacja Pythona nie jest potrzebna. **Wydanie nie zawiera systemów**: wybierasz je i pobierasz
-w aplikacji (**+ Z internetu…**). Pliki buduje GitHub Actions (`.github/workflows/build.yml`)
-przy każdej zmianie na gałęzi `main` i przy każdym tagu `v*`.
+Nic nie trzeba instalować. Systemów radia nie ma w wydaniu: wybierasz je i pobierasz
+w aplikacji, prosto z wydań ich autorów.
 
+## Jak przygotować kartę
 
-Program w stylu balenaEtchera dla **Xiegu X6100**: dodajesz obrazy kart kilku systemów
-(np. OpenX6X00 w dwóch wersjach) i program składa z nich **jedną kartę SD z menu startowym**.
-Przy włączaniu radia na ekranie pojawia się menu, a system wybierasz klawiszem **F1–F5**.
-Opcjonalnie w menu jest też **system Xiegu z pamięci wewnętrznej (eMMC)**, który pozostaje
-nietknięty.
+1. **+ Z internetu…**: wybierz system i wersję (najnowsza jest zaznaczona) i kliknij **Dodaj**.
+   Aplikacja pobierze obraz i sprawdzi go. Możesz dodać do 5 pozycji.
+   Obraz z dysku dodasz przyciskiem **+ Obraz karty…** (`.img`, `.img.zip`, `.img.xz`).
+2. **+ Xiegu z eMMC**: pozycja w menu, która uruchamia oryginalny system radia.
+3. Ustaw kolejność (**W górę / W dół**), nazwy (dwuklik na liście) i system domyślny
+   (**Domyślny**, ★). **Logo…** podmienia logo na własny obrazek PNG/JPG.
+   **Podgląd menu** pokazuje, jak menu będzie wyglądać na ekranie radia.
+4. Wybierz **czas na wybór** (0–9 s) i **partycję DATA** (patrz niżej).
+5. Włóż kartę SD do komputera, wybierz ją na liście i kliknij **Wgraj na kartę**.
+   System poprosi o hasło administratora; po zapisie aplikacja sprawdza, czy wszystko się zgadza.
+   Zamiast tego możesz kliknąć **Zapisz jako plik .img…** i wgrać plik balenaEtcherem.
 
-> **Status: wersja testowa.** Karta jest sprawdzana narzędziami (`fsck.fat`, `e2fsck`, `blkid`,
-> `sfdisk`), ale menu nie było jeszcze uruchomione na radiu.
+Zapis kasuje całą zawartość wybranej karty. Aplikacja pokazuje tylko karty wymienne
+i nigdy dysku systemowego, ale sprawdź nazwę i rozmiar karty przed potwierdzeniem.
 
-## Jak używać
-
-1. Uruchom program:
-   - najprościej: plik z [Releases](../../releases) dla Twojego systemu, albo ze źródeł:
-   - Windows: `uruchom-windows.bat` (potrzebny [Python 3.9+](https://www.python.org/downloads/),
-     przy instalacji zaznacz *Add python.exe to PATH*). Gotowy `Xiegu-Multi-Patcher.exe` powstaje w
-     GitHub Actions (patrz niżej).
-   - macOS: `uruchom-mac.command`.
-   - Linux: `./uruchom-linux.sh` (pakiety `python3-tk`, do zapisu na kartę `pkexec`).
-2. **+ Obraz karty…**: wybierz `.img` albo `.img.zip`, np. `OpenX6X00-x6100-v0.3.9-sdcard.img.zip`.
-   Kolejne obrazy dodajesz tak samo, łącznie do 5 pozycji.
-3. **+ Xiegu z eMMC**: pozycja menu, która uruchamia oryginalny system radia.
-4. Ustaw kolejność (**W górę / W dół**), nazwy (dwuklik) i system domyślny (**Domyślny**, ★).
-5. **Wgraj na kartę** (program poprosi o uprawnienia administratora i na koniec sprawdzi zapis)
-   albo **Zapisz jako plik .img…** i wgraj go balenaEtcherem.
-
-## Co jest na karcie
-
-| Miejsce | Zawartość |
-|---|---|
-| 8 KiB | U-Boot menu (mainline 2026.07 z obsługą ekranu X6100, `uboot/`) |
-| p1 `BOOT` (FAT32) | `boot.scr` z menu, `boot.cmd` (to samo tekstem), `bootmenu.env`, `menu.txt`, `SYS1/`…`SYS5/` z jądrem i `.dtb` każdego systemu |
-| p2 | system plików systemu 1, kopia bajt w bajt |
-| p5, p6, … (w p4) | systemy plików kolejnych systemów |
-| p3 `DATA` (FAT32) | ustawienia i logi; na karcie zajmuje całe wolne miejsce |
-
-Każdy system startuje z `root=/dev/mmcblk0pN` swojej partycji. OpenX6X00 znajduje DATA po
-etykiecie, a jego aktualizacje (Settings > Info > Update) zmieniają tylko pliki systemu, więc menu
-zostaje. **Wszystkie systemy dzielą jedną partycję DATA**, czyli także ustawienia (`params.db`).
-
-Bez ponownego wgrywania karty można na komputerze zmienić plik `bootmenu.env` na partycji BOOT:
-
-```
-bm_default=1
-bm_timeout=50
-xiegu_dev=1
-xiegu_part=1
-xiegu_kernel=zImage
-xiegu_fdt=sun8i-r16-x6100.dtb
-xiegu_args=console=ttyS0,115200 root=/dev/mmcblk2p2 rootwait panic=10 fbcon=rotate:3 video=VGA:480x800
-```
-
-`bm_default` to numer klawisza (1 = F1), `bm_timeout` to czas w dziesiątych częściach sekundy
-(50 = 5 s), `xiegu_dev=1` to eMMC widziane przez U-Boot jako `mmc 1`. W tym pliku nie wolno
-dopisywać komentarzy na końcu linii, bo U-Boot wczyta je jako część wartości.
-
-Parametry `xiegu_*` odpowiadają temu, co instalator Xiegu (obraz `sdcard.img` z aktualizacji
-V1.1.9, skrypty `install_emmc.sh`/`fmt_emmc.sh`) zapisuje do eMMC: p1 FAT z `zImage`,
-`sun8i-r16-x6100.dtb` i `boot.scr`, p2 ext4, `root=/dev/mmcblk2p2`, a w U-Boot eMMC to `mmc 1`.
-Jeśli system Xiegu się nie uruchomi, menu pokaże na ekranie partycje i pliki eMMC (zrób zdjęcie),
-a po 60 s uruchomi system domyślny.
-
-**Obrazu aktualizacji Xiegu nie dodaje się jako systemu na karcie.** Ten obraz to instalator:
-po uruchomieniu nadpisuje eMMC. Program rozpoznaje go (plik `rootfs.tar` na trzeciej partycji)
-i odmawia. System Xiegu dodajesz pozycją **+ Xiegu z eMMC**.
-
-## Wiersz poleceń
-
-```
-python x6100_multiboot.py info OBRAZ...
-python x6100_multiboot.py build -o karta.img --xiegu --names "OpenX6X00 0.3.9,OpenX6X00 0.3.8" A.img.zip B.img.zip
-python x6100_multiboot.py list
-python -m unittest discover -s tests
-```
-
-## Jak to działa w U-Boot
-
-Menu to zwykły skrypt U-Boot (`boot.scr`), działający z U-Boot, który już jest w obrazie OpenX6X00.
-Klawisze są odczytywane z matrycy GPIO panelu (według device tree X6100) tak samo jak w
-multiboot projektu [x6100-fw-mangler](https://github.com/j0ju/x6100-fw-mangler): wiersz w stan
-niski (`gpio clear PG6`), odczyt kolumn (`gpio input PE16`, 0 = wciśnięty). F1/F2/F3 = kolumny
-PE16/PE17/PE11 w wierszu PG6, F4/F5 = PE16/PE17 w wierszu PG8.
-Napisy idą na ekran przez `vidconsole` U-Boota (patrz niżej: U-Boot z obsługą ekranu).
-
-## Pobieranie systemów z internetu
-
-**+ Z internetu…** pokazuje znane systemy z listą ich wydań z GitHuba (najnowsza wersja jest
-zaznaczona). Po kliknięciu **Dodaj** aplikacja pobiera obraz, sprawdza rozmiar i sumę SHA-256
-(jeśli GitHub ją podaje) i dodaje go do menu. Obrazy zostają w pamięci podręcznej.
+## Systemy do pobrania w aplikacji
 
 | System | Źródło |
 |---|---|
 | OpenX6X00 | [Guru-RF/OpenX6X00](https://github.com/Guru-RF/OpenX6X00) |
 | OpenX6100 (następca R1CBU) | [OpenX6100/x6100_gui](https://github.com/OpenX6100/x6100_gui) |
-| CX8ANM | [condoruy/OpenX6X00-CX8ANM](https://github.com/condoruy/OpenX6X00-CX8ANM) (1.1.x), [condoruy/X6100-CX8ANM](https://github.com/condoruy/X6100-CX8ANM) (1.0.x) |
+| CX8ANM | [condoruy/OpenX6X00-CX8ANM](https://github.com/condoruy/OpenX6X00-CX8ANM) (1.1.x, na bazie OpenX6X00 i z jego wyglądem), [condoruy/X6100-CX8ANM](https://github.com/condoruy/X6100-CX8ANM) (1.0.x) |
+| 1KO125 | [TheMurusTeam/x6100_gui](https://github.com/TheMurusTeam/x6100_gui) |
+| IU1WXY (X6100 Link) | [IU1WXY/X6100-IU1WXY](https://github.com/IU1WXY/X6100-IU1WXY): oprogramowanie zamknięte; aplikacja pobiera obraz z wydań autora i kopiuje go na kartę bez zmian, zgodnie z jego [warunkami](https://github.com/IU1WXY/X6100-IU1WXY/blob/main/LICENSE) |
 | R1CBU (klasyczny) | [gdyuldin/x6100_gui](https://github.com/gdyuldin/x6100_gui) |
-| 1KO125 | [TheMurusTeam/x6100_gui](https://github.com/TheMurusTeam/x6100_gui) (na razie wersje testowe) |
-| IU1WXY (X6100 Link) | [IU1WXY/X6100-IU1WXY](https://github.com/IU1WXY/X6100-IU1WXY): oprogramowanie zamknięte; aplikacja pobiera je z wydań autora i kopiuje na kartę bez zmian, nie używa jego grafiki (warunki w jego LICENSE) |
 
-Logo każdego systemu aplikacja pobiera z repozytorium projektu. Jeśli wpisany adres nie odpowiada,
-szuka w typowych miejscach (`boot/logo.png`, `logo.png`, `assets/logo.png`, logo jądra
-w `AetherX6100Buildroot`). Gdy nic nie znajdzie, rysuje kafelek z nazwą.
-
-Nie ma w katalogu: Debian ([agrif/debian-x6100](https://github.com/agrif/debian-x6100)), który nie
-publikuje gotowych obrazów, oraz WSPR ([sstjohn/x6100-wspr](https://github.com/sstjohn/x6100-wspr))
-i Armbian, które mają inny układ partycji startowej (na razie nieobsługiwany).
-
-W wierszu poleceń zamiast pliku można podać `openx6x00@latest`, `openx6100@v1.2.0`, `cx8anm@latest` itd.;
-`catalog` wypisuje dostępne wersje. Obraz Xiegu nie jest pobierany: system Xiegu startuje
-z pamięci radia (pozycja **+ Xiegu z eMMC**).
-
-## Menu na ekranie radia
-
-- **Graficzne:** kafelek z logo dla każdego systemu, ustawiony nad jego fizycznym przyciskiem
-  F1–F5, system domyślny podświetlony, po wybraniu kafelek robi się zielony („START”).
-  Logo można wskazać w aplikacji (**Logo…**, dowolny PNG/JPG). Bez tego aplikacja rysuje
-  kafelek z nazwą w kolorach systemu. **Podgląd menu** pokazuje ekran przed zapisem.
-- **Odliczanie** do startu systemu domyślnego (0–9 s, `bm_secs` w `bootmenu.env`).
-- Jeśli obrazek się nie wczyta, menu pokazuje się jako kolorowy tekst.
+Logo w menu każdy system dostaje ze swojego repozytorium. Systemy bez logo do pobrania
+(i IU1WXY, którego grafiki aplikacja nie używa) mają kafelek z nazwą.
 
 ## Partycja DATA: wspólna albo osobna
 
-- **Wspólna:** jedna DATA (ustawienia, logi) dla wszystkich systemów.
-- **Osobna:** każdy system ma swoją DATA. W tablicy partycji jest zawsze tylko DATA systemu,
-  który ostatnio startował, jako trzecia partycja z etykietą `DATA`, więc systemy nie wymagają
-  zmian. Przed startem innego systemu U-Boot zapisuje sektor 0 karty z jego tablicą
-  (`SYSn/MBR.BIN` na BOOT), ale tylko wtedy, gdy się zmienia. Na komputerze widać tylko DATA
-  ostatnio uruchomionego systemu.
+DATA to partycja z ustawieniami i logami systemów.
 
-## U-Boot z obsługą ekranu (`uboot/`)
+- **Wspólna:** jedna DATA dla wszystkich systemów.
+- **Osobna:** każdy system ma własne ustawienia i logi. Na komputerze widać DATA systemu,
+  który był uruchomiony ostatnio.
 
-Ekran X6100 (kontroler Sitronix ST7701S, panel JLT4013A 480×800) trzeba najpierw zainicjować
-sekwencją poleceń przez SPI. Robi to dopiero sterownik w Linuksie, dlatego z U-Boot z obrazów
-systemów ekran pozostaje czarny i menu jest niewidoczne (sprawdzone na radiu: menu działało
-na ślepo, F2 uruchomił R1CBU). Katalog `uboot/` buduje U-Boot v2026.07 z:
+## Zmiany bez ponownego wgrywania karty
+
+Na partycji `BOOT` karty jest plik `bootmenu.env`. Można go zmienić na komputerze:
+
+```
+bm_default=1
+bm_secs=5
+```
+
+`bm_default` to klawisz systemu domyślnego (1 = F1), `bm_secs` to czas na wybór w sekundach
+(0–9). Nie dopisuj komentarzy na końcu linii.
+
+## Aktualizacje systemów
+
+Systemy aktualizowane z poziomu radia (np. OpenX6X00: Settings → Info → Update) zmieniają
+tylko swoje pliki, więc menu zostaje. Nową wersję, która wymaga nowego obrazu karty,
+dodajesz w aplikacji i wgrywasz kartę od nowa.
+
+## Problemy i uwagi
+
+Zgłaszaj je w zakładce **[Issues](../../issues)**. Pomaga:
+
+- system komputera (Windows / macOS / Linux) i zrzut ekranu z błędem;
+- zdjęcie ekranu radia, jeśli coś dzieje się przy starcie;
+- które systemy były na karcie i który klawisz został wciśnięty.
+
+Jeśli system Xiegu z eMMC się nie uruchomi, menu pokaże na ekranie zawartość eMMC:
+zrób zdjęcie i dołącz je do zgłoszenia.
+
+---
+
+## Dla programistów
+
+### Uruchamianie ze źródeł
+
+Python 3.9+ i Tk (na Linuksie pakiet `python3-tk`), opcjonalnie Pillow (menu graficzne) i certifi:
+
+```
+python x6100_multiboot.py                        # okno
+python x6100_multiboot.py catalog                # systemy do pobrania i ich wersje
+python x6100_multiboot.py build -o karta.img --xiegu --data separate openx6x00@latest cx8anm@latest
+python x6100_multiboot.py info OBRAZ...
+python -m unittest discover -s tests
+```
+
+### Układ karty
+
+| Miejsce | Zawartość |
+|---|---|
+| 8 KiB | U-Boot menu (`uboot/`) |
+| p1 `BOOT` (FAT32) | `boot.scr` (menu), `boot.cmd` (to samo tekstem), `bootmenu.env`, `menu.txt`, `MENU/*.BMP`, `SYS1/`…`SYS5/` z jądrem, `.dtb` i (przy osobnej DATA) `MBR.BIN` |
+| p2 | system plików systemu 1, kopia bajt w bajt |
+| p5, p6, … (w p4) | systemy plików kolejnych systemów |
+| p3 `DATA` (FAT32) | DATA (przy osobnej: DATA ostatnio uruchomionego systemu; pozostałe leżą za nią) |
+
+Każdy system startuje z `root=/dev/mmcblk0pN` swojej partycji. Przy osobnej DATA U-Boot przed
+startem systemu zapisuje sektor 0 karty z jego tablicą partycji (`SYSn/MBR.BIN`), ale tylko
+wtedy, gdy się zmienia; systemy widzą swoją DATA jako trzecią partycję z etykietą `DATA`.
+
+Pozycja Xiegu wczytuje `zImage` i `sun8i-r16-x6100.dtb` z `mmc 1:1` z
+`root=/dev/mmcblk2p2`, tak jak zapisuje je instalator Xiegu; parametry są w `bootmenu.env`
+(`xiegu_*`). Obraz aktualizacji Xiegu (instalator eMMC) aplikacja rozpoznaje i odrzuca.
+
+### Menu w U-Boot
+
+Menu to skrypt U-Boot (`boot.scr`). Klawisze są odczytywane z matrycy GPIO panelu, tak jak
+w multiboot projektu [x6100-fw-mangler](https://github.com/j0ju/x6100-fw-mangler): wiersz
+w stan niski (`gpio clear PG6`), odczyt kolumn (`gpio input PE16`, 0 = wciśnięty).
+F1/F2/F3 = kolumny PE16/PE17/PE11 w wierszu PG6, F4/F5 = PE16/PE17 w wierszu PG8.
+Obraz menu (8-bit BMP, obrócony do układu ekranu) rysuje `bmp display`, odliczanie
+i teksty idą przez `vidconsole` z kodami ANSI.
+
+### U-Boot z obsługą ekranu (`uboot/`)
+
+Ekran X6100 (kontroler Sitronix ST7701S, panel JLT4013A 480×800) trzeba zainicjować sekwencją
+poleceń przez SPI, czego U-Boot z obrazów systemów nie robi. `uboot/build.sh` buduje U-Boot
+v2026.07 z:
 
 - inicjalizacją ST7701S przeniesioną ze sterownika Linuksa (`panel-jinglitai-jlt4013a.c`,
   GPL-2.0), wysyłaną programowym SPI na pinach PL7 (CS), PL8 (MOSI), PL9 (SCK), PL10 (D/C);
-- konsolą obróconą o 270° (jak `fbcon=rotate:3`) i czcionką 16×32.
+- konsolą obróconą o 270° (jak `fbcon=rotate:3`), czcionką 16×32, kolorami ANSI i `bmp display`.
 
-`uboot/build.sh` uruchamia GitHub Actions, a gotowy `u-boot-x6100-menu.bin` trafia do aplikacji
-i jest domyślnie wgrywany na kartę. `--uboot image` wgrywa zamiast niego U-Boot z pierwszego
-obrazu (wtedy menu działa bez ekranu).
+### Budowanie
 
-## Do zrobienia
-
-- Test na radiu: menu, klawisze, start obu systemów, start Xiegu (układ eMMC).
-- Menu graficzne (BMP) wymaga U-Boot z `CONFIG_CMD_BMP`.
-- Osobne partycje DATA dla każdego systemu (opcja).
+`.github/workflows/build.yml`: testy, U-Boot, aplikacje (PyInstaller) na Windows, macOS
+i Linux oraz sprawdzenie na żywo (aplikacja pobiera najnowsze systemy i składa z nich kartę).
+Wydanie powstaje z tagu `v*`. Ikonę rysuje `tools/make_icon.py`.
