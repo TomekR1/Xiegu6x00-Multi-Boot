@@ -81,7 +81,8 @@ class ComposeTest(unittest.TestCase):
             self.assertIn("root=/dev/mmcblk0p2", script)
             self.assertIn("root=/dev/mmcblk0p5", script)
             self.assertIn("setenv bm_default 2", script)
-            self.assertIn("bm_timeout 30", script)
+            self.assertIn("setenv bm_secs 3", script)
+            self.assertIn("itest ${i} -ge ${bm_ticks}", script)
             data = FatReader(f, parts[3][2] * SECTOR)
             self.assertEqual(data.listdir(), [])
             f.seek(parts[3][2] * SECTOR + 71)
@@ -90,6 +91,33 @@ class ComposeTest(unittest.TestCase):
             self.assertEqual(f.read(4), b"ROOT")
             f.seek(8192 + 4)
             self.assertEqual(f.read(8), b"eGON.BT0")
+
+
+    def test_separate_data(self):
+        a = os.path.join(self.tmp, "a.img")
+        b = os.path.join(self.tmp, "b.img")
+        fake_card(a)
+        fake_card(b)
+        sa, sb = SourceSystem(a, a), SourceSystem(b, b)
+        plan = compose([{"kind": "sd", "name": "A", "sys": sa}, {"kind": "sd", "name": "B", "sys": sb}],
+                       default=1, data_mb=40, data_mode="separate")
+        out = os.path.join(self.tmp, "sep.img")
+        write_image_file(plan, out)
+        self.assertEqual(plan.info["data_partitions"], 2)
+        with open(out, "rb") as f:
+            parts = {p[0]: p for p in read_mbr(f)}
+            boot = FatReader(f, parts[1][2] * SECTOR)
+            m1 = boot.read_file("SYS1/MBR.BIN")
+            m2 = boot.read_file("SYS2/MBR.BIN")
+            p3 = lambda m: struct.unpack_from("<I", m, 446 + 32 + 8)[0]
+            self.assertNotEqual(p3(m1), p3(m2))
+            self.assertEqual(parts[3][2], p3(m2))          # the card starts on the default's DATA (B)
+            for m in (m1, m2):
+                f.seek(p3(m) * SECTOR + 71)
+                self.assertEqual(f.read(11), b"DATA       ")
+            script = parse_script_image(boot.read_file("boot.scr"))
+            self.assertIn("SYS1/MBR.BIN", script)
+            self.assertIn("mmc write 0x45100000 0 1", script)
 
 
 if __name__ == "__main__":

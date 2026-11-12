@@ -42,14 +42,14 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            out: X6100-Multiboot-Windows
-            extra: --windowed --uac-admin
+            out: Xiegu-Multi-Patcher-Windows
+            extra: --onefile --windowed --uac-admin --icon x6100mb/assets/icon.ico
           - os: macos-latest
-            out: X6100-Multiboot-macOS
-            extra: --windowed
+            out: Xiegu-Multi-Patcher-macOS
+            extra: --onedir --windowed --icon x6100mb/assets/icon.icns --osx-bundle-identifier eu.multipatcher.xiegu
           - os: ubuntu-22.04
-            out: X6100-Multiboot-Linux
-            extra: ""
+            out: Xiegu-Multi-Patcher-Linux
+            extra: --onefile
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -59,22 +59,30 @@ jobs:
         run: python -c "import tkinter; print(tkinter.TkVersion)"
       - uses: actions/download-artifact@v4
         with: {name: u-boot-x6100-menu, path: x6100mb/data}
-      - run: pip install pyinstaller==6.11.1
-      - run: pyinstaller --noconfirm --onefile --name X6100-Multiboot ${{ matrix.extra }} --paths . --add-data "x6100mb/data:x6100mb/data" x6100_multiboot.py
+      - run: pip install pyinstaller==6.11.1 pillow==11.0.0
+      - name: Build
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --name "Xiegu Multi Patcher" ${{ matrix.extra }} --paths . \
+            --add-data "x6100mb/data:x6100mb/data" --add-data "x6100mb/assets:x6100mb/assets" x6100_multiboot.py
       - name: Smoke test
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = macOS ]; then B=dist/X6100-Multiboot.app/Contents/MacOS/X6100-Multiboot; else B=dist/X6100-Multiboot; fi
-          [ "$RUNNER_OS" = Windows ] && B=dist/X6100-Multiboot.exe
-          "$B" --help || "$B" info --help
+          case "$RUNNER_OS" in
+            macOS)   B="dist/Xiegu Multi Patcher.app/Contents/MacOS/Xiegu Multi Patcher" ;;
+            Windows) B="dist/Xiegu Multi Patcher.exe" ;;
+            Linux)   B="dist/Xiegu Multi Patcher" ;;
+          esac
+          "$B" --help || true
+          if [ "$RUNNER_OS" != Windows ]; then "$B" build --help | grep -q -- --data; fi
       - name: Pack
         shell: bash
         run: |
           mkdir out
           case "$RUNNER_OS" in
-            Windows) cp dist/X6100-Multiboot.exe out/ ;;
-            macOS)   (cd dist && ditto -c -k --keepParent X6100-Multiboot.app ../out/X6100-Multiboot-macOS.zip) ;;
-            Linux)   cp dist/X6100-Multiboot out/X6100-Multiboot-Linux && chmod +x out/X6100-Multiboot-Linux ;;
+            Windows) cp "dist/Xiegu Multi Patcher.exe" out/Xiegu-Multi-Patcher.exe ;;
+            macOS)   (cd dist && ditto -c -k --keepParent "Xiegu Multi Patcher.app" ../out/Xiegu-Multi-Patcher-macOS.zip) ;;
+            Linux)   cp "dist/Xiegu Multi Patcher" out/Xiegu-Multi-Patcher-Linux && chmod +x out/Xiegu-Multi-Patcher-Linux ;;
           esac
       - uses: actions/upload-artifact@v4
         with:
@@ -98,10 +106,12 @@ jobs:
           echo "9357804f1d81f2412d56116d26c44dda613f80b70fe4649d52e7686c90706071  src/R1CBU-v0.28.0.img.zip" | sha256sum -c
       - name: Build test card
         run: |
-          python x6100_multiboot.py build -o X6100-multiboot-TEST.img --xiegu --data-mb 256 \
+          pip install pillow==11.0.0
+          python x6100_multiboot.py build -o X6100-multiboot-TEST.img --xiegu --data-mb 256 --data separate \
             --names "OpenX6X00 v0.3.9,R1CBU v0.28.0" src/OpenX6X00-v0.3.9.img.zip src/R1CBU-v0.28.0.img.zip > build.log
           tail -c 600 build.log
           grep -q "menu, ekran" build.log
+          grep -q "'graphics': True" build.log
           python x6100_multiboot.py build -o X6100-multiboot-TEST-mini.img --xiegu --data-mb 128 \
             --names "OpenX6X00 v0.3.9" src/OpenX6X00-v0.3.9.img.zip > /dev/null
           xz -T0 -9 X6100-multiboot-TEST.img X6100-multiboot-TEST-mini.img
@@ -138,12 +148,12 @@ jobs:
             **Wersja testowa, nie była jeszcze uruchamiana na radiu.**
 
             Aplikacje:
-            - Windows: `X6100-Multiboot.exe`
-            - macOS: `X6100-Multiboot-macOS.zip` (rozpakuj; przy pierwszym uruchomieniu prawy klik > Otwórz)
-            - Linux: `X6100-Multiboot-Linux` (`chmod +x`, do zapisu karty potrzebny pkexec)
+            - Windows: `Xiegu-Multi-Patcher.exe`
+            - macOS: `Xiegu-Multi-Patcher-macOS.zip` (rozpakuj; przy pierwszym uruchomieniu prawy klik > Otwórz)
+            - Linux: `Xiegu-Multi-Patcher-Linux` (`chmod +x`, do zapisu karty potrzebny pkexec)
 
             Karty testowe (wgraj balenaEtcherem bez rozpakowywania):
-            - `X6100-multiboot-TEST.img.xz`: F1 OpenX6X00 v0.3.9, F2 R1CBU v0.28.0, F3 Xiegu z eMMC
+            - `X6100-multiboot-TEST.img.xz`: F1 OpenX6X00 v0.3.9, F2 R1CBU v0.28.0, F3 Xiegu z eMMC (osobne DATA)
             - `X6100-multiboot-TEST-mini.img.xz`: F1 OpenX6X00 v0.3.9, F2 Xiegu z eMMC
 
             Karty mają własny U-Boot z obsługą ekranu X6100 (`u-boot-x6100-menu.bin`), więc menu

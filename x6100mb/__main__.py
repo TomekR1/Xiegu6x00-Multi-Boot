@@ -31,7 +31,12 @@ def cli(argv):
     b.add_argument("-o", "--output", required=True)
     b.add_argument("--xiegu", action="store_true", help="an entry for Xiegu's system on the eMMC (last)")
     b.add_argument("--default", type=int, default=1, help="default entry, 1 = F1")
-    b.add_argument("--timeout", type=float, default=5)
+    b.add_argument("--timeout", type=int, default=5, help="seconds before the default starts (0-9)")
+    b.add_argument("--data", choices=["shared", "separate"], default="shared",
+                   help="one DATA partition for all systems, or one per system")
+    b.add_argument("--logo", action="append", default=[], metavar="N=FILE",
+                   help="a picture for entry N (1 = F1) in the graphic menu; repeatable")
+    b.add_argument("--no-graphics", action="store_true", help="text menu only")
     b.add_argument("--data-mb", type=int, default=1024)
     b.add_argument("--names", help="entry names, comma-separated")
     b.add_argument("--uboot", help="U-Boot: a u-boot-sunxi-with-spl.bin file, or 'image' for the first image's "
@@ -60,13 +65,19 @@ def cli(argv):
         entries = [{"kind": "sd", "name": n, "sys": s} for n, s in zip(names, systems)]
         if a.xiegu:
             entries.append({"kind": "xiegu", "name": "Xiegu (eMMC)"})
+        for spec in a.logo:
+            n, _, path = spec.partition("=")
+            if not n.isdigit() or not 1 <= int(n) <= len(entries) or not path:
+                raise SystemExit(f"--logo {spec}: expected N=FILE with N from 1 to {len(entries)}")
+            entries[int(n) - 1]["logo"] = path
         ub = None
         if a.uboot == "image":
             ub = systems[0]
         elif a.uboot:
             from .image import UBoot
             ub = UBoot(a.uboot)
-        plan = compose(entries, default=a.default - 1, timeout_s=a.timeout, data_mb=a.data_mb, uboot_from=ub)
+        plan = compose(entries, default=a.default - 1, timeout_s=a.timeout, data_mb=a.data_mb, uboot_from=ub,
+                       data_mode=a.data, graphics=not a.no_graphics)
         if a.script_only:
             print(plan.script)
             return 0

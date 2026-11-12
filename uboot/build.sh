@@ -22,7 +22,7 @@ sed 's/^CONFIG_VIDEO_LCD_MODE=.*/CONFIG_VIDEO_LCD_MODE="x:480,y:800,depth:18,pcl
 cat "$HERE/menu.config" >> configs/x6100_menu_defconfig
 export CROSS_COMPILE=arm-linux-gnueabihf-
 make -s x6100_menu_defconfig
-for o in VIDEO_LCD_ST7701S_X6100 CONSOLE_ROTATION VIDEO_FONT_16X32 CMD_GPIO; do
+for o in VIDEO_LCD_ST7701S_X6100 CONSOLE_ROTATION VIDEO_FONT_16X32 CMD_GPIO VIDEO_ANSI; do
     grep -q "^CONFIG_$o=y" .config || { echo "CONFIG_$o not set"; exit 1; }
 done
 make -s -j"$(nproc)"

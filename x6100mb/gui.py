@@ -14,7 +14,7 @@ from .compose import KEYS, MAX_ENTRIES, XIEGU_DEFAULTS, compose
 from .image import SourceSystem, cache_dir, open_source
 from .writer import Progress, write_device, write_image_file
 
-APP = "X6100 Multiboot"
+APP = "Xiegu Multi Patcher"
 PHASES = {"prepare": "Przygotowanie karty", "write": "Zapis", "sync": "Opróżnianie bufora karty",
           "verify": "Weryfikacja", "unzip": "Rozpakowywanie", "done": "Gotowe"}
 
@@ -44,8 +44,8 @@ class App:
         top.pack(fill="both", expand=True, padx=10, pady=10)
 
         ttk.Label(top, text=APP, font=("TkDefaultFont", 15, "bold")).pack(anchor="w")
-        ttk.Label(top, text="Kilka systemów na jednej karcie SD dla Xiegu X6100, wybór klawiszem F1–F5 "
-                            "przy włączaniu radia.").pack(anchor="w", pady=(0, 8))
+        ttk.Label(top, text="Kilka systemów na jednej karcie SD dla Xiegu X6100: przy włączaniu radia menu na "
+                            "ekranie, wybór klawiszem F1–F5.").pack(anchor="w", pady=(0, 8))
 
         box = ttk.LabelFrame(top, text="1. Systemy w menu")
         box.pack(fill="both", expand=True)
@@ -61,22 +61,30 @@ class App:
         for text, cmd in (("+ Obraz karty…", self.add_image), ("+ Xiegu z eMMC", self.add_xiegu),
                           ("Zmień nazwę", self.rename), ("W górę", lambda: self.move(-1)),
                           ("W dół", lambda: self.move(1)), ("Domyślny", self.set_default),
-                          ("Usuń", self.remove)):
+                          ("Logo…", self.choose_logo), ("Podgląd menu", self.preview), ("Usuń", self.remove)):
             ttk.Button(btns, text=text, command=cmd, width=17).pack(fill="x", pady=2)
 
         opts = ttk.LabelFrame(top, text="2. Ustawienia menu")
         opts.pack(fill="x", pady=(8, 0))
         ttk.Label(opts, text="Czas na wybór (s):").grid(row=0, column=0, sticky="w", **pad)
         self.timeout = tk.StringVar(value="5")
-        ttk.Spinbox(opts, from_=0, to=60, textvariable=self.timeout, width=6).grid(row=0, column=1, sticky="w")
+        ttk.Spinbox(opts, from_=0, to=9, textvariable=self.timeout, width=6).grid(row=0, column=1, sticky="w")
         ttk.Label(opts, text="DATA w pliku .img (MB):").grid(row=0, column=2, sticky="w", **pad)
         self.data_mb = tk.StringVar(value="1024")
         ttk.Spinbox(opts, from_=128, to=32768, increment=128, textvariable=self.data_mb, width=8).grid(
             row=0, column=3, sticky="w")
         ttk.Label(opts, text="(na karcie DATA zajmuje całe wolne miejsce)").grid(row=0, column=4, sticky="w", **pad)
+        ttk.Label(opts, text="Partycja DATA:").grid(row=1, column=0, sticky="w", **pad)
+        self.data_mode = tk.StringVar(value="shared")
+        dm = ttk.Frame(opts)
+        dm.grid(row=1, column=1, columnspan=4, sticky="w")
+        ttk.Radiobutton(dm, text="wspólna dla wszystkich systemów", value="shared",
+                        variable=self.data_mode).pack(side="left", padx=(0, 12))
+        ttk.Radiobutton(dm, text="osobna dla każdego systemu (własne ustawienia i logi)", value="separate",
+                        variable=self.data_mode).pack(side="left")
         self.show_adv = tk.BooleanVar(value=False)
         ttk.Checkbutton(opts, text="Zaawansowane: start systemu Xiegu z eMMC", variable=self.show_adv,
-                        command=self._toggle_adv).grid(row=1, column=0, columnspan=5, sticky="w", **pad)
+                        command=self._toggle_adv).grid(row=2, column=0, columnspan=5, sticky="w", **pad)
         self.adv = ttk.Frame(opts)
         self.xiegu_vars = {}
         labels = {"xiegu_dev": "Urządzenie mmc", "xiegu_part": "Partycja", "xiegu_kernel": "Jądro",
@@ -103,14 +111,14 @@ class App:
         self.btn_img = ttk.Button(b, text="Zapisz jako plik .img…", command=self.save_image)
         self.btn_img.pack(side="right")
 
-        self.status = tk.StringVar(value="Dodaj obraz karty systemu (.img lub .img.zip), np. OpenX6X00.")
+        self.status = tk.StringVar(value="Dodaj obraz karty systemu (.img, .img.zip lub .img.xz), np. OpenX6X00.")
         self.bar = ttk.Progressbar(top, mode="determinate", maximum=1000)
         self.bar.pack(fill="x", pady=(10, 2))
         ttk.Label(top, textvariable=self.status, wraplength=720).pack(anchor="w")
 
     def _toggle_adv(self):
         if self.show_adv.get():
-            self.adv.grid(row=2, column=0, columnspan=5, sticky="w", pady=(0, 6))
+            self.adv.grid(row=3, column=0, columnspan=5, sticky="w", pady=(0, 6))
         else:
             self.adv.grid_forget()
 
@@ -125,6 +133,8 @@ class App:
                 info = e["sys"].summary()
                 if e["sys"].warnings:
                     info += "  ⚠ " + "; ".join(e["sys"].warnings)
+            if e.get("logo"):
+                info = "[logo: %s]  %s" % (os.path.basename(e["logo"]), info)
             self.tree.insert("", "end", iid=str(i), values=(key, e["name"], info))
         if select is not None and 0 <= select < len(self.entries):
             self.tree.selection_set(str(select))
@@ -139,8 +149,8 @@ class App:
         if len(self.entries) >= MAX_ENTRIES:
             messagebox.showwarning(APP, f"Menu ma najwyżej {MAX_ENTRIES} pozycji (F1–F{MAX_ENTRIES}).")
             return
-        path = filedialog.askopenfilename(title="Obraz karty systemu",
-                                          filetypes=[("Obrazy kart", "*.img *.zip *.img.zip"), ("Wszystkie", "*")])
+        path = filedialog.askopenfilename(title="Obraz karty systemu (.img, .img.zip, .img.xz)",
+                                          **_filetypes([("Obrazy kart", "*.img *.zip *.xz")]))
         if not path:
             return
         self._job("Analiza obrazu…", self._analyse, path)
@@ -200,6 +210,46 @@ class App:
             self.default -= 1
         self._redraw()
 
+    def choose_logo(self):
+        i = self._sel()
+        if i is None:
+            messagebox.showinfo(APP, "Zaznacz system na liście, potem Logo…")
+            return
+        path = filedialog.askopenfilename(title="Logo dla " + self.entries[i]["name"],
+                                          **_filetypes([("Obrazki", "*.png *.jpg *.jpeg *.bmp *.gif")]))
+        if not path:
+            return
+        try:
+            from . import menu_gfx
+            menu_gfx.load_logo(path)
+        except Exception as e:
+            messagebox.showerror(APP, f"Nie da się wczytać obrazka: {e}")
+            return
+        self.entries[i]["logo"] = path
+        self._redraw(i)
+
+    def preview(self):
+        from . import menu_gfx
+        if not self.entries:
+            messagebox.showinfo(APP, "Najpierw dodaj systemy.")
+            return
+        if not menu_gfx.HAVE_PIL:
+            messagebox.showinfo(APP, "Podgląd wymaga biblioteki Pillow (jest w gotowych aplikacjach).")
+            return
+        import base64
+        import io
+        tiles = [{"name": e["name"], "logo": e.get("logo")} for e in self.entries]
+        img = menu_gfx.render_menu(tiles, min(self.default, len(tiles) - 1))
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        win = tk.Toplevel(self.root)
+        win.title("Podgląd menu na ekranie radia (800×480)")
+        photo = tk.PhotoImage(data=base64.b64encode(buf.getvalue()))
+        lbl = ttk.Label(win, image=photo)
+        lbl.image = photo
+        lbl.pack(padx=8, pady=8)
+        ttk.Label(win, text="Na radiu w drugim wierszu odlicza się czas do startu domyślnego systemu.").pack(pady=(0, 8))
+
     # ---------------------------------------------------------------- cards
     def refresh_cards(self):
         try:
@@ -218,7 +268,7 @@ class App:
     # ---------------------------------------------------------------- building
     def _settings(self):
         try:
-            timeout = float(self.timeout.get().replace(",", "."))
+            timeout = max(0, min(9, int(float(self.timeout.get().replace(",", ".")))))
             data_mb = int(self.data_mb.get())
         except ValueError:
             raise ValueError("Czas i rozmiar DATA muszą być liczbami")
@@ -229,7 +279,7 @@ class App:
         timeout, data_mb, xiegu = self._settings()
         ents = [dict(e) for e in self.entries]
         return compose(ents, default=self.default, timeout_s=timeout, data_mb=data_mb,
-                       card_bytes=card_bytes, xiegu=xiegu)
+                       card_bytes=card_bytes, xiegu=xiegu, data_mode=self.data_mode.get())
 
     def save_image(self):
         if self.busy:
@@ -240,7 +290,8 @@ class App:
             messagebox.showerror(APP, str(e))
             return
         path = filedialog.asksaveasfilename(title="Zapisz obraz karty", defaultextension=".img",
-                                            initialfile="X6100-multiboot.img", filetypes=[("Obraz karty", "*.img")])
+                                            initialfile="X6100-multiboot.img",
+                                            **({} if devices.MAC else {"filetypes": [("Obraz karty", "*.img")]}))
         if not path:
             return
         self._job("Zapis obrazu…", self._save_job, plan, path)
@@ -370,8 +421,27 @@ class App:
         self.root.after(100, self._poll)
 
 
+def _filetypes(types):
+    """Tk on macOS crashes on some file filters (patterns with two dots, '*'): none there"""
+    if devices.MAC:
+        return {}
+    return {"filetypes": types + [("Wszystkie pliki", "*.*")]}
+
+
+def _set_icon(root):
+    try:
+        here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icon.png")
+        if os.path.isfile(here):
+            img = tk.PhotoImage(file=here)
+            root.iconphoto(True, img)
+            root._icon = img
+    except tk.TclError:
+        pass
+
+
 def main():
     root = tk.Tk()
+    _set_icon(root)
     try:
         ttk.Style().theme_use("clam" if not devices.WIN else "vista")
     except tk.TclError:

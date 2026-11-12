@@ -1,4 +1,4 @@
-# Xiegu6x00 Multi-Boot (X6100 Multiboot)
+# Xiegu6x00 Multi-Boot: Xiegu Multi Patcher
 
 ## Pobieranie
 
@@ -6,9 +6,9 @@ Gotowe pliki są w zakładce **[Releases](../../releases)**:
 
 | Plik | Dla |
 |---|---|
-| `X6100-Multiboot.exe` | Windows 10/11 (poprosi o uprawnienia administratora) |
-| `X6100-Multiboot-macOS.zip` | macOS (rozpakuj; za pierwszym razem prawy klik > Otwórz) |
-| `X6100-Multiboot-Linux` | Linux x86-64 (`chmod +x`; do zapisu karty potrzebny `pkexec`) |
+| `Xiegu-Multi-Patcher.exe` | Windows 10/11 (poprosi o uprawnienia administratora) |
+| `Xiegu-Multi-Patcher-macOS.zip` | macOS (rozpakuj; za pierwszym razem prawy klik > Otwórz) |
+| `Xiegu-Multi-Patcher-Linux` | Linux x86-64 (`chmod +x`; do zapisu karty potrzebny `pkexec`) |
 | `X6100-multiboot-TEST.img.xz` | karta testowa: F1 OpenX6X00 v0.3.9, F2 R1CBU v0.28.0, F3 Xiegu z eMMC |
 | `X6100-multiboot-TEST-mini.img.xz` | mniejsza karta testowa: F1 OpenX6X00 v0.3.9, F2 Xiegu z eMMC |
 | `u-boot-x6100-menu.bin` | sam U-Boot menu z obsługą ekranu |
@@ -31,7 +31,7 @@ nietknięty.
 1. Uruchom program:
    - najprościej: plik z [Releases](../../releases) dla Twojego systemu, albo ze źródeł:
    - Windows: `uruchom-windows.bat` (potrzebny [Python 3.9+](https://www.python.org/downloads/),
-     przy instalacji zaznacz *Add python.exe to PATH*). Gotowy `X6100-Multiboot.exe` powstaje w
+     przy instalacji zaznacz *Add python.exe to PATH*). Gotowy `Xiegu-Multi-Patcher.exe` powstaje w
      GitHub Actions (patrz niżej).
    - macOS: `uruchom-mac.command`.
    - Linux: `./uruchom-linux.sh` (pakiety `python3-tk`, do zapisu na kartę `pkexec`).
@@ -99,6 +99,24 @@ multiboot projektu [x6100-fw-mangler](https://github.com/j0ju/x6100-fw-mangler):
 niski (`gpio clear PG6`), odczyt kolumn (`gpio input PE16`, 0 = wciśnięty). F1/F2/F3 = kolumny
 PE16/PE17/PE11 w wierszu PG6, F4/F5 = PE16/PE17 w wierszu PG8.
 Napisy idą na ekran przez `vidconsole` U-Boota (patrz niżej: U-Boot z obsługą ekranu).
+
+## Menu na ekranie radia
+
+- **Graficzne:** kafelek z logo dla każdego systemu, ustawiony nad jego fizycznym przyciskiem
+  F1–F5, system domyślny podświetlony, po wybraniu kafelek robi się zielony („START”).
+  Logo można wskazać w aplikacji (**Logo…**, dowolny PNG/JPG). Bez tego aplikacja rysuje
+  kafelek z nazwą w kolorach systemu. **Podgląd menu** pokazuje ekran przed zapisem.
+- **Odliczanie** do startu systemu domyślnego (0–9 s, `bm_secs` w `bootmenu.env`).
+- Jeśli obrazek się nie wczyta, menu pokazuje się jako kolorowy tekst.
+
+## Partycja DATA: wspólna albo osobna
+
+- **Wspólna:** jedna DATA (ustawienia, logi) dla wszystkich systemów.
+- **Osobna:** każdy system ma swoją DATA. W tablicy partycji jest zawsze tylko DATA systemu,
+  który ostatnio startował, jako trzecia partycja z etykietą `DATA`, więc systemy nie wymagają
+  zmian. Przed startem innego systemu U-Boot zapisuje sektor 0 karty z jego tablicą
+  (`SYSn/MBR.BIN` na BOOT), ale tylko wtedy, gdy się zmienia. Na komputerze widać tylko DATA
+  ostatnio uruchomionego systemu.
 
 ## U-Boot z obsługą ekranu (`uboot/`)
 

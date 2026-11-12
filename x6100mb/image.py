@@ -125,8 +125,34 @@ def make_script_image(text, name="X6100 boot menu"):
 # --------------------------------------------------------------------------------------------
 # A source image
 # --------------------------------------------------------------------------------------------
+def _unxz(path, cache_dir, progress=None):
+    import lzma
+    os.makedirs(cache_dir, exist_ok=True)
+    st = os.stat(path)
+    base = re.sub(r"\.xz$", "", os.path.basename(path), flags=re.I)
+    out = os.path.join(cache_dir, f"{base}.{int(st.st_mtime)}.{st.st_size}")
+    if os.path.exists(out):
+        return out
+    tmp = out + ".part"
+    done = 0
+    with open(path, "rb") as raw, lzma.open(raw) as src, open(tmp, "wb") as dst:
+        while True:
+            d = src.read(4 << 20)
+            if not d:
+                break
+            dst.write(d)
+            if progress:
+                progress(raw.tell(), st.st_size)
+    os.replace(tmp, out)
+    return out
+
+
 def open_source(path, cache_dir, progress=None):
-    """The raw image's path: a .zip is unpacked into cache_dir first (once)"""
+    """The raw image's path: a .zip or .xz is unpacked into cache_dir first (once)"""
+    with open(path, "rb") as f:
+        head = f.read(6)
+    if head == b"\xfd7zXZ\x00":
+        return _unxz(path, cache_dir, progress)
     if not zipfile.is_zipfile(path):
         return path
     with zipfile.ZipFile(path) as z:
@@ -195,6 +221,8 @@ class SourceSystem:
             if script is None:
                 raise ImageError("no boot.scr on the boot partition (extlinux / uEnv not supported)")
             self.script = script
+            if "x6100-multiboot" in script or "X6100 multiboot menu" in script:
+                raise ImageError("to już karta multiboot (z tej aplikacji); dodaj obrazy pojedynczych systemów")
             self._parse_script(fat)
 
         root_parts = [p for p in self.parts if p[0] == self.root_number]
