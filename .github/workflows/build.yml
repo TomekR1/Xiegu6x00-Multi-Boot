@@ -49,13 +49,14 @@ jobs:
           - os: windows-latest
             out: Xiegu-Multi-Patcher-Windows
             extra: --onefile --windowed --uac-admin --icon x6100mb/assets/icon.ico
-          - os: macos-latest
+          - os: macos-14
             out: Xiegu-Multi-Patcher-macOS
             extra: --onedir --windowed --icon x6100mb/assets/icon.icns --osx-bundle-identifier eu.multipatcher.xiegu
           - os: ubuntu-22.04
             out: Xiegu-Multi-Patcher-Linux
             extra: --onefile
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -121,10 +122,14 @@ jobs:
 
   release:
     needs: [apps, live-check, uboot]
+    # One app that did not build (GitHub's macOS queue) does not hold back the others
+    if: ${{ !cancelled() && needs.uboot.result == 'success' && needs.live-check.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with: {path: art, pattern: "Xiegu-Multi-Patcher-*", merge-multiple: true}
+      - name: At least one app
+        run: ls art/Xiegu-Multi-Patcher* >/dev/null
       - uses: actions/download-artifact@v4
         with: {name: u-boot-x6100-menu, path: art}
       - name: Replace the previous test build
