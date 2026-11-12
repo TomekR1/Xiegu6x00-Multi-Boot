@@ -7,6 +7,7 @@ import tempfile
 import threading
 import time
 import tkinter as tk
+import webbrowser
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import devices
@@ -15,6 +16,7 @@ from .image import SourceSystem, cache_dir, open_source
 from .writer import Progress, write_device, write_image_file
 
 APP = "Xiegu Multi Patcher"
+AUTHOR_URL = "https://www.qrz.com/db/SQ6RT"
 PHASES = {"download": "Pobieranie", "prepare": "Przygotowanie karty", "write": "Zapis",
           "sync": "Opróżnianie bufora karty",
           "verify": "Weryfikacja", "unzip": "Rozpakowywanie", "done": "Gotowe"}
@@ -44,7 +46,13 @@ class App:
         top = ttk.Frame(self.root)
         top.pack(fill="both", expand=True, padx=10, pady=10)
 
-        ttk.Label(top, text=APP, font=("TkDefaultFont", 15, "bold")).pack(anchor="w")
+        head = ttk.Frame(top)
+        head.pack(fill="x")
+        ttk.Label(head, text=APP, font=("TkDefaultFont", 15, "bold")).pack(side="left")
+        author = tk.Label(head, text="aplikacja: SQ6RT", fg="#1f6fd1", cursor="hand2",
+                          font=("TkDefaultFont", 10, "underline"))
+        author.pack(side="right")
+        author.bind("<Button-1>", lambda e: webbrowser.open(AUTHOR_URL))
         ttk.Label(top, text="Kilka systemów na jednej karcie SD dla Xiegu X6100: przy włączaniu radia menu na "
                             "ekranie, wybór klawiszem F1–F5.").pack(anchor="w", pady=(0, 8))
 

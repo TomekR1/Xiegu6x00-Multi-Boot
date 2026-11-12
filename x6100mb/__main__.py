@@ -51,7 +51,8 @@ def cli(argv):
     if argv and argv[0] == "write-plan":
         from .writer import main_write_plan
         return main_write_plan(argv[1:])
-    ap = argparse.ArgumentParser(prog="x6100mb", description="Multi-boot SD cards for the Xiegu X6100")
+    ap = argparse.ArgumentParser(prog="x6100mb", description="Xiegu Multi Patcher: multi-boot SD cards for the "
+                                 "Xiegu X6100", epilog="Aplikacja: SQ6RT, https://www.qrz.com/db/SQ6RT")
     sub = ap.add_subparsers(dest="cmd")
     i = sub.add_parser("info")
     i.add_argument("images", nargs="+")

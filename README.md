@@ -1,5 +1,7 @@
 # Xiegu6x00 Multi-Boot: Xiegu Multi Patcher
 
+Autor aplikacji: [SQ6RT](https://www.qrz.com/db/SQ6RT)
+
 ## Pobieranie
 
 Gotowe pliki są w zakładce **[Releases](../../releases)**:
