@@ -75,6 +75,8 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT"):
     a("")
     a("setenv bm_choice")
     a("setenv i 0")
+    a("# gpio prints each pin it reads: while keys are read, the console goes to the serial port only")
+    a("setenv stdout serial")
     a('while test -z "${bm_choice}"; do')
     rows = []
     for i in range(len(entries)):
@@ -91,6 +93,7 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT"):
     a("        if test ${i} -ge ${bm_timeout}; then setenv bm_choice ${bm_default}; else sleep 0.1; setexpr i ${i} + 1; fi")
     a("    fi")
     a("done")
+    a("setenv stdout serial,vidconsole")
     a('echo ""')
     a('echo "  Start: F${bm_choice} ..."')
     a("")
