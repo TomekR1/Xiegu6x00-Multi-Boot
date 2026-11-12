@@ -65,7 +65,7 @@ jobs:
         run: python -c "import tkinter; print(tkinter.TkVersion)"
       - uses: actions/download-artifact@v4
         with: {name: u-boot-x6100-menu, path: x6100mb/data}
-      - run: pip install pyinstaller==6.11.1 pillow==11.0.0
+      - run: pip install pyinstaller==6.11.1 pillow==11.0.0 certifi
       - name: Build
         shell: bash
         run: |
@@ -73,6 +73,7 @@ jobs:
             --add-data "x6100mb/data:x6100mb/data" --add-data "x6100mb/assets:x6100mb/assets" x6100_multiboot.py
       - name: Smoke test
         shell: bash
+        env: {GITHUB_TOKEN: "${{ github.token }}"}
         run: |
           case "$RUNNER_OS" in
             macOS)   B="dist/Xiegu Multi Patcher.app/Contents/MacOS/Xiegu Multi Patcher" ;;
@@ -80,7 +81,12 @@ jobs:
             Linux)   B="dist/Xiegu Multi Patcher" ;;
           esac
           "$B" --help || true
-          if [ "$RUNNER_OS" != Windows ]; then "$B" build --help | grep -q -- --data; fi
+          if [ "$RUNNER_OS" != Windows ]; then
+            "$B" build --help | grep -q -- --data
+            # HTTPS from inside the packed app (macOS: no system certificates without certifi)
+            "$B" catalog | tee catalog.txt
+            ! grep -q "error:" catalog.txt
+          fi
       - name: Pack
         shell: bash
         run: |
@@ -112,7 +118,7 @@ jobs:
       - name: A card from the newest releases, fetched by the app (not kept)
         env: {GITHUB_TOKEN: "${{ github.token }}"}
         run: |
-          pip install pillow==11.0.0
+          pip install pillow==11.0.0 certifi
           python x6100_multiboot.py build -o "$RUNNER_TEMP/check.img" --xiegu --data separate --data-mb 64 \
             openx6x00@latest openx6100@latest cx8anm@latest > build.log
           tail -c 700 build.log

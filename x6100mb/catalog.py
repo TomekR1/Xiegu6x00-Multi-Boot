@@ -48,13 +48,39 @@ class CatalogError(Exception):
     pass
 
 
+_ctx = None
+
+
+def _ssl():
+    """The system's certificates plus certifi's: a Python packed into an app on macOS sees none of
+    the system's (CERTIFICATE_VERIFY_FAILED), and certifi alone would miss a company's own CA"""
+    global _ctx
+    if _ctx is None:
+        import ssl
+        _ctx = ssl.create_default_context()
+        try:
+            import certifi
+            _ctx.load_verify_locations(certifi.where())
+        except Exception:
+            pass
+    return _ctx
+
+
+def _open(req, timeout):
+    if isinstance(req, str) and req.startswith("file:"):
+        return urllib.request.urlopen(req, timeout=timeout)
+    if isinstance(req, urllib.request.Request) and req.full_url.startswith("file:"):
+        return urllib.request.urlopen(req, timeout=timeout)
+    return urllib.request.urlopen(req, timeout=timeout, context=_ssl())
+
+
 def _get(url, timeout=20):
     headers = {"User-Agent": UA, "Accept": "application/vnd.github+json"}
     if os.environ.get("GITHUB_TOKEN"):          # in CI: a higher request limit
         headers["Authorization"] = "Bearer " + os.environ["GITHUB_TOKEN"]
     req = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with _open(req, timeout) as r:
             return json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         if e.code == 403 and e.headers.get("X-RateLimit-Remaining") == "0":
@@ -110,7 +136,7 @@ def download(source, rel, cache_dir, progress=None):
     h = hashlib.sha256()
     req = urllib.request.Request(rel["url"], headers={"User-Agent": UA})
     try:
-        with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
+        with _open(req, 60) as r, open(tmp, "wb") as f:
             total = int(r.headers.get("Content-Length") or rel["size"] or 0)
             done = 0
             while True:
@@ -161,7 +187,7 @@ def _raw_png(path, timeout):
         return None
     try:
         req = urllib.request.Request(RAW + path, headers={"User-Agent": UA})
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with _open(req, timeout) as r:
             data = r.read(4 << 20)
     except (urllib.error.URLError, OSError, ValueError):
         _missing.add(path)
