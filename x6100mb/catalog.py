@@ -19,17 +19,21 @@ API = "https://api.github.com/repos/{repo}/releases?per_page={n}"
 SOURCES = [
     {"id": "openx6x00", "name": "OpenX6X00",
      "feeds": [("Guru-RF/OpenX6X00", r"^OpenX6X00-x6100-v[\d.]+-sdcard\.img\.zip$")],
-     "about": "Guru-RF: nowe GUI, aktualizacje przez sieć, Wavelog, FT8/JS8"},
+     "about": "Guru-RF: nowe GUI, aktualizacje przez sieć, Wavelog, FT8/JS8",
+     "logo": "Guru-RF/OpenX6X00/HEAD/boot/logo.png", "crop": (0.0, 0.0, 1.0, 0.42)},
     {"id": "openx6100", "name": "OpenX6100",
      "feeds": [("OpenX6100/x6100_gui", r"^sdcard.*\.img\.zip$")],
-     "about": "następca R1CBU, rozwijany przez społeczność OpenX6100"},
+     "about": "następca R1CBU, rozwijany przez społeczność OpenX6100",
+     "logo": "OpenX6100/AetherX6100Buildroot/HEAD/br2_external/board/X6100/linux/logo.png"},
     {"id": "cx8anm", "name": "CX8ANM",
      "feeds": [("condoruy/OpenX6X00-CX8ANM", r"^OpenX6X00-CX8ANM-x6100-v[\d.]+-sdcard\.img\.zip$"),
                ("condoruy/X6100-CX8ANM", r"^Xiegu_X6100-CX8ANM_v[\d.]+\.img\.zip$")],
-     "about": "CX8ANM: wydania 1.1.x (na bazie OpenX6X00) i wcześniejsze 1.0.x"},
+     "about": "CX8ANM: wydania 1.1.x (na bazie OpenX6X00) i wcześniejsze 1.0.x",
+     "logo": "condoruy/X6100-CX8ANM/HEAD/boot/logo.png", "crop": (0.0, 0.0, 1.0, 0.70)},
     {"id": "r1cbu", "name": "R1CBU",
      "feeds": [("gdyuldin/x6100_gui", r"^sdcard.*\.img\.zip$")],
-     "about": "klasyczne oprogramowanie R1CBU (gdyuldin)"},
+     "about": "klasyczne oprogramowanie R1CBU (gdyuldin)",
+     "logo": "gdyuldin/AetherX6100Buildroot/HEAD/br2_external/board/X6100/linux/logo.png"},
 ]
 
 
@@ -120,4 +124,42 @@ def download(source, rel, cache_dir, progress=None):
         os.remove(tmp)
         raise CatalogError("suma kontrolna pobranego pliku się nie zgadza")
     os.replace(tmp, path)
+    return path
+
+
+RAW = "https://raw.githubusercontent.com/"
+
+
+def source_for(name):
+    """The catalog source a system's name belongs to (CX8ANM before OpenX6X00: its 1.1.x is named
+    OpenX6X00-CX8ANM), or None"""
+    n = name.lower().replace(" ", "").replace("_", "").replace("-", "")
+    for sid in ("cx8anm", "openx6100", "openx6x00", "r1cbu"):
+        if sid in n:
+            return next(x for x in SOURCES if x["id"] == sid)
+    if "x6100gui" in n or "aether" in n:
+        return next(x for x in SOURCES if x["id"] == "r1cbu")
+    return None
+
+
+def fetch_logo(source, cache_dir, timeout=10):
+    """The project's own logo (its boot screen picture, from its repository), cached; None offline"""
+    if not source or not source.get("logo"):
+        return None
+    d = os.path.join(cache_dir, "logos")
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, source["id"] + ".png")
+    if os.path.exists(path) and os.path.getsize(path) > 0:
+        return path
+    try:
+        req = urllib.request.Request(RAW + source["logo"], headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = r.read(4 << 20)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    if not data.startswith(b"\x89PNG"):
+        return None
+    with open(path + ".part", "wb") as f:
+        f.write(data)
+    os.replace(path + ".part", path)
     return path

@@ -41,6 +41,27 @@ class ComposeError(Exception):
     pass
 
 
+def project_logo(entry):
+    """The logo the system's own project publishes (fetched once, cached), or None"""
+    if entry["kind"] != "sd":
+        return None
+    from . import catalog
+    from .image import cache_dir
+    return catalog.fetch_logo(catalog.source_for(entry["name"]), cache_dir())
+
+
+def tile(entry):
+    """What the graphic menu shows for an entry: its name, a logo of one's own, else the project's"""
+    if entry.get("logo"):
+        return {"name": entry["name"], "logo": entry["logo"]}
+    logo = project_logo(entry)
+    crop = None
+    if logo:
+        from . import catalog
+        crop = (catalog.source_for(entry["name"]) or {}).get("crop")
+    return {"name": entry["name"], "logo": logo, "crop": crop}
+
+
 def _ascii(s, n=28):
     s = re.sub(r"[^A-Za-z0-9 .,_+()/:-]", "", s)
     return s[:n] or "system"
@@ -313,7 +334,7 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     fat = Fat32Builder(boot_size, boot_lba, label="BOOT")
     if gfx:
         from . import menu_gfx
-        tiles = [{"name": e["name"], "logo": e.get("logo")} for e in entries]
+        tiles = [tile(e) for e in entries]
         fat.add_file("MENU/MENU.BMP", menu_gfx.to_framebuffer_bmp(menu_gfx.render_menu(tiles, default)))
         for i in range(len(entries)):
             fat.add_file("MENU/SEL%d.BMP" % (i + 1),

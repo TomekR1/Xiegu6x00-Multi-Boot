@@ -258,7 +258,8 @@ class App:
             return
         import base64
         import io
-        tiles = [{"name": e["name"], "logo": e.get("logo")} for e in self.entries]
+        from .compose import tile
+        tiles = [tile(e) for e in self.entries]
         img = menu_gfx.render_menu(tiles, min(self.default, len(tiles) - 1))
         buf = io.BytesIO()
         img.save(buf, "PNG")

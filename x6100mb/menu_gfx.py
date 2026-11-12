@@ -84,14 +84,59 @@ def default_logo(name, size=120, bg=None):
     return img
 
 
-def load_logo(path, size=120, bg=None):
-    """A picture of one's own (PNG, JPG, ...), fitted into the logo square on the tile colour"""
+def _content_box(img, tol=24):
+    """The part of a picture that is not its background (the colour of its corners)"""
+    rgb = img.convert("RGB")
+    w, h = rgb.size
+    bg = rgb.getpixel((2, 2))
+    diff = Image.new("L", (w, h))
+    px, dp = rgb.load(), diff.load()
+    for y in range(0, h):
+        for x in range(0, w):
+            r, g, b = px[x, y]
+            if abs(r - bg[0]) + abs(g - bg[1]) + abs(b - bg[2]) > tol:
+                dp[x, y] = 255
+    box = diff.getbbox()
+    return box, bg
+
+
+def load_logo(path, size=120, bg=None, width=None, crop=None):
+    """A picture (a project's boot screen, a PNG/JPG of one's own) fitted into the logo box:
+    cropped to what is not background, on a rounded card of its own background colour.
+    crop: (left, top, right, bottom) as fractions, the part of the picture to start from."""
+    width = width or size
     src = Image.open(path)
     src.load()
-    src = src.convert("RGBA")
-    src.thumbnail((size, size), Image.LANCZOS)
-    out = Image.new("RGB", (size, size), bg or TILE)
-    out.paste(src, ((size - src.width) // 2, (size - src.height) // 2), src)
+    if crop:
+        w, h = src.size
+        src = src.crop((int(crop[0] * w), int(crop[1] * h), int(crop[2] * w), int(crop[3] * h)))
+    alpha = None
+    if src.mode in ("RGBA", "LA") or (src.mode == "P" and "transparency" in src.info):
+        alpha = src.convert("RGBA").getchannel("A")
+        if alpha.getextrema()[0] == 255:          # an alpha channel that hides nothing
+            alpha = None
+    if alpha is not None:
+        rgba = src.convert("RGBA")
+        box = alpha.getbbox()
+        card = (34, 38, 50)
+    else:
+        rgba = src.convert("RGBA")
+        small = rgba.copy()
+        small.thumbnail((400, 400))
+        sbox, card = _content_box(small)
+        k = rgba.width / small.width
+        box = tuple(int(v * k) for v in sbox) if sbox else None
+    if box:
+        x0, y0, x1, y1 = box
+        pad = int(max(x1 - x0, y1 - y0) * 0.06)
+        rgba = rgba.crop((max(0, x0 - pad), max(0, y0 - pad), min(rgba.width, x1 + pad), min(rgba.height, y1 + pad)))
+    out = Image.new("RGB", (width, size), bg or TILE)
+    mask = Image.new("L", (width, size), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, width - 1, size - 1], radius=size // 6, fill=255)
+    out.paste(Image.new("RGB", (width, size), card[:3]), (0, 0), mask)
+    inner = rgba.copy()
+    inner.thumbnail((width - 12, size - 12), Image.LANCZOS)
+    out.paste(inner, ((width - inner.width) // 2, (size - inner.height) // 2), inner)
     return out
 
 
@@ -128,12 +173,12 @@ def render_menu(entries, default, selected=None, title="X6100 MULTIBOOT"):
         logo = None
         if e.get("logo"):
             try:
-                logo = load_logo(e["logo"], bg=fill)
+                logo = load_logo(e["logo"], size=124, bg=fill, width=136, crop=e.get("crop"))
             except Exception:
                 logo = None
         if logo is None:
-            logo = default_logo(e["name"], bg=fill)
-        img.paste(logo, (cx - 60, 92))
+            logo = default_logo(e["name"], size=124, bg=fill)
+        img.paste(logo, (cx - logo.width // 2, 88))
         f = _font(19)
         for k, line in enumerate(_wrap(d, e["name"], f, 136)):
             d.text((cx, 240 + 26 * k), line, font=_fit_text(d, line, 136, 19), fill=WHITE, anchor="mm")
