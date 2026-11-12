@@ -6,6 +6,11 @@ on:
     tags: ["v*"]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Wydanie: numer wersji, np. v0.1.0 (puste: tylko budowanie)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -126,13 +131,15 @@ jobs:
           grep -q "'graphics': True" build.log
           rm -f "$RUNNER_TEMP/check.img"
 
-  # A release only from a tag (git tag v0.1.0 && git push origin v0.1.0): the apps and the menu's
-  # U-Boot. A push to main builds and checks everything, the apps stay as the run's artifacts.
+  # A release from a tag v*, or from Actions > Build > Run workflow with a version number (GitHub then
+  # makes the tag): the apps and the menu's U-Boot. A push to main builds and checks everything only.
   release:
     needs: [apps, live-check, uboot]
     # One app that did not build (GitHub's macOS queue) does not hold back the others
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') && needs.uboot.result == 'success' && needs.live-check.result == 'success' }}
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '') && needs.uboot.result == 'success' && needs.live-check.result == 'success' }}
     runs-on: ubuntu-latest
+    env:
+      REL_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag }}
     steps:
       - uses: actions/download-artifact@v4
         with: {path: art, pattern: "Xiegu-Multi-Patcher-*", merge-multiple: true}
@@ -144,9 +151,10 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Xiegu Multi Patcher ${{ github.ref_name }}
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ env.REL_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Xiegu Multi Patcher ${{ env.REL_TAG }}
+          prerelease: ${{ contains(env.REL_TAG, '-') }}
           make_latest: true
           files: art/*
           body: |
