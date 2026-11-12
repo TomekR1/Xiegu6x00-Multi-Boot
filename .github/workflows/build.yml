@@ -49,7 +49,7 @@ jobs:
           - os: windows-latest
             out: Xiegu-Multi-Patcher-Windows
             extra: --onefile --windowed --uac-admin --icon x6100mb/assets/icon.ico
-          - os: macos-14
+          - os: macos-latest
             out: Xiegu-Multi-Patcher-macOS
             extra: --onedir --windowed --icon x6100mb/assets/icon.icns --osx-bundle-identifier eu.multipatcher.xiegu
           - os: ubuntu-22.04
