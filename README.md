@@ -88,6 +88,12 @@ Zgłaszaj je w zakładce **[Issues](../../issues)**. Pomaga:
 Jeśli system Xiegu z eMMC się nie uruchomi, menu pokaże na ekranie zawartość eMMC:
 zrób zdjęcie i dołącz je do zgłoszenia.
 
+## Licencja
+
+Aplikacja: **GPL-3.0** ([LICENSE](LICENSE)), © SQ6RT. Poprawka U-Boot w `uboot/` (inicjalizacja
+ekranu przeniesiona ze sterownika Linuksa X6100) jest, jak U-Boot, na licencji GPL-2.0-or-later.
+Systemy radia i ich loga należą do ich autorów; aplikacja pobiera je z ich wydań i repozytoriów.
+
 ---
 
 ## Dla programistów
