@@ -84,7 +84,7 @@ def cli(argv):
     if a.cmd == "catalog":
         from . import catalog
         for src in catalog.SOURCES:
-            print(f"{src['id']:10s} {src['name']} ({src['repo']})")
+            print(f"{src['id']:10s} {src['name']} ({', '.join(r for r, _ in src['feeds'])})")
             try:
                 for r in catalog.releases(src)[:5]:
                     print(f"    {r['tag']:12s} {r['date']}  {r['size'] >> 20} MB{'  (test)' if r['prerelease'] else ''}")

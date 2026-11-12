@@ -9,7 +9,7 @@ Gotowe pliki są w zakładce **[Releases](../../releases)**:
 | `Xiegu-Multi-Patcher.exe` | Windows 10/11 (poprosi o uprawnienia administratora) |
 | `Xiegu-Multi-Patcher-macOS.zip` | macOS (rozpakuj; za pierwszym razem prawy klik > Otwórz) |
 | `Xiegu-Multi-Patcher-Linux` | Linux x86-64 (`chmod +x`; do zapisu karty potrzebny `pkexec`) |
-| `X6100-multiboot-TEST.img.xz` | karta testowa: F1 OpenX6X00 v0.3.9, F2 R1CBU v0.28.0, F3 Xiegu z eMMC |
+| `X6100-multiboot-TEST.img.xz` | karta testowa: F1 OpenX6X00, F2 OpenX6100, F3 CX8ANM (najnowsze), F4 Xiegu z eMMC |
 | `X6100-multiboot-TEST-mini.img.xz` | mniejsza karta testowa: F1 OpenX6X00 v0.3.9, F2 Xiegu z eMMC |
 | `u-boot-x6100-menu.bin` | sam U-Boot menu z obsługą ekranu |
 
@@ -110,9 +110,10 @@ zaznaczona). Po kliknięciu **Dodaj** aplikacja pobiera obraz, sprawdza rozmiar 
 |---|---|
 | OpenX6X00 | [Guru-RF/OpenX6X00](https://github.com/Guru-RF/OpenX6X00) |
 | OpenX6100 (następca R1CBU) | [OpenX6100/x6100_gui](https://github.com/OpenX6100/x6100_gui) |
+| CX8ANM | [condoruy/OpenX6X00-CX8ANM](https://github.com/condoruy/OpenX6X00-CX8ANM) (1.1.x), [condoruy/X6100-CX8ANM](https://github.com/condoruy/X6100-CX8ANM) (1.0.x) |
 | R1CBU (klasyczny) | [gdyuldin/x6100_gui](https://github.com/gdyuldin/x6100_gui) |
 
-W wierszu poleceń zamiast pliku można podać `openx6x00@latest`, `openx6100@v1.2.0` itd.;
+W wierszu poleceń zamiast pliku można podać `openx6x00@latest`, `openx6100@v1.2.0`, `cx8anm@latest` itd.;
 `catalog` wypisuje dostępne wersje. Obraz Xiegu nie jest pobierany: system Xiegu startuje
 z pamięci radia (pozycja **+ Xiegu z eMMC**).
 

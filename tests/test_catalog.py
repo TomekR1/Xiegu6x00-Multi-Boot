@@ -35,11 +35,20 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(catalog.label(src, rels[1]), "OpenX6X00 v0.3.9")
 
     def test_other_sources_match_their_assets(self):
-        names = {"openx6100": "sdcard.v1.2.0.img.zip", "r1cbu": "sdcard.img.zip"}
+        names = {"openx6100": ["sdcard.v1.2.0.img.zip"], "r1cbu": ["sdcard.img.zip"],
+                 "cx8anm": ["OpenX6X00-CX8ANM-x6100-v1.1.5-sdcard.img.zip", "Xiegu_X6100-CX8ANM_v1.0.52.img.zip"]}
         for src in catalog.SOURCES[1:]:
-            ans = [{"tag_name": "v1", "published_at": "2026-01-01", "assets": [
-                {"name": names[src["id"]], "size": 1, "browser_download_url": "u"}]}]
-            self.assertEqual(len(catalog.releases(src, fetch=lambda url: ans)), 1, src["id"])
+            want = names[src["id"]]
+            feeds = {repo: want[k] for k, (repo, _) in enumerate(src["feeds"])}
+
+            def fetch(url, feeds=feeds):
+                repo = url.split("/repos/")[1].split("/releases")[0]
+                return [{"tag_name": "v1." + str(len(repo)), "published_at": "2026-01-%02d" % len(repo), "assets": [
+                    {"name": "OpenX6X00-CX8ANM-x6200-v1.1.5-sdcard.img.zip", "size": 1, "browser_download_url": "x"},
+                    {"name": feeds[repo], "size": 1, "browser_download_url": repo}]}]
+            rels = catalog.releases(src, fetch=fetch)
+            self.assertEqual(len(rels), len(want), src["id"])
+            self.assertTrue(all(r["url"] != "x" for r in rels))
 
     def test_download_checks_size_and_sha(self):
         d = tempfile.mkdtemp()

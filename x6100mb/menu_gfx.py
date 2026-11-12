@@ -28,6 +28,7 @@ GREY = (150, 158, 175)
 
 # Colours of the generated logos by system family (a logo of one's own can be chosen in the app)
 FAMILIES = [
+    ("cx8anm", "CX8ANM", ((20, 120, 70), (60, 200, 120))),
     ("openx6x00", "OpenX6X00", ((0, 122, 204), (0, 190, 170))),
     ("r1cbu", "R1CBU", ((235, 110, 20), (250, 180, 40))),
     ("openx6100", "OpenX6100", ((120, 70, 220), (200, 90, 220))),

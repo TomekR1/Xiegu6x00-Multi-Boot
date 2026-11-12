@@ -106,7 +106,7 @@ jobs:
         run: |
           pip install pillow==11.0.0
           python x6100_multiboot.py build -o X6100-multiboot-TEST.img --xiegu --data separate --data-mb 256 \
-            openx6x00@latest openx6100@latest > build.log
+            openx6x00@latest openx6100@latest cx8anm@latest > build.log
           tail -c 700 build.log
           grep -q "menu, ekran" build.log
           grep -q "'graphics': True" build.log
@@ -150,7 +150,7 @@ jobs:
             - Linux: `Xiegu-Multi-Patcher-Linux` (`chmod +x`, do zapisu karty potrzebny pkexec)
 
             Karty testowe (wgraj balenaEtcherem bez rozpakowywania):
-            - `X6100-multiboot-TEST.img.xz`: F1 najnowszy OpenX6X00, F2 najnowszy OpenX6100, F3 Xiegu z eMMC (osobne DATA)
+            - `X6100-multiboot-TEST.img.xz`: F1 OpenX6X00, F2 OpenX6100, F3 CX8ANM (najnowsze wersje), F4 Xiegu z eMMC; osobne DATA
             - `X6100-multiboot-TEST-mini.img.xz`: F1 najnowszy OpenX6X00, F2 Xiegu z eMMC
 
             Karty mają własny U-Boot z obsługą ekranu X6100 (`u-boot-x6100-menu.bin`), więc menu

@@ -3,7 +3,8 @@
 Each source is a public GitHub repository whose releases carry an X6100 SD card image. The
 list of versions comes from GitHub's API (no account needed; GitHub allows some 60 such
 requests an hour per address), the image from the release's download link, checked against
-the size and, where GitHub gives one, the SHA-256 it publishes.
+the size and, where GitHub gives one, the SHA-256 it publishes. A source may publish in
+more than one repository (CX8ANM moved its newer releases): their lists are merged.
 """
 import hashlib
 import json
@@ -16,14 +17,18 @@ UA = "xiegu-multi-patcher"
 API = "https://api.github.com/repos/{repo}/releases?per_page={n}"
 
 SOURCES = [
-    {"id": "openx6x00", "name": "OpenX6X00", "repo": "Guru-RF/OpenX6X00",
-     "asset": r"^OpenX6X00-x6100-v[\d.]+-sdcard\.img\.zip$",
+    {"id": "openx6x00", "name": "OpenX6X00",
+     "feeds": [("Guru-RF/OpenX6X00", r"^OpenX6X00-x6100-v[\d.]+-sdcard\.img\.zip$")],
      "about": "Guru-RF: nowe GUI, aktualizacje przez sieć, Wavelog, FT8/JS8"},
-    {"id": "openx6100", "name": "OpenX6100", "repo": "OpenX6100/x6100_gui",
-     "asset": r"^sdcard.*\.img\.zip$",
+    {"id": "openx6100", "name": "OpenX6100",
+     "feeds": [("OpenX6100/x6100_gui", r"^sdcard.*\.img\.zip$")],
      "about": "następca R1CBU, rozwijany przez społeczność OpenX6100"},
-    {"id": "r1cbu", "name": "R1CBU", "repo": "gdyuldin/x6100_gui",
-     "asset": r"^sdcard.*\.img\.zip$",
+    {"id": "cx8anm", "name": "CX8ANM",
+     "feeds": [("condoruy/OpenX6X00-CX8ANM", r"^OpenX6X00-CX8ANM-x6100-v[\d.]+-sdcard\.img\.zip$"),
+               ("condoruy/X6100-CX8ANM", r"^Xiegu_X6100-CX8ANM_v[\d.]+\.img\.zip$")],
+     "about": "CX8ANM: wydania 1.1.x (na bazie OpenX6X00) i wcześniejsze 1.0.x"},
+    {"id": "r1cbu", "name": "R1CBU",
+     "feeds": [("gdyuldin/x6100_gui", r"^sdcard.*\.img\.zip$")],
      "about": "klasyczne oprogramowanie R1CBU (gdyuldin)"},
 ]
 
@@ -49,29 +54,32 @@ def _get(url, timeout=20):
 
 
 def releases(source, n=15, fetch=_get):
-    """[{"tag", "date", "prerelease", "asset", "size", "url", "sha256"}] newest first"""
-    data = fetch(API.format(repo=source["repo"], n=n))
-    if not isinstance(data, list):
-        raise CatalogError("nieoczekiwana odpowiedź GitHuba")
-    pat = re.compile(source["asset"], re.I)
+    """[{"tag", "date", "prerelease", "asset", "size", "url", "sha256", "repo"}] newest first,
+    from every repository the source publishes in"""
     out = []
-    for r in data:
-        if r.get("draft"):
-            continue
-        for a in r.get("assets", []):
-            if not pat.search(a.get("name", "")):
+    for repo, asset in source["feeds"]:
+        data = fetch(API.format(repo=repo, n=n))
+        if not isinstance(data, list):
+            raise CatalogError("nieoczekiwana odpowiedź GitHuba")
+        pat = re.compile(asset, re.I)
+        for r in data:
+            if r.get("draft"):
                 continue
-            digest = a.get("digest") or ""
-            out.append({
-                "tag": r.get("tag_name", "?"),
-                "date": (r.get("published_at") or "")[:10],
-                "prerelease": bool(r.get("prerelease")),
-                "asset": a["name"],
-                "size": int(a.get("size") or 0),
-                "url": a["browser_download_url"],
-                "sha256": digest[7:] if digest.startswith("sha256:") else None,
-            })
-            break
+            for a in r.get("assets", []):
+                if not pat.search(a.get("name", "")):
+                    continue
+                digest = a.get("digest") or ""
+                out.append({
+                    "tag": r.get("tag_name", "?"),
+                    "date": (r.get("published_at") or "")[:10],
+                    "prerelease": bool(r.get("prerelease")),
+                    "asset": a["name"],
+                    "size": int(a.get("size") or 0),
+                    "url": a["browser_download_url"],
+                    "sha256": digest[7:] if digest.startswith("sha256:") else None,
+                    "repo": repo,
+                })
+                break
     out.sort(key=lambda x: x["date"], reverse=True)
     return out
 
