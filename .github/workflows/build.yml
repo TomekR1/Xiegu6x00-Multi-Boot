@@ -148,6 +148,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with: {name: u-boot-x6100-menu, path: art}
       - run: ls -la art
+      - name: The interim test build goes
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: gh release delete test-build --cleanup-tag --yes -R "${{ github.repository }}" || true
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
