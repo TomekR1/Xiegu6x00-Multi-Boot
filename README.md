@@ -38,7 +38,7 @@ Każdy system startuje z `root=/dev/mmcblk0pN` swojej partycji. OpenX6X00 znajdu
 etykiecie, a jego aktualizacje (Settings > Info > Update) zmieniają tylko pliki systemu, więc menu
 zostaje. **Wszystkie systemy dzielą jedną partycję DATA**, czyli także ustawienia (`params.db`).
 
-Bez komputera na karcie można zmienić plik `bootmenu.env` na partycji BOOT:
+Bez ponownego wgrywania karty można na komputerze zmienić plik `bootmenu.env` na partycji BOOT:
 
 ```
 bm_default=1
