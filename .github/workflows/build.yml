@@ -94,7 +94,9 @@ jobs:
           name: ${{ matrix.out }}
           path: out/
 
-  test-image:
+  # The app fetches the newest systems itself and builds a card from them: a check only, nothing
+  # of it is published (the release carries the app; users fetch the systems they want in it)
+  live-check:
     needs: [test, uboot]
     runs-on: ubuntu-latest
     steps:
@@ -106,33 +108,25 @@ jobs:
       - name: Catalog (live, newest releases on GitHub)
         env: {GITHUB_TOKEN: "${{ github.token }}"}
         run: python x6100_multiboot.py catalog
-      - name: Build test cards from the newest releases (fetched by the app itself)
+      - name: A card from the newest releases, fetched by the app (not kept)
         env: {GITHUB_TOKEN: "${{ github.token }}"}
         run: |
           pip install pillow==11.0.0
-          python x6100_multiboot.py build -o X6100-multiboot-TEST.img --xiegu --data separate --data-mb 256 \
+          python x6100_multiboot.py build -o "$RUNNER_TEMP/check.img" --xiegu --data separate --data-mb 64 \
             openx6x00@latest openx6100@latest cx8anm@latest > build.log
           tail -c 700 build.log
           grep -q "menu, ekran" build.log
           grep -q "'graphics': True" build.log
-          python x6100_multiboot.py build -o X6100-multiboot-TEST-mini.img --xiegu --data-mb 128 openx6x00@latest > /dev/null
-          xz -T0 -9 X6100-multiboot-TEST.img X6100-multiboot-TEST-mini.img
-          sha256sum X6100-multiboot-TEST*.img.xz > SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: X6100-multiboot-TEST
-          path: |
-            X6100-multiboot-TEST.img.xz
-            X6100-multiboot-TEST-mini.img.xz
-            SHA256SUMS.txt
-          compression-level: 0
+          rm -f "$RUNNER_TEMP/check.img"
 
   release:
-    needs: [apps, test-image, uboot]
+    needs: [apps, live-check, uboot]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
-        with: {path: art, merge-multiple: true}
+        with: {path: art, pattern: "Xiegu-Multi-Patcher-*", merge-multiple: true}
+      - uses: actions/download-artifact@v4
+        with: {name: u-boot-x6100-menu, path: art}
       - name: Replace the previous test build
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         env: {GH_TOKEN: "${{ github.token }}"}
@@ -154,11 +148,11 @@ jobs:
             - macOS: `Xiegu-Multi-Patcher-macOS.zip` (rozpakuj; przy pierwszym uruchomieniu prawy klik > Otwórz)
             - Linux: `Xiegu-Multi-Patcher-Linux` (`chmod +x`, do zapisu karty potrzebny pkexec)
 
-            Karty testowe (wgraj balenaEtcherem bez rozpakowywania):
-            - `X6100-multiboot-TEST.img.xz`: F1 OpenX6X00, F2 OpenX6100, F3 CX8ANM (najnowsze wersje), F4 Xiegu z eMMC; osobne DATA
-            - `X6100-multiboot-TEST-mini.img.xz`: F1 najnowszy OpenX6X00, F2 Xiegu z eMMC
+            Systemów nie ma w wydaniu: wybierasz je i pobierasz w aplikacji
+            (**+ Z internetu…**, najnowsze wersje prosto z wydań ich autorów).
 
-            Karty mają własny U-Boot z obsługą ekranu X6100 (`u-boot-x6100-menu.bin`), więc menu
-            jest widoczne. eMMC nie jest zmieniane.
+            `u-boot-x6100-menu.bin`: U-Boot menu z obsługą ekranu X6100 (aplikacja ma go w sobie).
+
+            Aplikacja: SQ6RT, https://www.qrz.com/db/SQ6RT
 
             Bez wciśnięcia klawisza po 5 s startuje F1.

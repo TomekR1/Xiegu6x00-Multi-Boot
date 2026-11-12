@@ -11,11 +11,10 @@ Gotowe pliki są w zakładce **[Releases](../../releases)**:
 | `Xiegu-Multi-Patcher.exe` | Windows 10/11 (poprosi o uprawnienia administratora) |
 | `Xiegu-Multi-Patcher-macOS.zip` | macOS (rozpakuj; za pierwszym razem prawy klik > Otwórz) |
 | `Xiegu-Multi-Patcher-Linux` | Linux x86-64 (`chmod +x`; do zapisu karty potrzebny `pkexec`) |
-| `X6100-multiboot-TEST.img.xz` | karta testowa: F1 OpenX6X00, F2 OpenX6100, F3 CX8ANM (najnowsze), F4 Xiegu z eMMC |
-| `X6100-multiboot-TEST-mini.img.xz` | mniejsza karta testowa: F1 OpenX6X00 v0.3.9, F2 Xiegu z eMMC |
 | `u-boot-x6100-menu.bin` | sam U-Boot menu z obsługą ekranu |
 
-Instalacja Pythona nie jest potrzebna. Pliki buduje GitHub Actions (`.github/workflows/build.yml`)
+Instalacja Pythona nie jest potrzebna. **Wydanie nie zawiera systemów**: wybierasz je i pobierasz
+w aplikacji (**+ Z internetu…**). Pliki buduje GitHub Actions (`.github/workflows/build.yml`)
 przy każdej zmianie na gałęzi `main` i przy każdym tagu `v*`.
 
 
