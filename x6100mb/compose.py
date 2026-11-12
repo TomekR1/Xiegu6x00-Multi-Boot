@@ -22,11 +22,10 @@ from .image import SECTOR, UBOOT_END, UBOOT_OFFSET, make_ebr, make_mbr, make_scr
 MIB = 1024 * 1024
 ALIGN = MIB // SECTOR
 
-# Front-panel keys in U-Boot: the X6100 key matrix (rows read with pull-ups, one column driven low)
-# from the device tree, F1..F5 from OpenX6X00's src/front_keys.c (BTN_TRIGGER_HAPPY13..15, 19, 20)
+# Front-panel keys in U-Boot: the X6100 key matrix from the device tree. As in j0ju's
+# x6100-fw-mangler multiboot (used on radios): the row is driven low, the column read (0 = pressed); F1..F5 from OpenX6X00's src/front_keys.c (BTN_TRIGGER_HAPPY13..15, 19, 20)
 KEYS = [("F1", "PE16", "PG6"), ("F2", "PE17", "PG6"), ("F3", "PE11", "PG6"),
         ("F4", "PE16", "PG8"), ("F5", "PE17", "PG8")]
-COLUMNS = ["PE16", "PE17", "PE11", "PE14", "PE12", "PE13"]
 MAX_ENTRIES = len(KEYS)
 
 XIEGU_DEFAULTS = {
@@ -63,10 +62,6 @@ def menu_script(entries, default, timeout_s, title="X6100 BOOT MENU"):
         a('setenv %s "%s"' % (k, v))
     a("if fatload mmc 0:1 ${scriptaddr} bootmenu.env; then env import -t ${scriptaddr} ${filesize}; fi")
     a("")
-    a("# Key matrix: pull-ups on the rows PG6..PG10 (PIO port G PULL0), the columns high")
-    a("setexpr.l bm_pull *0x01C208F4 \\| 0x00155000")
-    a("mw.l 0x01C208F4 ${bm_pull}")
-    a("for c in %s; do gpio set ${c}; done" % " ".join(COLUMNS))
     a("")
     a("cls")
     a('echo ""')
@@ -81,11 +76,17 @@ def menu_script(entries, default, timeout_s, title="X6100 BOOT MENU"):
     a("setenv bm_choice")
     a("setenv i 0")
     a('while test -z "${bm_choice}"; do')
-    for i, _e in enumerate(entries):
-        key, col, row = KEYS[i]
-        a("    gpio clear %s" % col)
-        a("    if gpio input %s; then setenv bm_choice %d; fi" % (row, i + 1))
-        a("    gpio set %s" % col)
+    rows = []
+    for i in range(len(entries)):
+        if KEYS[i][2] not in rows:
+            rows.append(KEYS[i][2])
+    for row in rows:
+        a("    gpio clear %s" % row)
+        for i in range(len(entries)):
+            _key, col, r = KEYS[i]
+            if r == row:
+                a("    if gpio input %s; then setenv bm_choice %d; fi" % (col, i + 1))
+        a("    gpio input %s" % row)
     a('    if test -z "${bm_choice}"; then')
     a("        if test ${i} -ge ${bm_timeout}; then setenv bm_choice ${bm_default}; else sleep 0.1; setexpr i ${i} + 1; fi")
     a("    fi")

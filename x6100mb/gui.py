@@ -27,7 +27,7 @@ class App:
     def __init__(self, root):
         self.root = root
         root.title(APP)
-        root.minsize(860, 680)
+        root.minsize(800, 680)
         self.entries = []                 # {"kind", "name", "sys"?}
         self.default = 0
         self.q = queue.Queue()
@@ -51,7 +51,7 @@ class App:
         box.pack(fill="both", expand=True)
         cols = ("key", "name", "info")
         self.tree = ttk.Treeview(box, columns=cols, show="headings", height=6, selectmode="browse")
-        for c, t, w in (("key", "Klawisz", 70), ("name", "Nazwa w menu", 220), ("info", "Zawartość", 420)):
+        for c, t, w in (("key", "Klawisz", 70), ("name", "Nazwa w menu", 180), ("info", "Zawartość", 330)):
             self.tree.heading(c, text=t)
             self.tree.column(c, width=w, stretch=(c == "info"))
         self.tree.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=8)
@@ -62,7 +62,7 @@ class App:
                           ("Zmień nazwę", self.rename), ("W górę", lambda: self.move(-1)),
                           ("W dół", lambda: self.move(1)), ("Domyślny", self.set_default),
                           ("Usuń", self.remove)):
-            ttk.Button(btns, text=text, command=cmd, width=22).pack(fill="x", pady=2)
+            ttk.Button(btns, text=text, command=cmd, width=17).pack(fill="x", pady=2)
 
         opts = ttk.LabelFrame(top, text="2. Ustawienia menu")
         opts.pack(fill="x", pady=(8, 0))

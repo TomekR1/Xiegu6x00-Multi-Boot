@@ -1,4 +1,19 @@
-# X6100 Multiboot
+# Xiegu6x00 Multi-Boot (X6100 Multiboot)
+
+## Pobieranie
+
+Gotowe pliki są w zakładce **[Releases](../../releases)**:
+
+| Plik | Dla |
+|---|---|
+| `X6100-Multiboot.exe` | Windows 10/11 (poprosi o uprawnienia administratora) |
+| `X6100-Multiboot-macOS.zip` | macOS (rozpakuj; za pierwszym razem prawy klik > Otwórz) |
+| `X6100-Multiboot-Linux` | Linux x86-64 (`chmod +x`; do zapisu karty potrzebny `pkexec`) |
+| `X6100-multiboot-TEST.img.zip` | gotowa karta testowa: F1 OpenX6X00 v0.3.9, F2 R1CBU v0.28.0, F3 Xiegu z eMMC |
+
+Instalacja Pythona nie jest potrzebna. Pliki buduje GitHub Actions (`.github/workflows/build.yml`)
+przy każdej zmianie na gałęzi `main` i przy każdym tagu `v*`.
+
 
 Program w stylu balenaEtchera dla **Xiegu X6100**: dodajesz obrazy kart kilku systemów
 (np. OpenX6X00 w dwóch wersjach) i program składa z nich **jedną kartę SD z menu startowym**.
@@ -12,6 +27,7 @@ nietknięty.
 ## Jak używać
 
 1. Uruchom program:
+   - najprościej: plik z [Releases](../../releases) dla Twojego systemu, albo ze źródeł:
    - Windows: `uruchom-windows.bat` (potrzebny [Python 3.9+](https://www.python.org/downloads/),
      przy instalacji zaznacz *Add python.exe to PATH*). Gotowy `X6100-Multiboot.exe` powstaje w
      GitHub Actions (patrz niżej).
@@ -54,9 +70,15 @@ xiegu_args=console=ttyS0,115200 root=/dev/mmcblk2p2 rootwait panic=10 fbcon=rota
 (50 = 5 s), `xiegu_dev=1` to eMMC widziane przez U-Boot jako `mmc 1`. W tym pliku nie wolno
 dopisywać komentarzy na końcu linii, bo U-Boot wczyta je jako część wartości.
 
+Parametry `xiegu_*` odpowiadają temu, co instalator Xiegu (obraz `sdcard.img` z aktualizacji
+V1.1.9, skrypty `install_emmc.sh`/`fmt_emmc.sh`) zapisuje do eMMC: p1 FAT z `zImage`,
+`sun8i-r16-x6100.dtb` i `boot.scr`, p2 ext4, `root=/dev/mmcblk2p2`, a w U-Boot eMMC to `mmc 1`.
 Jeśli system Xiegu się nie uruchomi, menu pokaże na ekranie partycje i pliki eMMC (zrób zdjęcie),
-a po 60 s uruchomi system domyślny. Parametry `xiegu_*` są wpisane na podstawie przypuszczeń,
-zanim poznamy układ eMMC.
+a po 60 s uruchomi system domyślny.
+
+**Obrazu aktualizacji Xiegu nie dodaje się jako systemu na karcie.** Ten obraz to instalator:
+po uruchomieniu nadpisuje eMMC. Program rozpoznaje go (plik `rootfs.tar` na trzeciej partycji)
+i odmawia. System Xiegu dodajesz pozycją **+ Xiegu z eMMC**.
 
 ## Wiersz poleceń
 
@@ -70,8 +92,10 @@ python -m unittest discover -s tests
 ## Jak to działa w U-Boot
 
 Menu to zwykły skrypt U-Boot (`boot.scr`), działający z U-Boot, który już jest w obrazie OpenX6X00.
-Klawisze są odczytywane z matrycy GPIO panelu (wiersze PG6–PG10, kolumny PE11–PE17, według
-device tree X6100): F1/F2/F3 = kolumny PE16/PE17/PE11 i wiersz PG6, F4/F5 = PE16/PE17 i wiersz PG8.
+Klawisze są odczytywane z matrycy GPIO panelu (według device tree X6100) tak samo jak w
+multiboot projektu [x6100-fw-mangler](https://github.com/j0ju/x6100-fw-mangler): wiersz w stan
+niski (`gpio clear PG6`), odczyt kolumn (`gpio input PE16`, 0 = wciśnięty). F1/F2/F3 = kolumny
+PE16/PE17/PE11 w wierszu PG6, F4/F5 = PE16/PE17 w wierszu PG8.
 Napisy idą na ekran przez `vidconsole` U-Boota i mogą być obrócone o 90°.
 
 ## Do zrobienia

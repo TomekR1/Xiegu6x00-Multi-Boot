@@ -1,10 +1,14 @@
-# Testy, a potem gotowe programy: X6100-Multiboot.exe (Windows) i X6100-Multiboot.app (macOS).
-# Uruchamiane przy każdym tagu v* albo ręcznie (Actions > Build > Run workflow).
+# Aplikacje na Windows, macOS i Linux oraz testowy obraz karty, wystawiane w Releases.
+# Start: tag v* (git tag v0.1.0 && git push origin v0.1.0) albo ręcznie: Actions > Build > Run workflow.
 name: Build
 on:
   push:
     tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   test:
@@ -15,25 +19,104 @@ jobs:
         with: {python-version: "3.12"}
       - run: python -m unittest discover -s tests -v
 
-  build:
+  apps:
     needs: test
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            artifact: X6100-Multiboot-windows
-            extra: --uac-admin
+            out: X6100-Multiboot-Windows
+            extra: --windowed --uac-admin
           - os: macos-latest
-            artifact: X6100-Multiboot-macos
+            out: X6100-Multiboot-macOS
             extra: --windowed
+          - os: ubuntu-22.04
+            out: X6100-Multiboot-Linux
+            extra: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
+      - name: Tk check
+        run: python -c "import tkinter; print(tkinter.TkVersion)"
       - run: pip install pyinstaller==6.11.1
-      - run: pyinstaller --onefile --name X6100-Multiboot ${{ matrix.extra }} x6100_multiboot.py --paths .
+      - run: pyinstaller --noconfirm --onefile --name X6100-Multiboot ${{ matrix.extra }} --paths . x6100_multiboot.py
+      - name: Smoke test
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then B=dist/X6100-Multiboot.app/Contents/MacOS/X6100-Multiboot; else B=dist/X6100-Multiboot; fi
+          [ "$RUNNER_OS" = Windows ] && B=dist/X6100-Multiboot.exe
+          "$B" --help || "$B" info --help
+      - name: Pack
+        shell: bash
+        run: |
+          mkdir out
+          case "$RUNNER_OS" in
+            Windows) cp dist/X6100-Multiboot.exe out/ ;;
+            macOS)   (cd dist && ditto -c -k --keepParent X6100-Multiboot.app ../out/X6100-Multiboot-macOS.zip) ;;
+            Linux)   cp dist/X6100-Multiboot out/X6100-Multiboot-Linux && chmod +x out/X6100-Multiboot-Linux ;;
+          esac
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: dist/
+          name: ${{ matrix.out }}
+          path: out/
+
+  test-image:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Download systems
+        run: |
+          mkdir -p src
+          curl -sSfL -o src/OpenX6X00-v0.3.9.img.zip https://github.com/Guru-RF/OpenX6X00/releases/download/v0.3.9/OpenX6X00-x6100-v0.3.9-sdcard.img.zip
+          curl -sSfL -o src/R1CBU-v0.28.0.img.zip https://github.com/gdyuldin/x6100_gui/releases/download/v0.28.0/sdcard.img.zip
+          echo "9357804f1d81f2412d56116d26c44dda613f80b70fe4649d52e7686c90706071  src/R1CBU-v0.28.0.img.zip" | sha256sum -c
+      - name: Build test card
+        run: |
+          python x6100_multiboot.py build -o X6100-multiboot-TEST.img --xiegu --data-mb 256 \
+            --names "OpenX6X00 v0.3.9,R1CBU v0.28.0" src/OpenX6X00-v0.3.9.img.zip src/R1CBU-v0.28.0.img.zip > build.log
+          tail -c 600 build.log
+          zip -9 X6100-multiboot-TEST.img.zip X6100-multiboot-TEST.img
+          sha256sum X6100-multiboot-TEST.img.zip > X6100-multiboot-TEST.img.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: X6100-multiboot-TEST
+          path: |
+            X6100-multiboot-TEST.img.zip
+            X6100-multiboot-TEST.img.zip.sha256
+          compression-level: 0
+
+  release:
+    needs: [apps, test-image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {path: art, merge-multiple: true}
+      - run: ls -la art
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'test-build' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Wersja testowa (z gałęzi main)' }}
+          prerelease: true
+          make_latest: true
+          files: art/*
+          body: |
+            **Wersja testowa, nie była jeszcze uruchamiana na radiu.**
+
+            Aplikacje:
+            - Windows: `X6100-Multiboot.exe`
+            - macOS: `X6100-Multiboot-macOS.zip` (rozpakuj; przy pierwszym uruchomieniu prawy klik > Otwórz)
+            - Linux: `X6100-Multiboot-Linux` (`chmod +x`, do zapisu karty potrzebny pkexec)
+
+            Karta testowa `X6100-multiboot-TEST.img.zip` (wgraj balenaEtcherem):
+            - F1: OpenX6X00 v0.3.9
+            - F2: R1CBU v0.28.0
+            - F3: Xiegu z pamięci wewnętrznej (eMMC), bez zmian w eMMC
+
+            Bez wciśnięcia klawisza po 5 s startuje F1.

@@ -161,6 +161,8 @@ class SourceSystem:
         self.path = path
         self.raw = raw_path
         self.name = re.sub(r"(-sdcard)?\.img(\.zip)?$", "", os.path.basename(path), flags=re.I)
+        if self.name.lower() in ("sdcard", "image", "disk", ""):
+            self.name = os.path.basename(os.path.dirname(os.path.abspath(path))) or self.name
         self.warnings = []
         with open(raw_path, "rb") as f:
             self.parts = read_mbr(f)
@@ -175,6 +177,14 @@ class SourceSystem:
             if not boots:
                 raise ImageError("no FAT boot partition")
             self.boot_part = boots[0]
+            # Xiegu's update card: booting it flashes the radio's eMMC. Never a menu entry.
+            for p in boots[1:]:
+                try:
+                    if FatReader(f, p[2] * SECTOR).find("rootfs.tar"):
+                        raise ImageError("to obraz instalacyjny Xiegu (wgrywa system do eMMC radia), nie system "
+                                         "do uruchamiania z karty. Dodaj pozycję \"Xiegu z eMMC\".")
+                except FatError:
+                    pass
             fat = FatReader(f, self.boot_part[2] * SECTOR)
             self.boot_files = [e[0] for e in fat.listdir()]
             script = None
@@ -206,6 +216,7 @@ class SourceSystem:
 
     def _parse_script(self, fat):
         text = self.script
+        text = re.sub(r"\\\s*\n", " ", text)      # lines continued with a backslash
         lines = [l.strip() for l in text.splitlines()]
         args = None
         loads = {}

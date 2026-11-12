@@ -77,5 +77,17 @@ def cli(argv):
     return main()
 
 
+def main():
+    try:
+        return cli(sys.argv[1:])
+    except KeyboardInterrupt:
+        return 130
+    except Exception as e:          # a message, not a traceback
+        if "--debug" in sys.argv:
+            raise
+        print(f"błąd: {e}", file=sys.stderr)
+        return 1
+
+
 if __name__ == "__main__":
-    sys.exit(cli(sys.argv[1:]))
+    sys.exit(main())
