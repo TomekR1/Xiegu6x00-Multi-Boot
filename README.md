@@ -100,6 +100,22 @@ niski (`gpio clear PG6`), odczyt kolumn (`gpio input PE16`, 0 = wciśnięty). F1
 PE16/PE17/PE11 w wierszu PG6, F4/F5 = PE16/PE17 w wierszu PG8.
 Napisy idą na ekran przez `vidconsole` U-Boota (patrz niżej: U-Boot z obsługą ekranu).
 
+## Pobieranie systemów z internetu
+
+**+ Z internetu…** pokazuje znane systemy z listą ich wydań z GitHuba (najnowsza wersja jest
+zaznaczona). Po kliknięciu **Dodaj** aplikacja pobiera obraz, sprawdza rozmiar i sumę SHA-256
+(jeśli GitHub ją podaje) i dodaje go do menu. Obrazy zostają w pamięci podręcznej.
+
+| System | Źródło |
+|---|---|
+| OpenX6X00 | [Guru-RF/OpenX6X00](https://github.com/Guru-RF/OpenX6X00) |
+| OpenX6100 (następca R1CBU) | [OpenX6100/x6100_gui](https://github.com/OpenX6100/x6100_gui) |
+| R1CBU (klasyczny) | [gdyuldin/x6100_gui](https://github.com/gdyuldin/x6100_gui) |
+
+W wierszu poleceń zamiast pliku można podać `openx6x00@latest`, `openx6100@v1.2.0` itd.;
+`catalog` wypisuje dostępne wersje. Obraz Xiegu nie jest pobierany: system Xiegu startuje
+z pamięci radia (pozycja **+ Xiegu z eMMC**).
+
 ## Menu na ekranie radia
 
 - **Graficzne:** kafelek z logo dla każdego systemu, ustawiony nad jego fizycznym przyciskiem

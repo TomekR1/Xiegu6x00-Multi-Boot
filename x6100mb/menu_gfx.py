@@ -65,10 +65,10 @@ def _fit_text(draw, text, max_w, start):
     return _font(10)
 
 
-def default_logo(name, size=120):
+def default_logo(name, size=120, bg=None):
     """A rounded square in the family's colours with its name: no one's trademark copied"""
     label, (c1, c2) = _family(name)
-    img = Image.new("RGB", (size, size), TILE)
+    img = Image.new("RGB", (size, size), bg or TILE)
     grad = Image.new("RGB", (size, size))
     gd = ImageDraw.Draw(grad)
     for y in range(size):
@@ -83,13 +83,13 @@ def default_logo(name, size=120):
     return img
 
 
-def load_logo(path, size=120):
+def load_logo(path, size=120, bg=None):
     """A picture of one's own (PNG, JPG, ...), fitted into the logo square on the tile colour"""
     src = Image.open(path)
     src.load()
     src = src.convert("RGBA")
     src.thumbnail((size, size), Image.LANCZOS)
-    out = Image.new("RGB", (size, size), TILE)
+    out = Image.new("RGB", (size, size), bg or TILE)
     out.paste(src, ((size - src.width) // 2, (size - src.height) // 2), src)
     return out
 
@@ -127,11 +127,11 @@ def render_menu(entries, default, selected=None, title="X6100 MULTIBOOT"):
         logo = None
         if e.get("logo"):
             try:
-                logo = load_logo(e["logo"])
+                logo = load_logo(e["logo"], bg=fill)
             except Exception:
                 logo = None
         if logo is None:
-            logo = default_logo(e["name"])
+            logo = default_logo(e["name"], bg=fill)
         img.paste(logo, (cx - 60, 92))
         f = _font(19)
         for k, line in enumerate(_wrap(d, e["name"], f, 136)):
@@ -148,8 +148,21 @@ def render_menu(entries, default, selected=None, title="X6100 MULTIBOOT"):
 
 
 def to_framebuffer_bmp(img):
-    """The landscape picture as the 480x800 24-bit BMP U-Boot draws into the portrait framebuffer"""
-    fb = img.transpose(Image.ROTATE_90)
+    """The landscape picture as the 480x800 BMP U-Boot draws into the portrait framebuffer.
+
+    8 bits with a 256-colour palette: U-Boot draws that always, 24-bit only with
+    CONFIG_BMP_24BPP. Black stays index 0's exact black (the countdown row's background)."""
+    fb = img.transpose(Image.ROTATE_90).quantize(colors=255, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    pal = fb.getpalette()[:255 * 3]
+    out = Image.new("P", fb.size)
+    out.putpalette([0, 0, 0] + pal)
+    # shift indices by one so black is its own entry 0, then map pure-black pixels to it
+    src = fb.load()
+    rgb = img.transpose(Image.ROTATE_90).load()
+    dst = out.load()
+    for y in range(fb.size[1]):
+        for x in range(fb.size[0]):
+            dst[x, y] = 0 if rgb[x, y] == (0, 0, 0) else src[x, y] + 1
     buf = io.BytesIO()
-    fb.save(buf, "BMP")
+    out.save(buf, "BMP")
     return buf.getvalue()

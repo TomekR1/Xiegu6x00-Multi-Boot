@@ -90,7 +90,7 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
         a("cls")
     a("setenv stdout serial")
     if gfx:
-        a("if itest ${bm_gfx} -eq 1; then bmp display ${kernel_addr_r} 0 0; fi")
+        a("if itest ${bm_gfx} -eq 1; then if bmp display ${kernel_addr_r} 0 0; then setenv bm_gfx 1; else setenv bm_gfx 0; fi; fi")
     count_row = "2;2H" if gfx else "%d;3H" % (len(entries) + 6)
     # The text menu (also under a picture that did not load)
     text = []
@@ -240,7 +240,7 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         e["part"] = 2 if i == 0 else 4 + i      # p2, then p5, p6, ...
 
     kernels = sum(sum(len(v) for v in e["sys"].files.values()) for e in sd)
-    pictures = (len(entries) + 1) * 1200 * 1024 if gfx else 0
+    pictures = (len(entries) + 1) * 400 * 1024 if gfx else 0
     boot_size = _up(max(64 * MIB, kernels + pictures + boot_extra_mb * MIB + 4 * MIB) // SECTOR) * SECTOR
 
     lba = ALIGN                                       # 1 MiB

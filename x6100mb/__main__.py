@@ -3,19 +3,47 @@
     python -m x6100mb                      the window
     python -m x6100mb info IMAGE...        what each image holds
     python -m x6100mb build -o OUT.img [--xiegu] [--default N] [--timeout S] [--data-mb MB] IMAGE...
+        IMAGE: a file, or a release to fetch: openx6x00@latest, openx6100@v1.2.0, r1cbu@latest
+    python -m x6100mb catalog              the systems it can fetch, newest releases
     python -m x6100mb list                 the removable cards seen
     python -m x6100mb write-plan PLAN DEVICE PROGRESS   (used by the window, with admin rights)
 """
 import argparse
+import os
 import sys
+
+
+def _fetch(spec):
+    """'openx6x00@latest' or 'openx6100@v1.2.0': that release's image, fetched; (path, name)"""
+    from . import catalog
+    from .image import cache_dir
+    sid, _, ver = spec.partition("@")
+    src = next((x for x in catalog.SOURCES if x["id"] == sid.lower()), None)
+    if src is None:
+        raise SystemExit(f"{spec}: unknown system (known: {', '.join(x['id'] for x in catalog.SOURCES)})")
+    rels = catalog.releases(src)
+    if ver in ("", "latest"):
+        rel = next((r for r in rels if not r["prerelease"]), rels[0] if rels else None)
+    else:
+        rel = next((r for r in rels if r["tag"].lstrip("v") == ver.lstrip("v")), None)
+    if rel is None:
+        raise SystemExit(f"{spec}: no such release with an X6100 image")
+    print(f"fetching {catalog.label(src, rel)}: {rel['url']}", file=sys.stderr)
+    return catalog.download(src, rel, cache_dir()), catalog.label(src, rel)
 
 
 def _load(paths):
     from .image import SourceSystem, cache_dir, open_source
     out = []
     for p in paths:
+        name = None
+        if "@" in p and not os.path.exists(p):
+            p, name = _fetch(p)
         raw = open_source(p, cache_dir())
-        out.append(SourceSystem(p, raw))
+        s = SourceSystem(p, raw)
+        if name:
+            s.name = name
+        out.append(s)
     return out
 
 
@@ -44,6 +72,7 @@ def cli(argv):
     b.add_argument("--script-only", action="store_true", help="print the menu script, write nothing")
     b.add_argument("images", nargs="+")
     sub.add_parser("list")
+    sub.add_parser("catalog", help="the systems the app can fetch, with their newest releases")
     a = ap.parse_args(argv)
 
     if a.cmd == "info":
@@ -51,6 +80,16 @@ def cli(argv):
             print(f"{s.name}\n  {s.summary()}\n  bootargs: {s.bootargs}")
             for w in s.warnings:
                 print("  warning:", w)
+        return 0
+    if a.cmd == "catalog":
+        from . import catalog
+        for src in catalog.SOURCES:
+            print(f"{src['id']:10s} {src['name']} ({src['repo']})")
+            try:
+                for r in catalog.releases(src)[:5]:
+                    print(f"    {r['tag']:12s} {r['date']}  {r['size'] >> 20} MB{'  (test)' if r['prerelease'] else ''}")
+            except catalog.CatalogError as e:
+                print(f"    error: {e}")
         return 0
     if a.cmd == "list":
         from .devices import list_cards

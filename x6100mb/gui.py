@@ -15,7 +15,8 @@ from .image import SourceSystem, cache_dir, open_source
 from .writer import Progress, write_device, write_image_file
 
 APP = "Xiegu Multi Patcher"
-PHASES = {"prepare": "Przygotowanie karty", "write": "Zapis", "sync": "Opróżnianie bufora karty",
+PHASES = {"download": "Pobieranie", "prepare": "Przygotowanie karty", "write": "Zapis",
+          "sync": "Opróżnianie bufora karty",
           "verify": "Weryfikacja", "unzip": "Rozpakowywanie", "done": "Gotowe"}
 
 
@@ -58,7 +59,8 @@ class App:
         self.tree.bind("<Double-1>", lambda e: self.rename())
         btns = ttk.Frame(box)
         btns.pack(side="right", fill="y", padx=8, pady=8)
-        for text, cmd in (("+ Obraz karty…", self.add_image), ("+ Xiegu z eMMC", self.add_xiegu),
+        for text, cmd in (("+ Z internetu…", self.add_online), ("+ Obraz karty…", self.add_image),
+                          ("+ Xiegu z eMMC", self.add_xiegu),
                           ("Zmień nazwę", self.rename), ("W górę", lambda: self.move(-1)),
                           ("W dół", lambda: self.move(1)), ("Domyślny", self.set_default),
                           ("Logo…", self.choose_logo), ("Podgląd menu", self.preview), ("Usuń", self.remove)):
@@ -155,12 +157,30 @@ class App:
             return
         self._job("Analiza obrazu…", self._analyse, path)
 
-    def _analyse(self, path):
+    def _analyse(self, path, name=None):
         def unzip(done, total):
             self.q.put(("progress", "unzip", done, total, ""))
         raw = open_source(path, cache_dir(), unzip)
         s = SourceSystem(path, raw)
+        if name:
+            s.name = name
         return ("added", s)
+
+    def add_online(self):
+        if self.busy:
+            return
+        if len(self.entries) >= MAX_ENTRIES:
+            messagebox.showwarning(APP, f"Menu ma najwyżej {MAX_ENTRIES} pozycji (F1–F{MAX_ENTRIES}).")
+            return
+        OnlineDialog(self)
+
+    def _fetch_and_add(self, source, rel):
+        from . import catalog
+
+        def prog(done, total):
+            self.q.put(("progress", "download", done, total, rel["asset"]))
+        path = catalog.download(source, rel, cache_dir(), prog)
+        return self._analyse(path, catalog.label(source, rel))
 
     def add_xiegu(self):
         if any(e["kind"] == "xiegu" for e in self.entries):
@@ -419,6 +439,72 @@ class App:
         except queue.Empty:
             pass
         self.root.after(100, self._poll)
+
+
+class OnlineDialog:
+    """The systems the app knows, each with its releases on GitHub: pick one, it is fetched and added"""
+
+    def __init__(self, app):
+        from . import catalog
+        self.app, self.cat = app, catalog
+        self.win = tk.Toplevel(app.root)
+        self.win.title("Pobierz system z internetu")
+        self.win.transient(app.root)
+        self.rels = {}
+        f = ttk.Frame(self.win)
+        f.pack(fill="both", expand=True, padx=12, pady=12)
+        ttk.Label(f, text="Wybierz system i wersję. Najnowsza jest na górze listy.",
+                  font=("TkDefaultFont", 11, "bold")).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 8))
+        self.vars, self.boxes = {}, {}
+        for i, src in enumerate(catalog.SOURCES):
+            r = i + 1
+            ttk.Label(f, text=src["name"], font=("TkDefaultFont", 10, "bold")).grid(row=2 * r - 1, column=0, sticky="w")
+            ttk.Label(f, text=src["about"], foreground="#666").grid(row=2 * r, column=0, columnspan=3, sticky="w", pady=(0, 8))
+            v = tk.StringVar(value="sprawdzam…")
+            box = ttk.Combobox(f, textvariable=v, state="disabled", width=38)
+            box.grid(row=2 * r - 1, column=1, sticky="w", padx=8)
+            btn = ttk.Button(f, text="Dodaj", state="disabled", command=lambda s=src: self.add(s))
+            btn.grid(row=2 * r - 1, column=2, sticky="w")
+            self.vars[src["id"]], self.boxes[src["id"]] = v, (box, btn)
+            threading.Thread(target=self._load, args=(src,), daemon=True).start()
+        ttk.Label(f, text="Obrazy pobierane są z wydań projektów na GitHubie i zostają w pamięci podręcznej "
+                          "aplikacji.", foreground="#666", wraplength=560).grid(row=99, column=0, columnspan=4,
+                                                                                sticky="w", pady=(8, 0))
+
+    def _load(self, src):
+        try:
+            rels = self.cat.releases(src)
+            err = None if rels else "brak obrazów X6100 w wydaniach"
+        except Exception as e:
+            rels, err = [], str(e)
+        self.app.root.after(0, self._loaded, src, rels, err)
+
+    def _loaded(self, src, rels, err):
+        if not self.win.winfo_exists():
+            return
+        box, btn = self.boxes[src["id"]]
+        if err:
+            self.vars[src["id"]].set("błąd: " + err)
+            return
+        self.rels[src["id"]] = rels
+        vals = ["%s  (%s%s, %d MB)" % (r["tag"], r["date"], ", test" if r["prerelease"] else "", r["size"] >> 20)
+                for r in rels]
+        box["values"] = vals
+        box.state(["!disabled", "readonly"])
+        stable = next((k for k, r in enumerate(rels) if not r["prerelease"]), 0)
+        box.current(stable)
+        btn.state(["!disabled"])
+
+    def add(self, src):
+        if self.app.busy:
+            return
+        if len(self.app.entries) >= MAX_ENTRIES:
+            messagebox.showwarning(APP, f"Menu ma najwyżej {MAX_ENTRIES} pozycji.", parent=self.win)
+            return
+        box, _ = self.boxes[src["id"]]
+        rel = self.rels[src["id"]][box.current()]
+        self.app._job("Pobieranie %s %s…" % (src["name"], rel["tag"]), self.app._fetch_and_add, src, rel)
+        self.win.destroy()
 
 
 def _filetypes(types):

@@ -98,22 +98,19 @@ jobs:
         with: {name: u-boot-x6100-menu, path: x6100mb/data}
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - name: Download systems
-        run: |
-          mkdir -p src
-          curl -sSfL -o src/OpenX6X00-v0.3.9.img.zip https://github.com/Guru-RF/OpenX6X00/releases/download/v0.3.9/OpenX6X00-x6100-v0.3.9-sdcard.img.zip
-          curl -sSfL -o src/R1CBU-v0.28.0.img.zip https://github.com/gdyuldin/x6100_gui/releases/download/v0.28.0/sdcard.img.zip
-          echo "9357804f1d81f2412d56116d26c44dda613f80b70fe4649d52e7686c90706071  src/R1CBU-v0.28.0.img.zip" | sha256sum -c
-      - name: Build test card
+      - name: Catalog (live, newest releases on GitHub)
+        env: {GITHUB_TOKEN: "${{ github.token }}"}
+        run: python x6100_multiboot.py catalog
+      - name: Build test cards from the newest releases (fetched by the app itself)
+        env: {GITHUB_TOKEN: "${{ github.token }}"}
         run: |
           pip install pillow==11.0.0
-          python x6100_multiboot.py build -o X6100-multiboot-TEST.img --xiegu --data-mb 256 --data separate \
-            --names "OpenX6X00 v0.3.9,R1CBU v0.28.0" src/OpenX6X00-v0.3.9.img.zip src/R1CBU-v0.28.0.img.zip > build.log
-          tail -c 600 build.log
+          python x6100_multiboot.py build -o X6100-multiboot-TEST.img --xiegu --data separate --data-mb 256 \
+            openx6x00@latest openx6100@latest > build.log
+          tail -c 700 build.log
           grep -q "menu, ekran" build.log
           grep -q "'graphics': True" build.log
-          python x6100_multiboot.py build -o X6100-multiboot-TEST-mini.img --xiegu --data-mb 128 \
-            --names "OpenX6X00 v0.3.9" src/OpenX6X00-v0.3.9.img.zip > /dev/null
+          python x6100_multiboot.py build -o X6100-multiboot-TEST-mini.img --xiegu --data-mb 128 openx6x00@latest > /dev/null
           xz -T0 -9 X6100-multiboot-TEST.img X6100-multiboot-TEST-mini.img
           sha256sum X6100-multiboot-TEST*.img.xz > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
@@ -153,8 +150,8 @@ jobs:
             - Linux: `Xiegu-Multi-Patcher-Linux` (`chmod +x`, do zapisu karty potrzebny pkexec)
 
             Karty testowe (wgraj balenaEtcherem bez rozpakowywania):
-            - `X6100-multiboot-TEST.img.xz`: F1 OpenX6X00 v0.3.9, F2 R1CBU v0.28.0, F3 Xiegu z eMMC (osobne DATA)
-            - `X6100-multiboot-TEST-mini.img.xz`: F1 OpenX6X00 v0.3.9, F2 Xiegu z eMMC
+            - `X6100-multiboot-TEST.img.xz`: F1 najnowszy OpenX6X00, F2 najnowszy OpenX6100, F3 Xiegu z eMMC (osobne DATA)
+            - `X6100-multiboot-TEST-mini.img.xz`: F1 najnowszy OpenX6X00, F2 Xiegu z eMMC
 
             Karty mają własny U-Boot z obsługą ekranu X6100 (`u-boot-x6100-menu.bin`), więc menu
             jest widoczne. eMMC nie jest zmieniane.
