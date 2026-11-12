@@ -1,0 +1,39 @@
+# Testy, a potem gotowe programy: X6100-Multiboot.exe (Windows) i X6100-Multiboot.app (macOS).
+# Uruchamiane przy każdym tagu v* albo ręcznie (Actions > Build > Run workflow).
+name: Build
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: python -m unittest discover -s tests -v
+
+  build:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: X6100-Multiboot-windows
+            extra: --uac-admin
+          - os: macos-latest
+            artifact: X6100-Multiboot-macos
+            extra: --windowed
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install pyinstaller==6.11.1
+      - run: pyinstaller --onefile --name X6100-Multiboot ${{ matrix.extra }} x6100_multiboot.py --paths .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/
