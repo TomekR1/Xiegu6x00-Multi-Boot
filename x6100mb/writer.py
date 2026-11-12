@@ -75,18 +75,22 @@ def write_device(plan, dev, progress=None, allow_file=False):
                 progress("write", done, total)
         progress("sync", done, total, "flushing the card's cache")
         devices.sync(fd)
+        devices.drop_cache(fd)
+        verify(plan, dev, progress, fd=fd)
     finally:
         devices.close(fd)
-    verify(plan, dev, progress)
     devices.after_write(dev)
     progress("done", total, total)
 
 
-def verify(plan, target, progress=None):
+def verify(plan, target, progress=None, fd=None):
+    """Reads every piece back; fd: an open descriptor to read through (kept open)"""
     progress = progress or Progress()
     total = plan.written_bytes()
     done = 0
-    fd = devices.open_for_read(target)
+    own = fd is None
+    if own:
+        fd = devices.open_for_read(target)
     try:
         for off, piece in plan.pieces:
             pos = off
@@ -99,7 +103,8 @@ def verify(plan, target, progress=None):
                 done += len(c)
                 progress("verify", done, total)
     finally:
-        devices.close(fd)
+        if own:
+            devices.close(fd)
 
 
 def main_write_plan(argv):

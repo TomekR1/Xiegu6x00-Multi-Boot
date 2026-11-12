@@ -347,7 +347,8 @@ class App:
                                         f"WSZYSTKO na tej karcie zostanie usunięte.\n\nMenu:\n" + "\n".join(lines) +
                                    f"\n\nDATA: {plan.info['data_mb']} MB\n\nWgrać?", icon="warning"):
             return
-        if devices.is_admin():
+        if devices.is_admin() or devices.MAC:
+            # macOS: the app writes itself, through authopen (it asks for the password)
             self._job("Zapis na kartę…", self._card_job_inproc, plan, card["path"])
         else:
             self._job("Zapis na kartę (uprawnienia administratora)…", self._card_job_elevated, plan, card["path"])

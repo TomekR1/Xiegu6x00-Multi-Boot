@@ -167,14 +167,56 @@ def _raw(dev):
     return dev
 
 
+def _authopen(path, flags):
+    """macOS: the raw disk opened by /usr/libexec/authopen, which asks for the password itself and
+    hands the open descriptor back over a socket. Even root gets 'Operation not permitted' opening
+    /dev/rdiskN on recent macOS; authopen is the way the system offers (balenaEtcher's too)."""
+    import socket
+    parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        p = subprocess.Popen(["/usr/libexec/authopen", "-stdoutpipe", "-o", str(flags), path],
+                             stdout=child, stderr=subprocess.PIPE)
+        child.close()
+        fds = []
+        try:
+            _msg, fds, _f, _a = socket.recv_fds(parent, 1024, 1)
+        except OSError:
+            pass
+        err = p.communicate(timeout=300)[1].decode(errors="replace").strip()
+    finally:
+        parent.close()
+    if not fds:
+        raise DeviceError("macOS nie dał dostępu do karty" + (f" ({err})" if err else
+                          " (odmowa hasła administratora?)"))
+    fd = fds[0]
+    try:
+        import fcntl
+        fcntl.fcntl(fd, 48, 1)     # F_NOCACHE: the read-back comes from the card, not the cache
+    except OSError:
+        pass
+    return fd
+
+
 def open_for_write(dev):
+    """Read and write: the same descriptor serves the read-back (on macOS one password, not two)"""
     flags = os.O_RDWR | getattr(os, "O_BINARY", 0)
-    if not WIN and not os.path.isfile(dev):
-        flags |= getattr(os, "O_EXCL", 0)
+    if MAC and not os.path.isfile(dev):
+        return _authopen(_raw(dev), os.O_RDWR)
     return os.open(_raw(dev), flags)
 
 
+def drop_cache(fd):
+    """Before a read-back: what Linux still caches of the card goes"""
+    if hasattr(os, "posix_fadvise"):
+        try:
+            os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+        except OSError:
+            pass
+
+
 def open_for_read(dev):
+    if MAC and not os.path.isfile(dev):
+        return _authopen(_raw(dev), os.O_RDONLY)
     fd = os.open(_raw(dev), os.O_RDONLY | getattr(os, "O_BINARY", 0))
     if hasattr(os, "posix_fadvise"):
         try:                       # read from the card, not from what Linux still caches of it
