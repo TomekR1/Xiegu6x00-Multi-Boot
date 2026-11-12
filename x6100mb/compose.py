@@ -50,7 +50,7 @@ def _up(n, a=ALIGN):
     return (n + a - 1) // a * a
 
 
-def menu_script(entries, default, timeout_s, title="X6100 BOOT MENU"):
+def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT"):
     """entries: [{"kind": "sd", "name", "dir", "part", "sys": SourceSystem} | {"kind": "xiegu", "name"}]"""
     L = []
     a = L.append
@@ -65,13 +65,13 @@ def menu_script(entries, default, timeout_s, title="X6100 BOOT MENU"):
     a("")
     a("cls")
     a('echo ""')
-    a('echo "   ===== %s ====="' % title)
-    a('echo ""')
+    a('echo "  %s"' % title)
+    a('echo "  ------------------------------"')
     for i, e in enumerate(entries):
-        a('echo "   %s  %s"' % (KEYS[i][0], _ascii(e["name"])))
-    a('echo ""')
-    a('echo "   default: F${bm_default}"')
-    a('echo ""')
+        a('echo "  %s   %s"' % (KEYS[i][0], _ascii(e["name"])))
+    a('echo "  ------------------------------"')
+    a("setexpr bm_secs ${bm_timeout} / 10")
+    a('echo "  Bez klawisza: F${bm_default} za ${bm_secs} s"')
     a("")
     a("setenv bm_choice")
     a("setenv i 0")
@@ -91,7 +91,8 @@ def menu_script(entries, default, timeout_s, title="X6100 BOOT MENU"):
     a("        if test ${i} -ge ${bm_timeout}; then setenv bm_choice ${bm_default}; else sleep 0.1; setexpr i ${i} + 1; fi")
     a("    fi")
     a("done")
-    a('echo "   -> F${bm_choice}"')
+    a('echo ""')
+    a('echo "  Start: F${bm_choice} ..."')
     a("")
     # Each entry's start as a variable, so a failed one can fall back to the default
     first_sd = None
@@ -141,7 +142,8 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     """A Plan for the card. entries as for menu_script, without "dir"/"part" (filled in here).
 
     card_bytes: writing to a card of that size, DATA fills the rest; else the image has
-    data_mb of DATA. uboot_from: the SourceSystem whose U-Boot goes on the card.
+    data_mb of DATA. uboot_from: the U-Boot to use (image.UBoot or a SourceSystem); by default
+    the bundled menu U-Boot (it lights the screen), else the first image's.
     """
     sd = [e for e in entries if e["kind"] == "sd"]
     if not sd:
@@ -150,6 +152,10 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         raise ComposeError(f"at most {MAX_ENTRIES} entries (keys F1..F{MAX_ENTRIES})")
     if not 0 <= default < len(entries):
         raise ComposeError("the default entry is not in the list")
+    if uboot_from is None:
+        from .image import UBoot, bundled_uboot_path
+        p = bundled_uboot_path()
+        uboot_from = UBoot(p) if p else None
     ub = uboot_from or next((e["sys"] for e in sd if e["sys"].has_uboot), None)
     if ub is None or not ub.has_uboot:
         raise ComposeError("none of the images carries an Allwinner U-Boot")

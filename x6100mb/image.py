@@ -286,6 +286,36 @@ class SourceSystem:
                 f"U-Boot {self.uboot_version or ('yes' if self.has_uboot else 'none')}")
 
 
+def bundled_uboot_path():
+    """The menu's own U-Boot (uboot/build.sh: sets up the X6100 screen), if this build carries it"""
+    import sys
+    bases = [os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")]
+    if hasattr(sys, "_MEIPASS"):
+        bases.insert(0, os.path.join(sys._MEIPASS, "x6100mb", "data"))
+    for b in bases:
+        p = os.path.join(b, "u-boot-x6100-menu.bin")
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+class UBoot:
+    """A U-Boot from a file (the bundled one, or one given): what compose() puts at 8 KiB"""
+
+    def __init__(self, path):
+        with open(path, "rb") as f:
+            data = f.read()
+        if data[4:12] != b"eGON.BT0":
+            raise ImageError(f"{os.path.basename(path)}: not an Allwinner U-Boot (no eGON header)")
+        if len(data) > UBOOT_END - UBOOT_OFFSET:
+            raise ImageError(f"{os.path.basename(path)}: U-Boot larger than {UBOOT_END - UBOOT_OFFSET} bytes")
+        self.uboot = data + b"\x00" * ((-len(data)) % SECTOR)
+        self.has_uboot = True
+        m = re.search(rb"U-Boot SPL (\d{4}\.\d{2}[^ ]*)", data)
+        self.uboot_version = (m.group(1).decode() if m else "?") + " (menu, ekran)"
+        self.path = path
+
+
 def cache_dir():
     base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), ".cache")
     return os.path.join(base, "x6100-multiboot")

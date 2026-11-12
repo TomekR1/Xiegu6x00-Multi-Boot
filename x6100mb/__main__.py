@@ -34,6 +34,8 @@ def cli(argv):
     b.add_argument("--timeout", type=float, default=5)
     b.add_argument("--data-mb", type=int, default=1024)
     b.add_argument("--names", help="entry names, comma-separated")
+    b.add_argument("--uboot", help="U-Boot: a u-boot-sunxi-with-spl.bin file, or 'image' for the first image's "
+                   "(default: the bundled menu U-Boot when there is one)")
     b.add_argument("--script-only", action="store_true", help="print the menu script, write nothing")
     b.add_argument("images", nargs="+")
     sub.add_parser("list")
@@ -58,7 +60,13 @@ def cli(argv):
         entries = [{"kind": "sd", "name": n, "sys": s} for n, s in zip(names, systems)]
         if a.xiegu:
             entries.append({"kind": "xiegu", "name": "Xiegu (eMMC)"})
-        plan = compose(entries, default=a.default - 1, timeout_s=a.timeout, data_mb=a.data_mb)
+        ub = None
+        if a.uboot == "image":
+            ub = systems[0]
+        elif a.uboot:
+            from .image import UBoot
+            ub = UBoot(a.uboot)
+        plan = compose(entries, default=a.default - 1, timeout_s=a.timeout, data_mb=a.data_mb, uboot_from=ub)
         if a.script_only:
             print(plan.script)
             return 0

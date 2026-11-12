@@ -1,0 +1,199 @@
+diff --git a/drivers/video/Kconfig b/drivers/video/Kconfig
+index c2acc131..dabfe629 100644
+--- a/drivers/video/Kconfig
++++ b/drivers/video/Kconfig
+@@ -702,6 +702,23 @@ config VIDEO_LCD_HITACHI_TX18D42VM
+ 	lcd controller which needs to be initialized over SPI, once that is
+ 	done they work like a regular LVDS panel.
+ 
++config VIDEO_LCD_ST7701S_X6100
++	bool "Xiegu X6100 ST7701S panel (SPI set-up on PL7..PL10)"
++	depends on VIDEO_SUNXI
++	help
++	  Sets up the Sitronix ST7701S controller of the Xiegu X6100's
++	  480x800 RGB panel over bit-banged SPI (CS PL7, MOSI PL8, SCK PL9,
++	  D/CX PL10), so U-Boot can show its console on the radio's screen.
++
++config VIDEO_SUNXI_ROTATION
++	int "Rotation of the sunxi LCD console (0..3, 90 degree steps clockwise)"
++	depends on VIDEO_SUNXI && CONSOLE_ROTATION
++	range 0 3
++	default 0
++	help
++	  For a panel mounted rotated, as the X6100's portrait panel in a
++	  landscape radio (3, as Linux's fbcon=rotate:3).
++
+ config VIDEO_LCD_SONY_L4F00430T01
+ 	tristate "Sony L4F00430T01 480x800 LCD panel support"
+ 	depends on PANEL
+diff --git a/drivers/video/Makefile b/drivers/video/Makefile
+index 082b8967..ac9a7db9 100644
+--- a/drivers/video/Makefile
++++ b/drivers/video/Makefile
+@@ -61,6 +61,7 @@ obj-$(CONFIG_VIDEO_LCD_ENDEAVORU) += endeavoru-panel.o
+ obj-$(CONFIG_VIDEO_LCD_HIMAX_HX8394) += himax-hx8394.o
+ obj-$(CONFIG_VIDEO_LCD_HITACHI_TX10D07VM0BAA) += hitachi-tx10d07vm0baa.o
+ obj-$(CONFIG_VIDEO_LCD_HITACHI_TX18D42VM) += hitachi_tx18d42vm_lcd.o
++obj-$(CONFIG_VIDEO_LCD_ST7701S_X6100) += st7701s_x6100_lcd.o
+ obj-$(CONFIG_VIDEO_LCD_ILITEK_ILI9806E) += ilitek-ili9806e.o
+ obj-$(CONFIG_VIDEO_LCD_LG_LD070WX3) += lg-ld070wx3.o
+ obj-$(CONFIG_VIDEO_LCD_LG_LH400WV3) += lg-lh400wv3-sd04.o
+diff --git a/drivers/video/st7701s_x6100_lcd.c b/drivers/video/st7701s_x6100_lcd.c
+new file mode 100644
+index 00000000..9ea93656
+--- /dev/null
++++ b/drivers/video/st7701s_x6100_lcd.c
+@@ -0,0 +1,120 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * Sitronix ST7701S panel of the Xiegu X6100 (Jinglitai JLT4013A, 480x800 RGB), set up over a
++ * bit-banged 4-wire SPI before U-Boot drives its RGB interface: without this the screen stays
++ * dark until Linux starts. The sequence is the one of the X6100's Linux driver
++ * (AetherX6100Buildroot, board/X6100/drivers/panel-jinglitai-jlt4013a.c, GPL-2.0), its porch
++ * values worked out for its display mode.
++ *
++ * Pins (X6100 device tree): CS PL7, MOSI PL8, SCK PL9, D/CX PL10; reset PL11 is
++ * CONFIG_VIDEO_LCD_RESET, toggled by sunxi_lcdc_panel_enable() before this runs.
++ */
++
++#include <asm/gpio.h>
++#include <linux/kernel.h>
++#include <linux/delay.h>
++#include <sunxi_gpio.h>
++#include <stdio.h>
++
++#define ST_CMD(x)	(0x100 | (x))
++#define ST_DAT(x)	(0x200 | (x))
++#define ST_SLEEP(ms)	(0x400 | (ms))
++
++static const u16 st7701s_init[] = {
++	ST_CMD(0x11),
++	ST_SLEEP(120),
++	ST_CMD(0xff), ST_DAT(0x77), ST_DAT(0x01), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x10),
++	ST_CMD(0xc1), ST_DAT(0x11), ST_DAT(0x12),
++	ST_CMD(0xc2), ST_DAT(0x31), ST_DAT(0x03),
++	ST_CMD(0xc3), ST_DAT(0x02), ST_DAT(0x0c), ST_DAT(0x12),
++	ST_CMD(0xcc), ST_DAT(0x10),
++	ST_CMD(0xb0), ST_DAT(0x40), ST_DAT(0xc9), ST_DAT(0x90), ST_DAT(0x0d), ST_DAT(0x0f), ST_DAT(0x04), ST_DAT(0x00), ST_DAT(0x07), ST_DAT(0x07), ST_DAT(0x1c), ST_DAT(0x04), ST_DAT(0x52), ST_DAT(0x0f), ST_DAT(0xdf), ST_DAT(0x26), ST_DAT(0xcf),
++	ST_CMD(0xb1), ST_DAT(0x40), ST_DAT(0xc9), ST_DAT(0xcf), ST_DAT(0x0c), ST_DAT(0x90), ST_DAT(0x04), ST_DAT(0x00), ST_DAT(0x07), ST_DAT(0x08), ST_DAT(0x1b), ST_DAT(0x06), ST_DAT(0x55), ST_DAT(0x13), ST_DAT(0x62), ST_DAT(0xe7), ST_DAT(0xcf),
++	ST_CMD(0xff), ST_DAT(0x77), ST_DAT(0x01), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x11),
++	ST_CMD(0xb0), ST_DAT(0x5b),
++	ST_CMD(0xb1), ST_DAT(0x68),
++	ST_CMD(0xb2), ST_DAT(0x07),
++	ST_CMD(0xb3), ST_DAT(0x80),
++	ST_CMD(0xb5), ST_DAT(0x47),
++	ST_CMD(0xb7), ST_DAT(0x85),
++	ST_CMD(0xb8), ST_DAT(0x21),
++	ST_CMD(0xb9), ST_DAT(0x10),
++	ST_CMD(0xc1), ST_DAT(0x21), ST_DAT(0x36),
++	ST_CMD(0xc2), ST_DAT(0x78),
++	ST_SLEEP(120),
++	ST_CMD(0xe0), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x02),
++	ST_CMD(0xe1), ST_DAT(0x08), ST_DAT(0x00), ST_DAT(0x0a), ST_DAT(0x00), ST_DAT(0x07), ST_DAT(0x00), ST_DAT(0x09), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x33), ST_DAT(0x33),
++	ST_CMD(0xe2), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x00),
++	ST_CMD(0xe3), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x33), ST_DAT(0x33),
++	ST_CMD(0xe4), ST_DAT(0x44), ST_DAT(0x44),
++	ST_CMD(0xe5), ST_DAT(0x0e), ST_DAT(0x2d), ST_DAT(0xa0), ST_DAT(0xa0), ST_DAT(0x10), ST_DAT(0x2d), ST_DAT(0xa0), ST_DAT(0xa0), ST_DAT(0x0a), ST_DAT(0x2d), ST_DAT(0xa0), ST_DAT(0xa0), ST_DAT(0x0c), ST_DAT(0x2d), ST_DAT(0xa0), ST_DAT(0xa0),
++	ST_CMD(0xe6), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x33), ST_DAT(0x33),
++	ST_CMD(0xe7), ST_DAT(0x44), ST_DAT(0x44),
++	ST_CMD(0xe8), ST_DAT(0x0d), ST_DAT(0x2d), ST_DAT(0xa0), ST_DAT(0xa0), ST_DAT(0x0f), ST_DAT(0x2d), ST_DAT(0xa0), ST_DAT(0xa0), ST_DAT(0x09), ST_DAT(0x2d), ST_DAT(0xa0), ST_DAT(0xa0), ST_DAT(0x0b), ST_DAT(0x2d), ST_DAT(0xa0), ST_DAT(0xa0),
++	ST_CMD(0xeb), ST_DAT(0x02), ST_DAT(0x01), ST_DAT(0xe4), ST_DAT(0xe4), ST_DAT(0x44), ST_DAT(0x00), ST_DAT(0x40),
++	ST_CMD(0xec), ST_DAT(0x02), ST_DAT(0x01),
++	ST_CMD(0xed), ST_DAT(0xab), ST_DAT(0x89), ST_DAT(0x76), ST_DAT(0x54), ST_DAT(0x01), ST_DAT(0xff), ST_DAT(0xff), ST_DAT(0xff), ST_DAT(0xff), ST_DAT(0xff), ST_DAT(0xff), ST_DAT(0x10), ST_DAT(0x45), ST_DAT(0x67), ST_DAT(0x98), ST_DAT(0xba),
++	ST_CMD(0xff), ST_DAT(0x77), ST_DAT(0x01), ST_DAT(0x00), ST_DAT(0x00), ST_DAT(0x00),
++	ST_CMD(0x3a), ST_DAT(0x77),
++	ST_CMD(0x29),
++	ST_SLEEP(120),
++};
++
++static int cs, sck, mosi, dcx;
++
++static void st7701s_write(int is_data, u8 byte)
++{
++	int bit;
++
++	gpio_direction_output(dcx, is_data);
++	gpio_direction_output(cs, 0);
++	for (bit = 7; bit >= 0; bit--) {
++		gpio_direction_output(sck, 0);
++		gpio_direction_output(mosi, (byte >> bit) & 1);
++		udelay(5);
++		gpio_direction_output(sck, 1);
++		udelay(5);
++	}
++	gpio_direction_output(sck, 0);
++	gpio_direction_output(cs, 1);
++	udelay(5);
++}
++
++int st7701s_x6100_init(void)
++{
++	int i;
++
++	cs = sunxi_name_to_gpio("PL7");
++	mosi = sunxi_name_to_gpio("PL8");
++	sck = sunxi_name_to_gpio("PL9");
++	dcx = sunxi_name_to_gpio("PL10");
++	if (cs < 0 || mosi < 0 || sck < 0 || dcx < 0) {
++		printf("st7701s: bad gpio names\n");
++		return -1;
++	}
++	if (gpio_request(cs, "st7701s-cs") || gpio_request(mosi, "st7701s-mosi") ||
++	    gpio_request(sck, "st7701s-sck") || gpio_request(dcx, "st7701s-dcx")) {
++		printf("st7701s: cannot request spi gpios\n");
++		return -1;
++	}
++	gpio_direction_output(cs, 1);
++	gpio_direction_output(sck, 0);
++	gpio_direction_output(mosi, 0);
++	gpio_direction_output(dcx, 0);
++
++	mdelay(120);		/* after the reset, as the datasheet wants */
++	for (i = 0; i < ARRAY_SIZE(st7701s_init); i++) {
++		u16 op = st7701s_init[i];
++
++		if (op & 0x400)
++			mdelay(op & 0xff);
++		else
++			st7701s_write(!!(op & 0x200), op & 0xff);
++	}
++
++	gpio_free(dcx);
++	gpio_free(sck);
++	gpio_free(mosi);
++	gpio_free(cs);
++	return 0;
++}
+diff --git a/drivers/video/sunxi/sunxi_display.c b/drivers/video/sunxi/sunxi_display.c
+index 4a6a89ef..51a5228b 100644
+--- a/drivers/video/sunxi/sunxi_display.c
++++ b/drivers/video/sunxi/sunxi_display.c
+@@ -35,6 +35,8 @@
+ #include "../videomodes.h"
+ #include "../anx9804.h"
+ #include "../hitachi_tx18d42vm_lcd.h"
++
++int st7701s_x6100_init(void);
+ #include "../ssd2828.h"
+ #include "simplefb_common.h"
+ 
+@@ -975,6 +977,9 @@ static void sunxi_mode_set(struct sunxi_display_priv *sunxi_display,
+ 			mdelay(50); /* Wait for lcd controller power on */
+ 			hitachi_tx18d42vm_init();
+ 		}
++#ifdef CONFIG_VIDEO_LCD_ST7701S_X6100
++		st7701s_x6100_init();
++#endif
+ 		if (IS_ENABLED(CONFIG_VIDEO_LCD_PANEL_I2C))
+ 			sunxi_panel_i2c_init(sunxi_display);
+ 		sunxi_composer_mode_set(mode, address, monitor);
+@@ -1236,6 +1241,9 @@ static int sunxi_de_probe(struct udevice *dev)
+ 	uc_priv->bpix = VIDEO_BPP32;
+ 	uc_priv->xsize = mode->xres;
+ 	uc_priv->ysize = mode->yres;
++#ifdef CONFIG_VIDEO_SUNXI_ROTATION
++	uc_priv->rot = CONFIG_VIDEO_SUNXI_ROTATION;
++#endif
+ 
+ 	video_set_flush_dcache(dev, true);
+ 

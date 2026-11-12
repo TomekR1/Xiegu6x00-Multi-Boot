@@ -19,8 +19,24 @@ jobs:
         with: {python-version: "3.12"}
       - run: python -m unittest discover -s tests -v
 
+  uboot:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q gcc-arm-linux-gnueabihf bison flex swig python3-dev python3-setuptools \
+            python3-pyelftools libssl-dev libgnutls28-dev device-tree-compiler bc
+      - name: Build U-Boot with the X6100 screen
+        run: ./uboot/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: u-boot-x6100-menu
+          path: uboot/out/u-boot-x6100-menu.bin
+
   apps:
-    needs: test
+    needs: [test, uboot]
     strategy:
       fail-fast: false
       matrix:
@@ -41,8 +57,10 @@ jobs:
         with: {python-version: "3.12"}
       - name: Tk check
         run: python -c "import tkinter; print(tkinter.TkVersion)"
+      - uses: actions/download-artifact@v4
+        with: {name: u-boot-x6100-menu, path: x6100mb/data}
       - run: pip install pyinstaller==6.11.1
-      - run: pyinstaller --noconfirm --onefile --name X6100-Multiboot ${{ matrix.extra }} --paths . x6100_multiboot.py
+      - run: pyinstaller --noconfirm --onefile --name X6100-Multiboot ${{ matrix.extra }} --paths . --add-data "x6100mb/data:x6100mb/data" x6100_multiboot.py
       - name: Smoke test
         shell: bash
         run: |
@@ -64,10 +82,12 @@ jobs:
           path: out/
 
   test-image:
-    needs: test
+    needs: [test, uboot]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {name: u-boot-x6100-menu, path: x6100mb/data}
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - name: Download systems
@@ -81,22 +101,30 @@ jobs:
           python x6100_multiboot.py build -o X6100-multiboot-TEST.img --xiegu --data-mb 256 \
             --names "OpenX6X00 v0.3.9,R1CBU v0.28.0" src/OpenX6X00-v0.3.9.img.zip src/R1CBU-v0.28.0.img.zip > build.log
           tail -c 600 build.log
-          zip -9 X6100-multiboot-TEST.img.zip X6100-multiboot-TEST.img
-          sha256sum X6100-multiboot-TEST.img.zip > X6100-multiboot-TEST.img.zip.sha256
+          grep -q "menu, ekran" build.log
+          python x6100_multiboot.py build -o X6100-multiboot-TEST-mini.img --xiegu --data-mb 128 \
+            --names "OpenX6X00 v0.3.9" src/OpenX6X00-v0.3.9.img.zip > /dev/null
+          xz -T0 -9 X6100-multiboot-TEST.img X6100-multiboot-TEST-mini.img
+          sha256sum X6100-multiboot-TEST*.img.xz > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: X6100-multiboot-TEST
           path: |
-            X6100-multiboot-TEST.img.zip
-            X6100-multiboot-TEST.img.zip.sha256
+            X6100-multiboot-TEST.img.xz
+            X6100-multiboot-TEST-mini.img.xz
+            SHA256SUMS.txt
           compression-level: 0
 
   release:
-    needs: [apps, test-image]
+    needs: [apps, test-image, uboot]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with: {path: art, merge-multiple: true}
+      - name: Replace the previous test build
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: gh release delete test-build --cleanup-tag --yes -R "${{ github.repository }}" || true
       - run: ls -la art
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -114,9 +142,11 @@ jobs:
             - macOS: `X6100-Multiboot-macOS.zip` (rozpakuj; przy pierwszym uruchomieniu prawy klik > Otwórz)
             - Linux: `X6100-Multiboot-Linux` (`chmod +x`, do zapisu karty potrzebny pkexec)
 
-            Karta testowa `X6100-multiboot-TEST.img.zip` (wgraj balenaEtcherem):
-            - F1: OpenX6X00 v0.3.9
-            - F2: R1CBU v0.28.0
-            - F3: Xiegu z pamięci wewnętrznej (eMMC), bez zmian w eMMC
+            Karty testowe (wgraj balenaEtcherem bez rozpakowywania):
+            - `X6100-multiboot-TEST.img.xz`: F1 OpenX6X00 v0.3.9, F2 R1CBU v0.28.0, F3 Xiegu z eMMC
+            - `X6100-multiboot-TEST-mini.img.xz`: F1 OpenX6X00 v0.3.9, F2 Xiegu z eMMC
+
+            Karty mają własny U-Boot z obsługą ekranu X6100 (`u-boot-x6100-menu.bin`), więc menu
+            jest widoczne. eMMC nie jest zmieniane.
 
             Bez wciśnięcia klawisza po 5 s startuje F1.

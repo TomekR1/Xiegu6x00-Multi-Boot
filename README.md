@@ -9,7 +9,9 @@ Gotowe pliki są w zakładce **[Releases](../../releases)**:
 | `X6100-Multiboot.exe` | Windows 10/11 (poprosi o uprawnienia administratora) |
 | `X6100-Multiboot-macOS.zip` | macOS (rozpakuj; za pierwszym razem prawy klik > Otwórz) |
 | `X6100-Multiboot-Linux` | Linux x86-64 (`chmod +x`; do zapisu karty potrzebny `pkexec`) |
-| `X6100-multiboot-TEST.img.zip` | gotowa karta testowa: F1 OpenX6X00 v0.3.9, F2 R1CBU v0.28.0, F3 Xiegu z eMMC |
+| `X6100-multiboot-TEST.img.xz` | karta testowa: F1 OpenX6X00 v0.3.9, F2 R1CBU v0.28.0, F3 Xiegu z eMMC |
+| `X6100-multiboot-TEST-mini.img.xz` | mniejsza karta testowa: F1 OpenX6X00 v0.3.9, F2 Xiegu z eMMC |
+| `u-boot-x6100-menu.bin` | sam U-Boot menu z obsługą ekranu |
 
 Instalacja Pythona nie jest potrzebna. Pliki buduje GitHub Actions (`.github/workflows/build.yml`)
 przy każdej zmianie na gałęzi `main` i przy każdym tagu `v*`.
@@ -44,7 +46,7 @@ nietknięty.
 
 | Miejsce | Zawartość |
 |---|---|
-| 8 KiB | U-Boot z pierwszego obrazu (OpenX6X00: mainline 2026.07) |
+| 8 KiB | U-Boot menu (mainline 2026.07 z obsługą ekranu X6100, `uboot/`) |
 | p1 `BOOT` (FAT32) | `boot.scr` z menu, `boot.cmd` (to samo tekstem), `bootmenu.env`, `menu.txt`, `SYS1/`…`SYS5/` z jądrem i `.dtb` każdego systemu |
 | p2 | system plików systemu 1, kopia bajt w bajt |
 | p5, p6, … (w p4) | systemy plików kolejnych systemów |
@@ -96,7 +98,22 @@ Klawisze są odczytywane z matrycy GPIO panelu (według device tree X6100) tak s
 multiboot projektu [x6100-fw-mangler](https://github.com/j0ju/x6100-fw-mangler): wiersz w stan
 niski (`gpio clear PG6`), odczyt kolumn (`gpio input PE16`, 0 = wciśnięty). F1/F2/F3 = kolumny
 PE16/PE17/PE11 w wierszu PG6, F4/F5 = PE16/PE17 w wierszu PG8.
-Napisy idą na ekran przez `vidconsole` U-Boota i mogą być obrócone o 90°.
+Napisy idą na ekran przez `vidconsole` U-Boota (patrz niżej: U-Boot z obsługą ekranu).
+
+## U-Boot z obsługą ekranu (`uboot/`)
+
+Ekran X6100 (kontroler Sitronix ST7701S, panel JLT4013A 480×800) trzeba najpierw zainicjować
+sekwencją poleceń przez SPI. Robi to dopiero sterownik w Linuksie, dlatego z U-Boot z obrazów
+systemów ekran pozostaje czarny i menu jest niewidoczne (sprawdzone na radiu: menu działało
+na ślepo, F2 uruchomił R1CBU). Katalog `uboot/` buduje U-Boot v2026.07 z:
+
+- inicjalizacją ST7701S przeniesioną ze sterownika Linuksa (`panel-jinglitai-jlt4013a.c`,
+  GPL-2.0), wysyłaną programowym SPI na pinach PL7 (CS), PL8 (MOSI), PL9 (SCK), PL10 (D/C);
+- konsolą obróconą o 270° (jak `fbcon=rotate:3`) i czcionką 16×32.
+
+`uboot/build.sh` uruchamia GitHub Actions, a gotowy `u-boot-x6100-menu.bin` trafia do aplikacji
+i jest domyślnie wgrywany na kartę. `--uboot image` wgrywa zamiast niego U-Boot z pierwszego
+obrazu (wtedy menu działa bez ekranu).
 
 ## Do zrobienia
 
