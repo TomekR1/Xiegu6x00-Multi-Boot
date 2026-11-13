@@ -162,6 +162,7 @@ tile explains the controls and the pairing; `doom.txt` on the card's BOOT partit
 Aplikacja: **GPL-3.0** ([LICENSE](LICENSE)), © SQ6RT. Poprawka U-Boot w `uboot/` (inicjalizacja
 ekranu przeniesiona ze sterownika Linuksa X6100) jest, jak U-Boot, na licencji GPL-2.0-or-later.
 Systemy radia i ich loga należą do ich autorów; aplikacja pobiera je z ich wydań i repozytoriów.
+Wygląd okna: motyw [Sun Valley](https://github.com/rdbende/Sun-Valley-ttk-theme) (sv-ttk, licencja MIT).
 
 ---
 
@@ -169,7 +170,8 @@ Systemy radia i ich loga należą do ich autorów; aplikacja pobiera je z ich wy
 
 ### Uruchamianie ze źródeł
 
-Python 3.9+ i Tk (na Linuksie pakiet `python3-tk`), opcjonalnie Pillow (menu graficzne) i certifi:
+Python 3.9+ i Tk (na Linuksie pakiet `python3-tk`), opcjonalnie Pillow (menu graficzne), certifi
+i sv-ttk (wygląd okna):
 
 ```
 python x6100_multiboot.py                        # okno

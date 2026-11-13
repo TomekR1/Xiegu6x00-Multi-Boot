@@ -18,6 +18,8 @@ from .writer import Progress, write_device, write_image_file
 
 APP = "Xiegu Multi Patcher"
 AUTHOR_URL = "https://www.qrz.com/db/SQ6RT"
+HEAD_BG, HEAD_FG, HEAD_SUB, LINK = "#16324f", "#ffffff", "#b9c8da", "#8fc3ff"
+HINT, WARN = "#5b6573", "#b35c00"
 PHASES = {"download": "Pobieranie", "prepare": "Przygotowanie karty", "write": "Zapis",
           "sync": "Opróżnianie bufora karty",
           "verify": "Weryfikacja", "unzip": "Rozpakowywanie", "done": "Gotowe"}
@@ -31,12 +33,14 @@ class App:
     def __init__(self, root):
         self.root = root
         root.title(APP)
-        root.minsize(800, 680)
+        root.minsize(880, 720)
         self.entries = []                 # {"kind", "name", "sys"?}
         self.default = 0
         self.q = queue.Queue()
         self.busy = False
         self.cards = []
+        self.thumbs = {}                  # key -> PhotoImage of the list's logos
+        self._thumb_jobs = set()
         self._build_all()
         self.refresh_cards()
         self.root.after(100, self._poll)
@@ -61,6 +65,7 @@ class App:
         xiegu = {k: v.get() for k, v in self.xiegu_vars.items()}
         card = self.card_box.current()
         self.top.destroy()
+        self._head.destroy()
         self._build_all(keep)
         for k, v in xiegu.items():
             self.xiegu_vars[k].set(v)
@@ -72,40 +77,58 @@ class App:
     def _build(self, top):
         pad = {"padx": 8, "pady": 4}
 
-        head = ttk.Frame(top)
-        head.pack(fill="x")
-        ttk.Label(head, text=APP, font=("TkDefaultFont", 15, "bold")).pack(side="left")
+        head = tk.Frame(self.root, bg=HEAD_BG)
+        head.pack(fill="x", before=top)
+        self._head = head
+        inner = tk.Frame(head, bg=HEAD_BG)
+        inner.pack(fill="x", padx=16, pady=12)
+        icon = _icon_image(self.root, 48)
+        if icon is not None:
+            tk.Label(inner, image=icon, bg=HEAD_BG).pack(side="left", padx=(0, 12))
+        titles = tk.Frame(inner, bg=HEAD_BG)
+        titles.pack(side="left", fill="x", expand=True)
+        tk.Label(titles, text=APP, bg=HEAD_BG, fg=HEAD_FG, font=_font(18, "bold")).pack(anchor="w")
+        tk.Label(titles, text=t("Kilka systemów na jednej karcie SD dla Xiegu X6100: przy włączaniu radia menu na "
+                                "ekranie, wybór klawiszem F1–F5."), bg=HEAD_BG, fg=HEAD_SUB,
+                 font=_font(10), wraplength=560, justify="left").pack(anchor="w")
+        side = tk.Frame(inner, bg=HEAD_BG)
+        side.pack(side="right", anchor="n")
         self.lang_var = tk.StringVar(value=i18n.LANGS[i18n.lang()])
-        langs = ttk.Combobox(head, textvariable=self.lang_var, values=list(i18n.LANGS.values()),
+        langs = ttk.Combobox(side, textvariable=self.lang_var, values=list(i18n.LANGS.values()),
                              state="readonly", width=8)
-        langs.pack(side="right", padx=(12, 0))
+        langs.pack(anchor="e")
         langs.bind("<<ComboboxSelected>>", lambda e: self.switch_lang(
             next(k for k, v in i18n.LANGS.items() if v == self.lang_var.get())))
-        ttk.Label(head, text=t("Język:")).pack(side="right", padx=(12, 4))
-        author = tk.Label(head, text=t("aplikacja: SQ6RT"), fg="#1f6fd1", cursor="hand2",
-                          font=("TkDefaultFont", 10, "underline"))
-        author.pack(side="right")
+        author = tk.Label(side, text=t("aplikacja: SQ6RT"), bg=HEAD_BG, fg=LINK, cursor="hand2",
+                          font=_font(10, "underline"))
+        author.pack(anchor="e", pady=(6, 0))
         author.bind("<Button-1>", lambda e: webbrowser.open(AUTHOR_URL))
-        ttk.Label(top, text=t("Kilka systemów na jednej karcie SD dla Xiegu X6100: przy włączaniu radia menu na "
-                              "ekranie, wybór klawiszem F1–F5.")).pack(anchor="w", pady=(0, 8))
 
         box = ttk.LabelFrame(top, text=t("1. Systemy w menu"))
         box.pack(fill="both", expand=True)
         cols = ("key", "name", "info")
-        self.tree = ttk.Treeview(box, columns=cols, show="headings", height=6, selectmode="browse")
-        for c, h, w in (("key", "Klawisz", 70), ("name", "Nazwa w menu", 180), ("info", "Zawartość", 330)):
+        self.tree = ttk.Treeview(box, columns=cols, show="tree headings", height=5, selectmode="browse",
+                                 style="Systems.Treeview")
+        self.tree.column("#0", width=64, stretch=False, anchor="center")
+        for c, h, w in (("key", "Klawisz", 70), ("name", "Nazwa w menu", 170), ("info", "Zawartość", 330)):
             self.tree.heading(c, text=t(h))
             self.tree.column(c, width=w, stretch=(c == "info"))
         self.tree.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=8)
         self.tree.bind("<Double-1>", lambda e: self.rename())
         btns = ttk.Frame(box)
         btns.pack(side="right", fill="y", padx=8, pady=8)
-        for text, cmd in (("+ Z internetu…", self.add_online), ("+ Obraz karty…", self.add_image),
-                          ("+ Xiegu z eMMC", self.add_xiegu),
+        for item in (("+ Z internetu…", self.add_online), ("+ Obraz karty…", self.add_image),
+                          ("+ Xiegu z eMMC", self.add_xiegu), None,
                           ("Zmień nazwę", self.rename), ("W górę", lambda: self.move(-1)),
                           ("W dół", lambda: self.move(1)), ("Domyślny", self.set_default),
-                          ("Logo…", self.choose_logo), ("Podgląd menu", self.preview), ("Usuń", self.remove)):
-            ttk.Button(btns, text=t(text), command=cmd, width=17).pack(fill="x", pady=2)
+                          ("Logo…", self.choose_logo), ("Usuń", self.remove), None,
+                          ("Podgląd menu", self.preview)):
+            if item is None:
+                ttk.Separator(btns).pack(fill="x", pady=5)
+                continue
+            text, cmd = item
+            ttk.Button(btns, text=t(text), command=cmd, width=18,
+                       style="Accent.TButton" if cmd == self.add_online else "TButton").pack(fill="x", pady=2)
 
         self._build_extras(top)
 
@@ -118,7 +141,8 @@ class App:
         self.data_mb = tk.StringVar(value="1024")
         ttk.Spinbox(opts, from_=128, to=32768, increment=128, textvariable=self.data_mb, width=8).grid(
             row=0, column=3, sticky="w")
-        ttk.Label(opts, text=t("(na karcie DATA zajmuje całe wolne miejsce)")).grid(row=0, column=4, sticky="w", **pad)
+        ttk.Label(opts, text=t("(na karcie DATA zajmuje całe wolne miejsce)"), foreground=HINT,
+                  wraplength=230).grid(row=0, column=4, sticky="w", **pad)
         ttk.Label(opts, text=t("Partycja DATA:")).grid(row=1, column=0, sticky="w", **pad)
         self.data_mode = tk.StringVar(value="shared")
         dm = ttk.Frame(opts)
@@ -151,7 +175,7 @@ class App:
         out.columnconfigure(1, weight=1)
         b = ttk.Frame(out)
         b.grid(row=1, column=0, columnspan=3, sticky="we", padx=8, pady=(4, 8))
-        self.btn_card = ttk.Button(b, text=t("Wgraj na kartę"), command=self.write_card)
+        self.btn_card = ttk.Button(b, text=t("Wgraj na kartę"), command=self.write_card, style="Accent.TButton")
         self.btn_card.pack(side="right", padx=(8, 0))
         self.btn_img = ttk.Button(b, text=t("Zapisz jako plik .img…"), command=self.save_image)
         self.btn_img.pack(side="right")
@@ -159,7 +183,7 @@ class App:
         self.status = tk.StringVar(value=t("Dodaj obraz karty systemu (.img, .img.zip lub .img.xz), np. OpenX6X00."))
         self.bar = ttk.Progressbar(top, mode="determinate", maximum=1000)
         self.bar.pack(fill="x", pady=(10, 2))
-        ttk.Label(top, textvariable=self.status, wraplength=720).pack(anchor="w")
+        ttk.Label(top, textvariable=self.status, wraplength=820, foreground=HINT).pack(anchor="w")
 
     def _toggle_adv(self):
         if self.show_adv.get():
@@ -175,16 +199,74 @@ class App:
             if e["kind"] == "xiegu":
                 info = t("system Xiegu z pamięci wewnętrznej radia (nic tam nie jest zmieniane)")
             elif e["kind"] == "doom":
-                info = t("klasyczny Doom (Freedoom), z jądrem pierwszego systemu z obrazu na liście")
+                donor = next((x for x in self.entries if x["kind"] == "sd"), None)
+                info = (t("klasyczny Doom (Freedoom); jądro i parowania Bluetooth z: {name}", name=donor["name"])
+                        if donor else t("klasyczny Doom (Freedoom), z jądrem pierwszego systemu z obrazu na liście"))
             else:
                 info = e["sys"].summary()
                 if e["sys"].warnings:
                     info += "  ⚠ " + "; ".join(e["sys"].warnings)
             if e.get("logo"):
                 info = "[logo: %s]  %s" % (os.path.basename(e["logo"]), info)
-            self.tree.insert("", "end", iid=str(i), values=(key, e["name"], info))
+            self.tree.insert("", "end", iid=str(i), image=self._thumb(e), values=(key, e["name"], info))
         if select is not None and 0 <= select < len(self.entries):
             self.tree.selection_set(str(select))
+        self._update_doom_hint()
+
+    def _update_doom_hint(self):
+        """Where Doom's Bluetooth mouse and keyboard must be paired: said where it is seen"""
+        from . import catalog
+        donor = next((x for x in self.entries if x["kind"] == "sd"), None)
+        if donor is None:
+            text, colour = t("Najpierw dodaj system z obrazu (np. OpenX6X00): Doom uruchamia się z jego jądrem."), HINT
+        elif (catalog.source_for(donor["name"]) or {}).get("id") == "r1cbu":
+            text, colour = t("Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.",
+                             name=donor["name"]), WARN
+        else:
+            text, colour = t("Mysz i klawiatura Bluetooth: sparuj je najpierw w {name}, pierwszym systemie z obrazu "
+                             "na liście. Szczegóły: Przeczytaj najpierw.", name=donor["name"]), WARN
+        self.doom_hint.configure(text="ⓘ  " + text, foreground=colour)
+
+    # ---------------------------------------------------------------- logos on the list
+    def _thumb_key(self, e):
+        return (e["kind"], e["name"], e.get("logo"))
+
+    def _thumb(self, e):
+        """The entry's logo, small: the project's is fetched in the background the first time"""
+        from . import menu_gfx
+        if not menu_gfx.HAVE_PIL:
+            return ""
+        key = self._thumb_key(e)
+        if key in self.thumbs:
+            return self.thumbs[key]
+        name = DOOM_NAME if e["kind"] == "doom" else ("Xiegu" if e["kind"] == "xiegu" else e["name"])
+        dkey = ("default",) + key
+        if dkey not in self.thumbs:
+            self.thumbs[dkey] = self._photo(menu_gfx.default_logo(name, size=40, bg=_tree_bg()))
+        img = self.thumbs[dkey]
+        if (e.get("logo") or e["kind"] == "sd") and key not in self._thumb_jobs:
+            self._thumb_jobs.add(key)
+            threading.Thread(target=self._thumb_job, args=(dict(e), key), daemon=True).start()
+        return img
+
+    def _thumb_job(self, e, key):
+        from . import menu_gfx
+        from .compose import tile
+        try:
+            tl = tile(e)
+            if not tl.get("logo"):
+                return
+            img = menu_gfx.load_logo(tl["logo"], size=40, bg=_tree_bg(), crop=tl.get("crop"))
+            self.q.put(("thumb", key, img))
+        except Exception:
+            pass
+
+    def _photo(self, pil_img):
+        import base64
+        import io
+        buf = io.BytesIO()
+        pil_img.save(buf, "PNG")
+        return tk.PhotoImage(data=base64.b64encode(buf.getvalue()))
 
     def _sel(self):
         s = self.tree.selection()
@@ -245,9 +327,13 @@ class App:
         b = ttk.Button(box, text="  Doom", image=self._doom_img, compound="left", command=self.add_doom)
         b.pack(side="left", padx=8, pady=6)
         ttk.Button(box, text=t("Przeczytaj najpierw"), command=self.doom_readme).pack(side="left", padx=(0, 8))
-        ttk.Label(box, text=t("Klasyczny Doom na radiu (Freedoom). Gałka VFO obraca, F1 lub PTT strzela, "
-                              "F2 otwiera drzwi, GEN to menu gry."), wraplength=440,
-                  foreground="#555").pack(side="left", padx=4)
+        texts = ttk.Frame(box)
+        texts.pack(side="left", fill="x", expand=True, padx=4)
+        ttk.Label(texts, text=t("Klasyczny Doom na radiu (Freedoom). Gałka VFO obraca, F1 lub PTT strzela, "
+                                "F2 otwiera drzwi, GEN to menu gry."), wraplength=470,
+                  foreground=HINT).pack(anchor="w")
+        self.doom_hint = ttk.Label(texts, text="", wraplength=470)
+        self.doom_hint.pack(anchor="w", pady=(4, 0))
 
     def add_doom(self):
         if any(e["kind"] == "doom" for e in self.entries):
@@ -266,8 +352,8 @@ class App:
         win = tk.Toplevel(self.root)
         win.title(t("Doom: przeczytaj najpierw"))
         win.transient(self.root)
-        txt = tk.Text(win, wrap="word", width=96, height=34, padx=12, pady=10, relief="flat",
-                      font=("TkDefaultFont", 11))
+        txt = tk.Text(win, wrap="word", width=96, height=34, padx=16, pady=12, relief="flat",
+                      font=_font(11), bg="#ffffff", fg="#1c1c1c", highlightthickness=0)
         sb = ttk.Scrollbar(win, orient="vertical", command=txt.yview)
         txt.configure(yscrollcommand=sb.set)
         body = i18n.DOOM_README[i18n.lang()]
@@ -277,10 +363,10 @@ class App:
         for k, line in enumerate(lines):
             heading = line and not line.startswith(" ") and k + 1 < len(lines) and lines[k + 1].startswith(" ")
             txt.insert("end", line + "\n", "h2" if heading else ())
-        txt.tag_configure("h1", font=("TkDefaultFont", 15, "bold"))
-        txt.tag_configure("h2", font=("TkDefaultFont", 11, "bold"), spacing1=6)
+        txt.tag_configure("h1", font=_font(16, "bold"), foreground=HEAD_BG)
+        txt.tag_configure("h2", font=_font(12, "bold"), foreground=HEAD_BG, spacing1=8)
         txt.configure(state="disabled")
-        ttk.Button(win, text="OK", command=win.destroy).pack(side="bottom", pady=8)
+        ttk.Button(win, text="OK", command=win.destroy, style="Accent.TButton", width=12).pack(side="bottom", pady=10)
         sb.pack(side="right", fill="y")
         txt.pack(side="left", fill="both", expand=True)
 
@@ -518,7 +604,11 @@ class App:
         try:
             while True:
                 m = self.q.get_nowait()
-                if m[0] == "progress":
+                if m[0] == "thumb":
+                    self.thumbs[m[1]] = self._photo(m[2])
+                    sel = self._sel()
+                    self._redraw(sel)
+                elif m[0] == "progress":
                     _, phase, done, total, msg = m
                     self.bar["value"] = 1000 * done // max(total, 1)
                     self.status.set(f"{t(PHASES.get(phase, phase))}: {done * 100 // max(total, 1)}%  "
@@ -559,12 +649,12 @@ class OnlineDialog:
         f = ttk.Frame(self.win)
         f.pack(fill="both", expand=True, padx=12, pady=12)
         ttk.Label(f, text=t("Wybierz system i wersję. Najnowsza jest na górze listy."),
-                  font=("TkDefaultFont", 11, "bold")).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 8))
+                  font=_font(12, "bold")).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 8))
         self.vars, self.boxes = {}, {}
         for i, src in enumerate(catalog.SOURCES):
             r = i + 1
-            ttk.Label(f, text=src["name"], font=("TkDefaultFont", 10, "bold")).grid(row=2 * r - 1, column=0, sticky="w")
-            ttk.Label(f, text=t(src["about"]), foreground="#666").grid(row=2 * r, column=0, columnspan=3, sticky="w", pady=(0, 8))
+            ttk.Label(f, text=src["name"], font=_font(11, "bold")).grid(row=2 * r - 1, column=0, sticky="w")
+            ttk.Label(f, text=t(src["about"]), foreground=HINT).grid(row=2 * r, column=0, columnspan=3, sticky="w", pady=(0, 8))
             v = tk.StringVar(value=t("sprawdzam…"))
             box = ttk.Combobox(f, textvariable=v, state="disabled", width=38)
             box.grid(row=2 * r - 1, column=1, sticky="w", padx=8)
@@ -573,7 +663,7 @@ class OnlineDialog:
             self.vars[src["id"]], self.boxes[src["id"]] = v, (box, btn)
             threading.Thread(target=self._load, args=(src,), daemon=True).start()
         ttk.Label(f, text=t("Obrazy pobierane są z wydań projektów na GitHubie i zostają w pamięci podręcznej "
-                            "aplikacji."), foreground="#666", wraplength=560).grid(row=99, column=0, columnspan=4,
+                            "aplikacji."), foreground=HINT, wraplength=560).grid(row=99, column=0, columnspan=4,
                                                                                 sticky="w", pady=(8, 0))
 
     def _load(self, src):
@@ -619,6 +709,52 @@ def _filetypes(types):
     return {"filetypes": types + [(t("Wszystkie pliki"), "*.*")]}
 
 
+def _font(size, *style):
+    fam = "Segoe UI" if devices.WIN else ("Helvetica Neue" if devices.MAC else "TkDefaultFont")
+    return (fam, size) + style
+
+
+def _tree_bg():
+    return (255, 255, 255)
+
+
+def _icon_image(root, size):
+    """The app's icon for the header, kept on the root so Tk does not drop it"""
+    try:
+        here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icon.png")
+        from . import menu_gfx
+        if menu_gfx.HAVE_PIL:
+            from PIL import Image
+            import base64
+            import io
+            img = Image.open(here).convert("RGBA").resize((size, size), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, "PNG")
+            photo = tk.PhotoImage(data=base64.b64encode(buf.getvalue()))
+        else:
+            photo = tk.PhotoImage(file=here)
+        root._head_icon = photo
+        return photo
+    except Exception:
+        return None
+
+
+def _theme(root):
+    """Sun Valley (sv-ttk, MIT): a light, modern look on all three systems; plain ttk without it"""
+    try:
+        import sv_ttk
+        sv_ttk.set_theme("light", root)
+    except Exception:
+        try:
+            ttk.Style().theme_use("clam" if not devices.WIN else "vista")
+        except tk.TclError:
+            pass
+    st = ttk.Style()
+    st.configure("Systems.Treeview", rowheight=48)
+    st.configure("TLabelframe.Label", font=_font(11, "bold"))
+    root.configure(bg=st.lookup("TFrame", "background") or "#fafafa")
+
+
 def _set_icon(root):
     try:
         here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icon.png")
@@ -633,10 +769,7 @@ def _set_icon(root):
 def main():
     root = tk.Tk()
     _set_icon(root)
-    try:
-        ttk.Style().theme_use("clam" if not devices.WIN else "vista")
-    except tk.TclError:
-        pass
+    _theme(root)
     App(root)
     root.mainloop()
     return 0

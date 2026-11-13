@@ -87,11 +87,11 @@ jobs:
         with: {name: u-boot-x6100-menu, path: x6100mb/data}
       - uses: actions/download-artifact@v4
         with: {name: doom-x6100-rootfs, path: x6100mb/data}
-      - run: pip install pyinstaller==6.11.1 pillow==11.0.0 certifi
+      - run: pip install pyinstaller==6.11.1 pillow==11.0.0 certifi sv-ttk==2.6.0
       - name: Build
         shell: bash
         run: |
-          pyinstaller --noconfirm --name "Xiegu Multi Patcher" ${{ matrix.extra }} --paths . \
+          pyinstaller --noconfirm --name "Xiegu Multi Patcher" ${{ matrix.extra }} --paths . --collect-data sv_ttk \
             --add-data "x6100mb/data:x6100mb/data" --add-data "x6100mb/assets:x6100mb/assets" x6100_multiboot.py
       - name: Smoke test
         shell: bash

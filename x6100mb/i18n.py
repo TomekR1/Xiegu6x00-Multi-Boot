@@ -133,6 +133,15 @@ EN = {
         "Classic Doom on the radio (Freedoom). The VFO knob turns, F1 or PTT fires, F2 opens doors, "
         "GEN is the game's menu.",
     "Przeczytaj najpierw": "Read first",
+    "klasyczny Doom (Freedoom); jądro i parowania Bluetooth z: {name}":
+        "classic Doom (Freedoom); kernel and Bluetooth pairings from: {name}",
+    "Najpierw dodaj system z obrazu (np. OpenX6X00): Doom uruchamia się z jego jądrem.":
+        "Add a system from an image first (e.g. OpenX6X00): Doom starts with its kernel.",
+    "Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.":
+        "Bluetooth in Doom does not work with {name}'s kernel (USB does). Move e.g. OpenX6X00 above it.",
+    "Mysz i klawiatura Bluetooth: sparuj je najpierw w {name}, pierwszym systemie z obrazu na liście. Szczegóły: Przeczytaj najpierw.":
+        "Bluetooth mouse and keyboard: pair them first in {name}, the first system from an image on the "
+        "list. More: Read first.",
     "Doom uruchamia się z jądrem systemu z obrazu (np. OpenX6X00). Dodaj najpierw taki system, potem Dooma.":
         "Doom starts with the kernel of a system from an image (e.g. OpenX6X00). Add such a system first, "
         "then Doom.",
