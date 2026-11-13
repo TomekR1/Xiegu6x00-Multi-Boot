@@ -57,6 +57,13 @@ def write_image_file(plan, path, progress=None):
 
 def write_device(plan, dev, progress=None, allow_file=False):
     """Every piece onto the card dev, synced, then read back"""
+    if allow_file and os.path.isfile(dev):
+        return _write_device(plan, dev, progress, allow_file)
+    with devices.WindowsQuiet():
+        return _write_device(plan, dev, progress, allow_file)
+
+
+def _write_device(plan, dev, progress=None, allow_file=False):
     progress = progress or Progress()
     total = plan.written_bytes()
     progress("prepare", 0, total, f"preparing {dev}")

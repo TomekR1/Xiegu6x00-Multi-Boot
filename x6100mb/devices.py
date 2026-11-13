@@ -321,3 +321,101 @@ def run_elevated(args):
         if subprocess.run(["which", tool], capture_output=True).returncode == 0:
             return subprocess.Popen([tool, "env", "PYTHONPATH=" + _src_dir()] + cmd, cwd=_src_dir())
     raise DeviceError("no pkexec: start this program with sudo to write cards")
+
+
+# --------------------------------------------------------------------------------------------
+# Windows: no windows popping up while the card is written
+# --------------------------------------------------------------------------------------------
+class WindowsQuiet:
+    """While the card is written and a while after: AutoPlay off (as the user had it afterwards), and
+    the windows Windows itself opens for the card's new partitions closed: an Explorer window of a
+    drive (DATA, BOOT: empty) and its "format the disk" question for the Linux partitions. Only windows
+    that appear meanwhile are touched; anything open before is left alone. Elsewhere: nothing."""
+
+    AFTER = 20          # seconds of watching once the writing is over
+
+    def __init__(self):
+        self.on = WIN
+        self.stop_at = None
+
+    def __enter__(self):
+        if not self.on:
+            return self
+        import atexit
+        import threading
+        self._autoplay(True)
+        atexit.register(self._autoplay, False)     # the app closed before the watching ended
+        self.before = set(self._windows())
+        self.thread = threading.Thread(target=self._watch, daemon=True)
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        if self.on:
+            import time
+            self.stop_at = time.time() + self.AFTER
+        return False
+
+    # --- AutoPlay (Settings > Bluetooth & devices > AutoPlay), the user's own value put back
+    def _autoplay(self, quiet):
+        try:
+            import winreg
+            path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers"
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, path) as k:
+                if quiet:
+                    try:
+                        self.saved = winreg.QueryValueEx(k, "DisableAutoplay")[0]
+                    except OSError:
+                        self.saved = None
+                    winreg.SetValueEx(k, "DisableAutoplay", 0, winreg.REG_DWORD, 1)
+                elif self.saved is None:
+                    winreg.DeleteValue(k, "DisableAutoplay")
+                else:
+                    winreg.SetValueEx(k, "DisableAutoplay", 0, winreg.REG_DWORD, self.saved)
+        except Exception:
+            pass
+
+    def _windows(self):
+        """[(hwnd, class, title)] of the visible top-level windows"""
+        import ctypes
+        from ctypes import wintypes
+        u = ctypes.windll.user32
+        out = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def each(hwnd, _):
+            if u.IsWindowVisible(hwnd):
+                cls = ctypes.create_unicode_buffer(64)
+                u.GetClassNameW(hwnd, cls, 64)
+                n = u.GetWindowTextLengthW(hwnd)
+                title = ctypes.create_unicode_buffer(n + 1)
+                u.GetWindowTextW(hwnd, title, n + 1)
+                out.append((hwnd, cls.value, title.value))
+            return True
+        try:
+            u.EnumWindows(each, 0)
+        except Exception:
+            pass
+        return out
+
+    def _watch(self):
+        import ctypes
+        import time
+        WM_CLOSE = 0x0010
+        drive = re.compile(r"\([A-Z]:\)\s*$")          # "DATA (F:)", "Dysk USB (G:)"
+        try:
+            while self.stop_at is None or time.time() < self.stop_at:
+                for w in self._windows():
+                    if w in self.before:
+                        continue
+                    hwnd, cls, title = w
+                    explorer_drive = cls == "CabinetWClass" and drive.search(title)
+                    format_question = cls == "#32770" and title == "Microsoft Windows"
+                    if explorer_drive or format_question:
+                        ctypes.windll.user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
+                    self.before.add(w)
+                time.sleep(0.3)
+        except Exception:
+            pass
+        finally:
+            self._autoplay(False)
