@@ -67,15 +67,25 @@ def write_device(plan, dev, progress=None, allow_file=False):
     if plan.size > size:
         raise WriteError(f"the image ({plan.size // 2**20} MB) is bigger than the card ({size // 2**20} MB)")
     done = 0
+    first = None        # the partition table: written last, see below
     fd = devices.open_for_write(dev)
     try:
         for off, piece in plan.pieces:
             pos = off
             for c in piece.chunks():
-                devices.pwrite(fd, c, pos)
+                if pos == 0:
+                    # As soon as a partition table is on the card Windows mounts its partitions and
+                    # refuses writes inside them; so sector 0 goes last, after everything else
+                    first = c[:512]
+                    if len(c) > 512:
+                        devices.pwrite(fd, c[512:], 512)
+                else:
+                    devices.pwrite(fd, c, pos)
                 pos += len(c)
                 done += len(c)
                 progress("write", done, total)
+        if first is not None:
+            devices.pwrite(fd, first, 0)
         progress("sync", done, total, "flushing the card's cache")
         devices.sync(fd)
         devices.drop_cache(fd)
