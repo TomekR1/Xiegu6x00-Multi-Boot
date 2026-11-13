@@ -29,7 +29,7 @@ THEMES = {
 THEME_NAMES = {"light": "Jasny", "dark": "Ciemny"}
 HINT = "#5b6573"
 BADGE_FG, H1, H2, TREE_BG = "#ffffff", "#c62828", "#0f2742", (255, 255, 255)
-SCREEN_W, SCREEN_H = 600, 360          # the radio's 800x480, at 3/4
+SCREEN_W, SCREEN_H = 640, 384          # the radio's 800x480 to start with; it grows with the window
 RED, RED_HOVER = "#d32f2f", "#ef4444"
 ACCENT = "#0067c0"
 PAGE_BG, TEXT_FG = "#fafafa", "#1c1c1c"
@@ -55,36 +55,70 @@ def _gb(n):
 BTN = {
     "blue": ("#1f6fd1", "#3a86e8"), "teal": ("#0f8b8d", "#17a7aa"), "orange": ("#d9822b", "#eb9845"),
     "doom": ("#8e1b1b", "#ad2626"), "green": ("#2e9d4f", "#39b95f"), "slate": ("#55707d", "#68848f"),
+    "red": ("#d32f2f", "#ef4444"),
 }
 
 
-class ColorButton(tk.Label):
-    """A coloured button that looks the same on Windows, macOS and Linux (themed buttons take no
-    colour on every system); state(["disabled"]) and state(["!disabled"]) as a ttk button"""
+class ColorButton(tk.Canvas):
+    """A rounded coloured button that looks the same on Windows, macOS and Linux (themed buttons take
+    no colour on every system); state(["disabled"]) and state(["!disabled"]) as a ttk button"""
 
-    def __init__(self, parent, text, colour, command, image=None, font=None, padx=12, pady=7, **kw):
+    def __init__(self, parent, text, colour, command, image=None, font=None, padx=18, pady=11, radius=12,
+                 width=None):
+        import tkinter.font as tkfont
         self._c, self._h = BTN[colour]
-        self._cmd = command
-        self._on = True
-        super().__init__(parent, text=text, image=image, compound="left" if image is not None else None,
-                         bg=self._c, fg="#ffffff", cursor="hand2", font=font or _font(10, "bold"),
-                         padx=padx, pady=pady, **kw)
-        self.bind("<Enter>", lambda e: self._on and self.configure(bg=self._h))
-        self.bind("<Leave>", lambda e: self.configure(bg=self._c if self._on else "#a7adb3"))
+        self._cmd, self._on, self._hover = command, True, False
+        self._text, self._image, self._r = text, image, radius
+        self._font = font or _font(11, "bold")
+        f = tkfont.Font(font=self._font)
+        tw, th = f.measure(text), f.metrics("linespace")
+        iw = image.width() + 10 if image is not None else 0
+        ih = image.height() if image is not None else 0
+        w = max(tw + iw + 2 * padx, (width or 0) * f.measure("0"))
+        h = max(th, ih) + 2 * pady
+        super().__init__(parent, width=w, height=h, highlightthickness=0, bd=0, bg=PAGE_BG, cursor="hand2")
+        self.bind("<Configure>", lambda e: self._draw())
+        self.bind("<Enter>", lambda e: self._set_hover(True))
+        self.bind("<Leave>", lambda e: self._set_hover(False))
         self.bind("<ButtonRelease-1>", lambda e: self._on and self._cmd())
+        self._draw()
+
+    def _set_hover(self, on):
+        self._hover = on
+        self._draw()
+
+    def _draw(self):
+        self.delete("all")
+        w, h = max(self.winfo_width(), int(self["width"])), max(self.winfo_height(), int(self["height"]))
+        if self.winfo_ismapped():
+            w, h = self.winfo_width(), self.winfo_height()
+        r = min(self._r, h // 2)
+        fill = (self._h if self._hover else self._c) if self._on else "#a7adb3"
+        pts = [r, 0, w - r, 0, w, 0, w, r, w, h - r, w, h, w - r, h, r, h, 0, h, 0, h - r, 0, r, 0, 0]
+        self.create_polygon(pts, smooth=True, fill=fill, outline="")
+        if self._image is not None:
+            import tkinter.font as tkfont
+            tw = tkfont.Font(font=self._font).measure(self._text)
+            x0 = (w - (self._image.width() + 10 + tw)) // 2
+            self.create_image(x0, h // 2, image=self._image, anchor="w")
+            self.create_text(x0 + self._image.width() + 10, h // 2, text=self._text, fill="#ffffff",
+                             font=self._font, anchor="w")
+        else:
+            self.create_text(w // 2, h // 2, text=self._text, fill="#ffffff", font=self._font)
 
     def state(self, flags):
         on = "!disabled" in flags
         if "disabled" in flags or on:
             self._on = on
-            self.configure(bg=self._c if on else "#a7adb3", cursor="hand2" if on else "arrow")
+            self.configure(cursor="hand2" if on else "arrow")
+            self._draw()
 
 
 class App:
     def __init__(self, root):
         self.root = root
         root.title(APP)
-        root.minsize(880, 720)
+        root.minsize(940, 760)
         self.entries = []                 # {"kind", "name", "sys"?}
         self.default = 0
         self.q = queue.Queue()
@@ -182,19 +216,23 @@ class App:
         btns.pack(side="right", fill="y", padx=(12, 2), pady=2)
         for text, cmd, colour in (("+ Z internetu…", self.add_online, "blue"), ("+ Obraz karty…", self.add_image, "teal"),
                                   ("+ Xiegu z eMMC", self.add_xiegu, "orange")):
-            ColorButton(btns, t(text), colour, cmd, width=18).pack(fill="x", pady=3)
+            ColorButton(btns, t(text), colour, cmd, width=17).pack(fill="x", pady=4)
         self._build_extras(btns)
         left = ttk.Frame(box)
         left.pack(side="left", fill="both", expand=True)
-        self.screen = tk.Canvas(left, width=SCREEN_W, height=SCREEN_H, bg="#000000", highlightthickness=2,
-                                highlightbackground="#3a3a3a", cursor="hand2")
-        self.screen.pack(side="top", anchor="w")
+        self.sw, self.sh, self.sox, self.soy = SCREEN_W, SCREEN_H, 0, 0
+        self.screen = tk.Canvas(left, width=SCREEN_W, height=SCREEN_H, bg=PAGE_BG, highlightthickness=0,
+                                cursor="hand2")
+        self.screen.pack(side="top", fill="both", expand=True)
+        self.screen.bind("<Configure>", self._screen_resized)
         self.screen.bind("<Button-1>", self._screen_click)
         self.screen.bind("<Double-1>", lambda e: (self._screen_click(e), self.rename()))
         self.info = ttk.Label(left, text="", foreground=HINT, wraplength=SCREEN_W, justify="left")
-        self.info.pack(side="top", anchor="w", pady=(6, 0))
         tools = ttk.Frame(left)
-        tools.pack(side="top", fill="x", pady=(6, 0))
+        tools.pack(side="bottom", fill="x", pady=(6, 0))
+        self.info.pack(side="bottom", anchor="w", pady=(6, 0))
+        self.screen.pack_forget()
+        self.screen.pack(side="top", fill="both", expand=True)
         for text, cmd in (("←", lambda: self.move(-1)), ("→", lambda: self.move(1)),
                           ("★  " + t("Domyślny"), self.set_default), ("✎  " + t("Zmień nazwę"), self.rename),
                           ("▣  " + t("Logo…"), self.choose_logo)):
@@ -214,7 +252,7 @@ class App:
         ttk.Spinbox(opts, from_=128, to=32768, increment=128, textvariable=self.data_mb, width=8).grid(
             row=0, column=3, sticky="w")
         ttk.Label(opts, text=t("(na karcie DATA zajmuje całe wolne miejsce)"), foreground=HINT,
-                  wraplength=190).grid(row=0, column=4, sticky="w", **pad)
+                  wraplength=300).grid(row=0, column=4, sticky="w", **pad)
         ttk.Label(opts, text=t("Partycja DATA:")).grid(row=1, column=0, sticky="w", **pad)
         self.data_mode = tk.StringVar(value="shared")
         dm = ttk.Frame(opts)
@@ -250,11 +288,11 @@ class App:
         out.columnconfigure(1, weight=1)
         b = ttk.Frame(out)
         b.grid(row=0, column=3, sticky="e", padx=(8, 4))
-        self.btn_card = ColorButton(b, "⬇  " + t("Wgraj na kartę"), "green", self.write_card, font=_font(13, "bold"),
-                                    padx=22, pady=10)
+        self.btn_card = ColorButton(b, "⬇  " + t("Wgraj na kartę"), "green", self.write_card, font=_font(14, "bold"),
+                                    padx=26, pady=12)
         self.btn_card.pack(side="right", padx=(8, 0))
-        self.btn_img = ColorButton(b, t("Zapisz jako plik .img…"), "slate", self.save_image, font=_font(11, "bold"),
-                                   padx=16, pady=10)
+        self.btn_img = ColorButton(b, t("Zapisz jako plik .img…"), "slate", self.save_image, font=_font(12, "bold"),
+                                   padx=18, pady=12)
         self.btn_img.pack(side="right")
 
         self.status = tk.StringVar(value=t("Dodaj obraz karty systemu (.img, .img.zip lub .img.xz), np. OpenX6X00."))
@@ -341,23 +379,38 @@ class App:
         except Exception:
             self.q.put(("tile", key, {"name": e["name"], "logo": None}))
 
+    def _screen_resized(self, ev):
+        """The radio's 5:3 screen as large as the room allows, centred"""
+        w, h = max(ev.width, 200), max(ev.height, 120)
+        sw = min(w, h * 5 // 3)
+        sh = sw * 3 // 5
+        if (sw, sh) != (self.sw, self.sh) or (self.sox, self.soy) != ((w - sw) // 2, 0):
+            self.sw, self.sh, self.sox, self.soy = sw, sh, (w - sw) // 2, 0
+            self.info.configure(wraplength=max(300, w - 10))
+            self._render()
+
     def _render(self):
         from . import menu_gfx
         c = self.screen
         c.delete("all")
+        SCREEN_W, SCREEN_H = self.sw, self.sh
         sx, sy = SCREEN_W / menu_gfx.W, SCREEN_H / menu_gfx.H
+        c.create_rectangle(self.sox - 2, self.soy, self.sox + SCREEN_W + 1, self.soy + SCREEN_H + 2,
+                           fill="#000000", outline="#3a3a3a", width=2)
         if menu_gfx.HAVE_PIL:
             from PIL import Image
             img = menu_gfx.render_menu([self._tile(e) for e in self.entries],
                                        None if self.wait.get() else min(self.default, max(len(self.entries) - 1, 0)))
             self._screen_img = self._photo(img.resize((SCREEN_W, SCREEN_H), Image.LANCZOS))
-            c.create_image(0, 0, image=self._screen_img, anchor="nw")
+            c.create_image(self.sox, self.soy + 1, image=self._screen_img, anchor="nw")
         else:                               # no Pillow (running from source): names in boxes
             for i, e in enumerate(self.entries):
                 cx = (menu_gfx.COL_W * i + menu_gfx.COL_W // 2) * sx
-                c.create_rectangle(cx - 72 * sx, 76 * sy, cx + 72 * sx, 372 * sy, outline="#3a4560", width=2)
-                c.create_text(cx, 220 * sy, text=e["name"], fill="#ffffff", width=130 * sx)
-                c.create_text(cx, 435 * sy, text="F%d" % (i + 1), fill="#ffffff", font=_font(14, "bold"))
+                c.create_rectangle(cx - 72 * sx, 76 * sy, cx + 72 * sx, 372 * sy, outline="#3a4560", width=2,
+                                   tags="over")
+                c.create_text(cx, 220 * sy, text=e["name"], fill="#ffffff", width=130 * sx, tags="over")
+                c.create_text(cx, 435 * sy, text="F%d" % (i + 1), fill="#ffffff", font=_font(14, "bold"),
+                              tags="over")
         if self.entries:                    # what U-Boot writes in the second row, in its 16x32 font
             try:
                 secs = max(0, min(MAX_SECS, int(float(self.timeout.get().replace(",", ".")))))
@@ -368,19 +421,23 @@ class App:
                 text = t(WAITING).format(n=len(self.entries))
             else:
                 text = t(COUNTDOWN).replace("${bm_default}", str(self.default + 1)).replace("${bm_left}", str(secs))
-            c.create_text(16 * sx, 48 * sy, text=text, anchor="w", fill="#d0d0d0", font=("Courier", 13, "bold"))
+            c.create_text(16 * sx, 48 * sy, text=text, anchor="w", fill="#d0d0d0", tags="over",
+                          font=("Courier", max(9, int(19 * sy)), "bold"))
         if not self.entries:
             c.create_text(SCREEN_W // 2, SCREEN_H // 2, fill="#9aa3ad", width=SCREEN_W - 80, justify="center",
-                          font=_font(12), text=t("Tu zobaczysz menu dokładnie tak, jak pokaże je radio. Zacznij od "
+                          tags="over", font=_font(13), text=t("Tu zobaczysz menu dokładnie tak, jak pokaże je radio. Zacznij od "
                                                  "„+ Z internetu…”: wybierz system, a aplikacja sama go pobierze."))
         if self.selected is not None:
             cx = menu_gfx.COL_W * self.selected + menu_gfx.COL_W // 2
             c.create_rectangle((cx - 78) * sx, 70 * sy, (cx + 78) * sx, 472 * sy, outline=ACCENT, width=3,
-                               dash=(6, 4))
+                               dash=(6, 4), tags="over")
+        c.move("over", self.sox, self.soy + 1)
 
     def _screen_click(self, ev):
         from . import menu_gfx
-        i = int(ev.x / (SCREEN_W / menu_gfx.W) // menu_gfx.COL_W)
+        if not (self.soy <= ev.y <= self.soy + self.sh):
+            return
+        i = int((ev.x - self.sox) / (self.sw / menu_gfx.W) // menu_gfx.COL_W) if ev.x >= self.sox else -1
         if 0 <= i < len(self.entries):
             self.selected = i
             self._render()
@@ -441,17 +498,15 @@ class App:
         try:
             from . import menu_gfx
             if menu_gfx.HAVE_PIL:
-                self._doom_img = self._photo(menu_gfx.load_logo(DOOM_LOGO, size=44, bg=_tree_bg()))
+                c = BTN["doom"][0]
+                self._doom_img = self._photo(menu_gfx.load_logo(
+                    DOOM_LOGO, size=40, bg=tuple(int(c[k:k + 2], 16) for k in (1, 3, 5))))
         except Exception:
             self._doom_img = None
-        ColorButton(col, "  + Doom", "doom", self.add_doom, image=self._doom_img, font=_font(12, "bold"),
-                    pady=4).pack(fill="x")
-        read = tk.Label(col, text="⚠  " + t("Przeczytaj najpierw"), bg=RED, fg="#ffffff", cursor="hand2",
-                        font=_font(12, "bold"), padx=10, pady=9)
-        read.pack(fill="x", pady=(6, 0))
-        read.bind("<Button-1>", lambda e: self.doom_readme())
-        read.bind("<Enter>", lambda e: read.configure(bg=RED_HOVER))
-        read.bind("<Leave>", lambda e: read.configure(bg=RED))
+        ColorButton(col, "+ Doom", "doom", self.add_doom, image=self._doom_img, font=_font(13, "bold"),
+                    pady=6).pack(fill="x")
+        ColorButton(col, "⚠  " + t("Przeczytaj najpierw"), "red", self.doom_readme,
+                    font=_font(12, "bold")).pack(fill="x", pady=(8, 0))
 
     def add_doom(self):
         if any(e["kind"] == "doom" for e in self.entries):
@@ -804,9 +859,39 @@ def _filetypes(types):
     return {"filetypes": types + [(t("Wszystkie pliki"), "*.*")]}
 
 
+UI_FAMILY = None
+
+
 def _font(size, *style):
-    fam = "Segoe UI" if devices.WIN else ("Helvetica Neue" if devices.MAC else "TkDefaultFont")
-    return (fam, size) + style
+    """The app's font, a size larger than Tk's small default (2 points up)"""
+    fam = UI_FAMILY or ("Segoe UI" if devices.WIN else ("Helvetica Neue" if devices.MAC else "TkDefaultFont"))
+    return (fam, size + 2) + style
+
+
+def _setup_fonts(root):
+    """The theme asks for "Segoe UI Variable", which Windows 10, macOS and Linux lack: Tk then fell
+    back to a small, poor font. Each system's own good font instead, in the theme's named fonts too"""
+    global UI_FAMILY
+    import tkinter.font as tkfont
+    have = set(tkfont.families(root))
+    if devices.WIN:
+        cands = ["Segoe UI Variable Text", "Segoe UI"]
+    elif devices.MAC:
+        cands = [tkfont.nametofont("TkDefaultFont").actual()["family"], "Helvetica Neue"]
+    else:
+        cands = ["Inter", "Noto Sans", "Cantarell", "Ubuntu", "DejaVu Sans"]
+    UI_FAMILY = next((f for f in cands if f in have), tkfont.nametofont("TkDefaultFont").actual()["family"])
+    sizes = {"TkDefaultFont": 12, "TkTextFont": 12, "TkMenuFont": 12, "TkHeadingFont": 12, "TkCaptionFont": 12,
+             "SunValleyCaptionFont": 11, "SunValleyBodyFont": 12, "SunValleyBodyStrongFont": 12,
+             "SunValleyBodyLargeFont": 14, "SunValleySubtitleFont": 16, "SunValleyTitleFont": 21}
+    for name, size in sizes.items():
+        try:
+            f = tkfont.nametofont(name)
+            f.configure(family=UI_FAMILY, size=size)
+            if name in ("SunValleyBodyStrongFont", "SunValleySubtitleFont", "SunValleyTitleFont"):
+                f.configure(weight="bold")
+        except tk.TclError:
+            pass
 
 
 def _tree_bg():
@@ -853,7 +938,9 @@ def _theme(root):
             ttk.Style().theme_use("clam" if not devices.WIN else "vista")
         except tk.TclError:
             pass
+    _setup_fonts(root)
     st = ttk.Style()
+    st.configure("TButton", padding=(12, 6))
     st.configure("Systems.Treeview", rowheight=50)
     st.configure("Big.Accent.TButton", font=_font(12, "bold"), padding=(22, 8))
     st.configure("Big.TButton", padding=(16, 8))
@@ -872,10 +959,20 @@ def _set_icon(root):
         pass
 
 
+def _fit_screen(root):
+    """A window taller or wider than the screen made smaller (the radio's screen in it shrinks)"""
+    root.update_idletasks()
+    w, h = root.winfo_reqwidth(), root.winfo_reqheight()
+    sw, sh = root.winfo_screenwidth(), root.winfo_screenheight() - 80
+    if w > sw or h > sh:
+        root.geometry("%dx%d+0+0" % (min(w, sw), min(h, sh)))
+
+
 def main():
     root = tk.Tk()
     _set_icon(root)
     _theme(root)
     App(root)
+    _fit_screen(root)
     root.mainloop()
     return 0
