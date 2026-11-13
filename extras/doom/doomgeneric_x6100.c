@@ -47,10 +47,12 @@ enum {
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/fb.h>
+#include <linux/gpio.h>
 #include <linux/input.h>
 #include <linux/kd.h>
 #include <linux/reboot.h>
 #include <poll.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -89,7 +91,7 @@ static int rotate = 3;                          /* 3: as fbcon=rotate:3; 1: the 
 enum role { ROLE_RADIO, ROLE_MOUSE, ROLE_KEYBOARD };
 static int in_fd[MAX_DEVS], in_role[MAX_DEVS], n_in;
 static char in_dev[MAX_DEVS][24];
-static int mouse_dx, mouse_buttons;
+static int mouse_dx, mouse_dy, mouse_buttons;
 static uint32_t last_scan;
 static struct pollfd pfd[MAX_DEVS];
 static unsigned short queue[QSIZE];
@@ -305,8 +307,11 @@ static inline void put(unsigned fx, unsigned fy, uint32_t p)
 static void draw(void);
 static void test_dump(void);
 
+static unsigned frames_drawn;
+
 void DG_DrawFrame(void)
 {
+	frames_drawn++;
 	draw();
 	test_dump();
 }
@@ -447,6 +452,7 @@ static void mouse_event(const struct input_event *ev)
 {
 	if (ev->type == EV_REL) {
 		if (ev->code == REL_X) mouse_dx += ev->value;
+		else if (ev->code == REL_Y) mouse_dy += ev->value;
 		else if (ev->code == REL_WHEEL && ev->value) knob(2, -ev->value);
 	} else if (ev->type == EV_KEY) {
 		if (ev->code == BTN_LEFT)
@@ -454,10 +460,12 @@ static void mouse_event(const struct input_event *ev)
 		else if (ev->code == BTN_RIGHT && (ev->value == 0 || ev->value == 1))
 			push(ev->value, DK_USE);
 	} else if (ev->type == EV_SYN && ev->code == SYN_REPORT) {
-		event_t e = {.type = ev_mouse, .data1 = mouse_buttons, .data2 = mouse_dx * 6,
-		             .data3 = 0, .data4 = 0};
+		/* As in the first build, which turned well on the radio: one event per report of the mouse,
+		 * x3. Up and down (mouse up: forward) the same way */
+		event_t e = {.type = ev_mouse, .data1 = mouse_buttons, .data2 = mouse_dx * 3,
+		             .data3 = -mouse_dy * 3, .data4 = 0};
 		D_PostEvent(&e);
-		mouse_dx = 0;
+		mouse_dx = mouse_dy = 0;
 	}
 }
 
@@ -483,6 +491,14 @@ static void poll_input(void)
 	if (t - last_scan > 1000) {               /* a mouse or keyboard plugged in meanwhile */
 		last_scan = t;
 		open_inputs();
+		static uint32_t fps_t;
+		static unsigned fps_frames;
+		if (t - fps_t >= 10000) {             /* the game's speed, every 10 s */
+			if (fps_t)
+				logmsg("%.1f frames/s", (frames_drawn - fps_frames) * 1000.0 / (t - fps_t));
+			fps_t = t;
+			fps_frames = frames_drawn;
+		}
 		if (!late_dump_done && t > 25000) {   /* once, when USB and Bluetooth have had their time */
 			late_dump_done = true;
 			log_usb_devices();
@@ -699,11 +715,12 @@ void DG_SetWindowTitle(const char *title)
 extern int x6100_sound_volume, x6100_music_volume;
 static int bluetooth_on = 1;   /* bluetooth=0 in doom.txt: no Bluetooth */
 void x6100_radio_audio(int vol);
+extern int x6100_rx_mute, x6100_record, x6100_headphone;
 
 /* /boot/doom.txt on the card's BOOT partition: volume=0..200 (%), rxvol=0..55 (the radio's AF volume) */
 static void read_settings(void)
 {
-	int rxvol = 20;      /* the base board's AF volume: without the radio's own software it may be 0 */
+	int rxvol = 45;      /* the base board's AF volume: without the radio's own software it may be 0 */
 	mkdir("/boot", 0755);
 	if (mount("/dev/mmcblk0p1", "/boot", "vfat", MS_NOATIME, NULL) == 0) {
 		boot_rw = true;
@@ -730,6 +747,12 @@ static void read_settings(void)
 			bluetooth_on = v != 0;
 		else if (sscanf(line, " rxvol = %d", &v) == 1)
 			rxvol = v;
+		else if (sscanf(line, " rxmute = %d", &v) == 1)
+			x6100_rx_mute = v != 0;
+		else if (sscanf(line, " record = %d", &v) == 1)
+			x6100_record = v != 0;
+		else if (sscanf(line, " headphone = %d", &v) == 1)
+			x6100_headphone = v;
 	}
 	if (f)
 		fclose(f);
@@ -805,10 +828,115 @@ static bool mount_donor(void)
 	return true;
 }
 
-/* The radio's HOST port is the SoC's OTG port, whose driver (musb) the kernel has as a module */
+/* The SoC's OTG port, whose driver (musb) the kernel has as a module: on the X6100 the WiFi/BT
+ * chip (RTL8723BU) sits there, so Bluetooth needs it */
+static bool musb_has_device(void)
+{
+	DIR *d = opendir("/sys/bus/usb/devices");
+	struct dirent *e;
+	bool found = false;
+	while (d && (e = readdir(d)))
+		if (!strncmp(e->d_name, "3-", 2) && !strchr(e->d_name, ':'))   /* a device, not the hub's own */
+			found = true;
+	if (d)
+		closedir(d);
+	return found;
+}
+
+static void log_sysfs(const char *path)
+{
+	char buf[64] = "";
+	FILE *f = fopen(path, "r");
+	if (f) {
+		if (!fgets(buf, sizeof buf, f))
+			buf[0] = 0;
+		fclose(f);
+	}
+	buf[strcspn(buf, "\n")] = 0;
+	logmsg("  %s: %s", path, f ? buf : "(none)");
+}
+
+static void write_sysfs(const char *path, const char *val)
+{
+	FILE *f = fopen(path, "w");
+	if (!f) {
+		logmsg("  write %s: %s", path, strerror(errno));
+		return;
+	}
+	fputs(val, f);
+	if (fclose(f) != 0)
+		logmsg("  write %s=%s: %s", path, val, strerror(errno));
+	else
+		logmsg("  %s <- %s", path, val);
+}
+
+/* The WiFi/BT chip's power: line 5 of gpiochip0 (PL5, pin 357, "X6100_wifi" in X6100Control),
+ * active low: OpenX6X00's wifi_power_on() sets it 0, wifi_power_off() 1. The chip is switched off
+ * and on again, and the line stays ours (low) while Doom runs */
+static int wifi_line_fd = -1;
+
+static void wifi_chip_on(void)
+{
+	int chip = open("/dev/gpiochip0", O_RDWR | O_CLOEXEC);
+	if (chip < 0) {
+		logmsg("WiFi/BT chip power: /dev/gpiochip0: %s", strerror(errno));
+		return;
+	}
+	struct gpiohandle_request req;
+	memset(&req, 0, sizeof req);
+	req.lineoffsets[0] = 5;
+	req.flags = GPIOHANDLE_REQUEST_OUTPUT;
+	req.default_values[0] = 1;              /* off first: the chip started again, as the radio's */
+	req.lines = 1;                          /* software restarts it */
+	snprintf(req.consumer_label, sizeof req.consumer_label, "doom_wifi");
+	if (ioctl(chip, GPIO_GET_LINEHANDLE_IOCTL, &req) < 0)
+		logmsg("WiFi/BT chip power (gpiochip0 line 5): %s", strerror(errno));
+	else {
+		wifi_line_fd = req.fd;
+		usleep(500000);
+		struct gpiohandle_data on = {.values = {0}};
+		if (ioctl(wifi_line_fd, GPIOHANDLE_SET_LINE_VALUES_IOCTL, &on) < 0)
+			logmsg("WiFi/BT chip power on: %s", strerror(errno));
+		else
+			logmsg("WiFi/BT chip restarted (gpiochip0 line 5: 1 = off, 0.5 s, 0 = on)");
+	}
+	close(chip);
+}
+
 static void load_usb_host(void)
 {
+	wifi_chip_on();
 	load_with_deps("/usb/musb/sunxi.ko");
+}
+
+/* In a thread: if no device came up on the OTG port, the port is put in host mode, then its
+ * driver bound again; each step in the log */
+static void *musb_watch(void *arg)
+{
+	(void)arg;
+	static const char *mode = "/sys/devices/platform/soc/1c19000.usb/musb-hdrc.2.auto/mode";
+	static const char *drv = "/sys/bus/platform/drivers/musb-sunxi";
+	sleep(6);
+	logmsg("MUSB (WiFi/BT chip's port) after 6 s: %s", musb_has_device() ? "a device" : "EMPTY");
+	log_sysfs(mode);
+	log_sysfs("/sys/devices/platform/soc/1c19000.usb/musb-hdrc.2.auto/vbus");
+	if (musb_has_device())
+		return NULL;
+	write_sysfs(mode, "host");
+	sleep(4);
+	logmsg("MUSB after host mode: %s", musb_has_device() ? "a device" : "EMPTY");
+	if (musb_has_device())
+		return NULL;
+	char p[200];
+	snprintf(p, sizeof p, "%s/unbind", drv);
+	write_sysfs(p, "1c19000.usb");
+	sleep(1);
+	snprintf(p, sizeof p, "%s/bind", drv);
+	write_sysfs(p, "1c19000.usb");
+	sleep(6);
+	logmsg("MUSB after rebinding: %s", musb_has_device() ? "a device" : "EMPTY");
+	log_sysfs(mode);
+	return NULL;
 }
 
 /* Bluetooth keyboards and mice: the lending system's own Bluetooth (BlueZ, D-Bus, its pairings
@@ -927,6 +1055,9 @@ static void as_init(void)
 	read_settings();
 	if (mount_donor()) {
 		load_usb_host();
+		pthread_t t;
+		pthread_create(&t, NULL, musb_watch, NULL);
+		pthread_detach(t);
 		start_bluetooth();
 	}
 }

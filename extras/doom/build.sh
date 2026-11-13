@@ -17,11 +17,13 @@ rm -rf "$W" && mkdir -p "$W" "$OUT"
 
 git clone -q https://github.com/ozkl/doomgeneric "$W/doomgeneric"
 git -C "$W/doomgeneric" checkout -q $DG_COMMIT
-# The mouse's motion summed until the next tic (Doom keeps only the last event's: a USB mouse
-# sends many small ones a tic, and turning was too slow to notice)
-sed -i 's/\tmousex = ev->data2\*/\tmousex += ev->data2*/; s/\tmousey = ev->data3\*/\tmousey += ev->data3*/' \
-    "$W/doomgeneric/doomgeneric/g_game.c"
-grep -q 'mousex += ev->data2' "$W/doomgeneric/doomgeneric/g_game.c"
+# The mouse: all its motion until the next tic (Doom keeps only the last event, and when the
+# game runs slower, as with the radio's WiFi/BT chip on, most of the motion was lost), the turn
+# bounded so that mousex * 8 stays a 16-bit angle
+G="$W/doomgeneric/doomgeneric/g_game.c"
+sed -i 's/\tmousex = ev->data2\*/\tmousex += ev->data2*/; s/\tmousey = ev->data3\*/\tmousey += ev->data3*/' "$G"
+sed -i 's/cmd->angleturn -= mousex\*0x8;/cmd->angleturn -= (mousex > 4000 ? 4000 : mousex < -4000 ? -4000 : mousex)*0x8;/' "$G"
+grep -q 'mousex += ev->data2' "$G" && grep -q 'mousex > 4000' "$G"
 git clone -q https://github.com/tinyalsa/tinyalsa "$W/tinyalsa"
 git -C "$W/tinyalsa" checkout -q $TA_COMMIT
 TA=$W/tinyalsa

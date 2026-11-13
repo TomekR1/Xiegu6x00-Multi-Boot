@@ -15,7 +15,7 @@ Najnowsza wersja jest w zakładce **[Releases](../../releases/latest)**:
 | Plik | System |
 |---|---|
 | `Xiegu-Multi-Patcher.exe` | Windows 10/11 |
-| `Xiegu-Multi-Patcher-macOS.zip` | macOS: rozpakuj, przy pierwszym uruchomieniu prawy klik → **Otwórz** |
+| `Xiegu-Multi-Patcher-macOS.zip` | macOS: rozpakuj, przenieś do Programów; za pierwszym razem macOS ją zablokuje: **Ustawienia systemowe → Prywatność i ochrona → Otwórz mimo to** (albo w Terminalu `xattr -dr com.apple.quarantine "/Applications/Xiegu Multi Patcher.app"`) |
 | `Xiegu-Multi-Patcher-Linux` | Linux x86-64: `chmod +x Xiegu-Multi-Patcher-Linux`; do zapisu karty potrzebny `pkexec` |
 
 Nic nie trzeba instalować. Aplikacja jest po polsku i po angielsku (wybór języka w prawym górnym
@@ -62,25 +62,27 @@ karcie co najmniej jeden system z obrazu, bo Doom uruchamia się z jego jądrem)
 | AM | bieg |
 | POWER | wyłączenie radia |
 
-Działa też **myszka USB** (ruch w lewo/prawo obraca, lewy przycisk strzela, prawy otwiera drzwi,
-kółko zmienia broń) i **klawiatura USB** (strzałki: do przodu/do tyłu i obrót, Ctrl strzela, spacja
-otwiera, Esc to menu, F2/F3 zapis i wczytanie gry). Podłącza się je do gniazda **HOST** radia
+Działa też **myszka** (lewo/prawo obraca, góra/dół idzie do przodu i do tyłu, lewy przycisk strzela,
+prawy otwiera drzwi, kółko zmienia broń) i **klawiatura** (W/S do przodu i do tyłu, A/D krok w bok,
+strzałki chodzą i obracają, Ctrl strzela, spacja otwiera, Esc to menu, F2/F3 zapis i wczytanie gry). Podłącza się je do gniazda **HOST** radia
 (tego samego co klawiaturę w OpenX6X00), obie naraz przez mały hub USB albo jeden odbiornik
 bezprzewodowy zestawu klawiatura+mysz. Niczego nie trzeba włączać w menu radia: Doom sam ładuje
 sterownik gniazda HOST z systemu, z którego bierze jądro. Działają też podłączone w trakcie gry.
 
 **Mysz i klawiatura Bluetooth:** Doom bierze jądro z **pierwszego systemu z obrazu na liście**
 i to w nim trzeba je raz sparować (np. OpenX6X00: Settings > Bluetooth > DEVICES). Potem wyłącz
-radio, uruchom Dooma i rusz myszą albo naciśnij klawisz: połączą się same po kilku sekundach. Doom
+radio, uruchom Dooma i rusz myszą albo naciśnij klawisz: połączą się same w ciągu około minuty. Doom
 uruchamia obsługę Bluetooth tamtego systemu z jego zapisanymi parowaniami, niczego w nim nie
 zmieniając. Działa z OpenX6X00, CX8ANM, OpenX6100 i 1KO125; z klasycznym R1CBU działa tylko USB.
 `bluetooth=0` w `doom.txt` wyłącza Bluetooth w Doomie. To samo opisuje w aplikacji przycisk
 **Przeczytaj najpierw** obok kafelka Dooma.
 
 Dźwięk: efekty i **muzyka** (syntezator OPL3, jak karta AdLib/Sound Blaster, emulowany przez
-Nuked OPL3). Na partycji `BOOT` karty jest plik `doom.txt`: `volume=` i `music=` to głośność
-efektów i muzyki (0–200 %), a `rxvol=` (po usunięciu `#`) ustawia przy starcie Dooma głośność
-radia (0–55), gdyby nic nie było słychać.
+Nuked OPL3), na głośniku radia. Na partycji `BOOT` karty jest plik `doom.txt`: `volume=`
+i `music=` to głośność efektów i muzyki (0–200 %), `rxvol=` głośność głośnika radia (0–55,
+domyślnie 45), `headphone=` poziom wyjścia dźwięku do płyty radia (0–63; przy trzeszczeniu mniej),
+`rxmute=1` przycisza odbiornik radia na czas gry (bez szumu w tle). Doom zapisuje też na tej
+partycji dziennik `doom-log.txt`: co znalazł (dźwięk, USB, Bluetooth), przydatny przy zgłaszaniu problemu.
 
 Wyjście z gry wraca do menu startowego.
 
@@ -167,7 +169,7 @@ Aplikacja: **GPL-3.0** ([LICENSE](LICENSE)), © SQ6RT. Poprawka U-Boot w `uboot/
 ekranu przeniesiona ze sterownika Linuksa X6100) jest, jak U-Boot, na licencji GPL-2.0-or-later.
 Systemy radia i ich loga należą do ich autorów; aplikacja pobiera je z ich wydań i repozytoriów.
 Wygląd okna: motyw [Sun Valley](https://github.com/rdbende/Sun-Valley-ttk-theme) (sv-ttk, licencja MIT).
-Ikona Dooma to fragment ekranu tytułowego [Freedoom](https://freedoom.github.io/) (BSD-3-Clause, © autorzy Freedoom).
+Ikona Dooma jest narysowana dla tej aplikacji (napis czcionką Inter, licencja SIL OFL).
 
 ---
 

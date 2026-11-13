@@ -95,6 +95,8 @@ static int mixing_freq, mixing_channels;
 
 // The sound module's output rate (0: no sound), set before the music starts
 extern unsigned int x6100_sound_rate;
+// The OPL emulator's own rate: half the output's at 44.1 kHz and up (x6100_sound.c doubles it)
+extern unsigned int x6100_opl_rate;
 
 // Advance time by the specified number of samples, invoking any
 // callback functions as appropriate.
@@ -266,7 +268,7 @@ static int OPL_SDL_Init(unsigned int port_base)
     pause_offset = 0;
     callback_queue = OPL_Queue_Create();
     current_time = 0;
-    mixing_freq = (int) x6100_sound_rate;
+    mixing_freq = (int) (x6100_opl_rate ? x6100_opl_rate : x6100_sound_rate);
     mixing_channels = 2;
     mix_buffer = malloc(mixing_freq * sizeof(uint32_t) * 2);
     OPL3_Reset(&opl_chip, mixing_freq);

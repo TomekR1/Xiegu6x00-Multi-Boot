@@ -57,7 +57,7 @@ def project_logo(entry):
 
 
 DOOM_NAME = "DOOM"
-# Freedoom's title picture (its TITLEPIC, BSD-3-Clause, (c) the Freedoom contributors), squared
+# Our own icon for the Doom tile (fire-coloured lettering, drawn for this app)
 DOOM_LOGO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "doom.png")
 
 
@@ -414,7 +414,10 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         fat.add_file("doom.txt", (
             t("# Doom: glosnosc efektow i muzyki 0..200 (%)") + "\r\nvolume=100\r\nmusic=100\r\n" +
             t("# Glosnosc glosnika radia (AF) 0..55, ustawiana przy starcie Dooma") + "\r\n"
-            "rxvol=20\r\n" +
+            "rxvol=45\r\n" +
+            t("# Wycisz odbiornik radia w Doomie (szum w tle); 0: zostaw jak byl") + "\r\nrxmute=1\r\n" +
+            t("# Wyjscie dzwieku procesora do plyty radia 0..63") + "\r\nheadphone=63\r\n" +
+            t("# Tryb odtwarzania plyty radia (jak OpenX6X00); 0: wylaczony") + "\r\nrecord=0\r\n" +
             t("# Dziennik startu Dooma: doom-log.txt na tej partycji") + "\r\n" +
             t("# Bluetooth: mysz i klawiatura sparowane w systemie, z ktorego Doom bierze jadro (0: wylaczony)") +
             "\r\nbluetooth=1\r\n").encode())

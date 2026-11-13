@@ -51,6 +51,35 @@ def _gb(n):
     return f"{n / 1e9:.1f} GB"
 
 
+# Colours of the app's own buttons: (normal, under the pointer)
+BTN = {
+    "blue": ("#1f6fd1", "#3a86e8"), "teal": ("#0f8b8d", "#17a7aa"), "orange": ("#d9822b", "#eb9845"),
+    "doom": ("#8e1b1b", "#ad2626"), "green": ("#2e9d4f", "#39b95f"), "slate": ("#55707d", "#68848f"),
+}
+
+
+class ColorButton(tk.Label):
+    """A coloured button that looks the same on Windows, macOS and Linux (themed buttons take no
+    colour on every system); state(["disabled"]) and state(["!disabled"]) as a ttk button"""
+
+    def __init__(self, parent, text, colour, command, image=None, font=None, padx=12, pady=7, **kw):
+        self._c, self._h = BTN[colour]
+        self._cmd = command
+        self._on = True
+        super().__init__(parent, text=text, image=image, compound="left" if image is not None else None,
+                         bg=self._c, fg="#ffffff", cursor="hand2", font=font or _font(10, "bold"),
+                         padx=padx, pady=pady, **kw)
+        self.bind("<Enter>", lambda e: self._on and self.configure(bg=self._h))
+        self.bind("<Leave>", lambda e: self.configure(bg=self._c if self._on else "#a7adb3"))
+        self.bind("<ButtonRelease-1>", lambda e: self._on and self._cmd())
+
+    def state(self, flags):
+        on = "!disabled" in flags
+        if "disabled" in flags or on:
+            self._on = on
+            self.configure(bg=self._c if on else "#a7adb3", cursor="hand2" if on else "arrow")
+
+
 class App:
     def __init__(self, root):
         self.root = root
@@ -151,10 +180,9 @@ class App:
         box = self._section(top, 1, t("Menu na ekranie radia"), expand=True)
         btns = ttk.Frame(box)
         btns.pack(side="right", fill="y", padx=(12, 2), pady=2)
-        for text, cmd, accent in (("+ Z internetu…", self.add_online, True), ("+ Obraz karty…", self.add_image, False),
-                                  ("+ Xiegu z eMMC", self.add_xiegu, False)):
-            ttk.Button(btns, text=t(text), command=cmd, width=18,
-                       style="Accent.TButton" if accent else "TButton").pack(fill="x", pady=2)
+        for text, cmd, colour in (("+ Z internetu…", self.add_online, "blue"), ("+ Obraz karty…", self.add_image, "teal"),
+                                  ("+ Xiegu z eMMC", self.add_xiegu, "orange")):
+            ColorButton(btns, t(text), colour, cmd, width=18).pack(fill="x", pady=3)
         self._build_extras(btns)
         left = ttk.Frame(box)
         left.pack(side="left", fill="both", expand=True)
@@ -222,9 +250,11 @@ class App:
         out.columnconfigure(1, weight=1)
         b = ttk.Frame(out)
         b.grid(row=0, column=3, sticky="e", padx=(8, 4))
-        self.btn_card = ttk.Button(b, text="⬇  " + t("Wgraj na kartę"), command=self.write_card, style="Big.Accent.TButton")
+        self.btn_card = ColorButton(b, "⬇  " + t("Wgraj na kartę"), "green", self.write_card, font=_font(13, "bold"),
+                                    padx=22, pady=10)
         self.btn_card.pack(side="right", padx=(8, 0))
-        self.btn_img = ttk.Button(b, text=t("Zapisz jako plik .img…"), command=self.save_image, style="Big.TButton")
+        self.btn_img = ColorButton(b, t("Zapisz jako plik .img…"), "slate", self.save_image, font=_font(11, "bold"),
+                                   padx=16, pady=10)
         self.btn_img.pack(side="right")
 
         self.status = tk.StringVar(value=t("Dodaj obraz karty systemu (.img, .img.zip lub .img.xz), np. OpenX6X00."))
@@ -414,7 +444,8 @@ class App:
                 self._doom_img = self._photo(menu_gfx.load_logo(DOOM_LOGO, size=44, bg=_tree_bg()))
         except Exception:
             self._doom_img = None
-        ttk.Button(col, text="  + Doom", image=self._doom_img, compound="left", command=self.add_doom).pack(fill="x")
+        ColorButton(col, "  + Doom", "doom", self.add_doom, image=self._doom_img, font=_font(12, "bold"),
+                    pady=4).pack(fill="x")
         read = tk.Label(col, text="⚠  " + t("Przeczytaj najpierw"), bg=RED, fg="#ffffff", cursor="hand2",
                         font=_font(12, "bold"), padx=10, pady=9)
         read.pack(fill="x", pady=(6, 0))

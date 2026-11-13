@@ -49,13 +49,16 @@ void *I_Realloc(void *ptr, size_t size)
 	return p;
 }
 
+int x6100_headphone = 63;       /* headphone= in doom.txt: the codec's output to the base board */
 int x6100_sound_volume = 100;   /* set from /boot/doom.txt before the sound starts */
 int x6100_music_volume = 100;   /* the same, for the music */
-unsigned int x6100_sound_rate;  /* the output rate once the sound runs (the OPL emulator's too) */
+unsigned int x6100_sound_rate;  /* the output rate once the sound runs */
+unsigned int x6100_opl_rate;    /* the OPL emulator's: half of it from 32 kHz up (the R16 kept up
+                                   badly with the game and the emulator at 48 kHz), each doubled */
 int opl_x6100_render(int16_t *buffer, unsigned int frames);
 
 #define CHANNELS 16
-#define PERIOD   512
+#define PERIOD   1024
 
 struct chan {
 	const uint8_t *data;   /* unsigned 8-bit samples */
@@ -90,7 +93,7 @@ static const struct setting settings[] = {
 	{"AIF1 DA0 Stereo Playback Route", "Mix Mono", 0},
 	{"Headphone Source Playback Route", "DAC", 0},
 	{"Headphone Playback Switch", NULL, 1},
-	{"Headphone Playback Volume", NULL, 47},
+	{"Headphone Playback Volume", NULL, 63},      /* headphone= in doom.txt; OpenX6X00 has 47 */
 };
 
 static void set_mixer(void)
@@ -106,13 +109,17 @@ static void set_mixer(void)
 			fprintf(stderr, "sound: no control '%s'\n", settings[i].name);
 			continue;
 		}
+		int value = settings[i].value;
+		if (!strcmp(settings[i].name, "Headphone Playback Volume"))
+			value = x6100_headphone < 0 ? 0 : x6100_headphone > 63 ? 63 : x6100_headphone;
 		if (settings[i].text) {
 			mixer_ctl_set_enum_by_string(c, settings[i].text);
 		} else {
 			for (unsigned v = 0; v < mixer_ctl_get_num_values(c); v++)
-				mixer_ctl_set_value(c, v, settings[i].value);
+				mixer_ctl_set_value(c, v, value);
 		}
 	}
+	fprintf(stderr, "sound: codec headphone volume %d of 63\n", x6100_headphone);
 	mixer_close(m);
 }
 
@@ -137,26 +144,58 @@ static bool base_write(int fd, unsigned reg, uint32_t val)
  * to the speaker; both microphones' gain 0 in register 20 (line in/out at its default 10), so no
  * microphone is heard; the AF volume, register 14, at vol (0..55). Without the radio's own
  * software none of it is set, and the codec's sound only went towards the transmitter. */
+int x6100_rx_mute = 1;          /* rxmute= in doom.txt */
+int x6100_record = 0;           /* record= in doom.txt: the base board's play mode */
+
 void x6100_radio_audio(int vol)
 {
 	if (vol < 0 || vol > 55)
-		vol = 20;
+		vol = 40;
 	int fd = open("/dev/i2c-0", O_RDWR);
 	if (fd < 0) {
 		fprintf(stderr, "sound: /dev/i2c-0: %s\n", strerror(errno));
 		return;
 	}
-	bool ok = base_write(fd, 20, 10u | (10u << 8)) &&     /* line in 10, line out 10, mics 0 */
-	          base_write(fd, 12, 0x8) &&                    /* record: the codec to the speaker */
-	          base_write(fd, 14, (uint32_t)vol);            /* AF volume */
-	fprintf(stderr, "sound: radio speaker %s (record on, mics off, AF volume %d)\n",
-	        ok ? "set" : "NOT set", vol);
+	/* On the radio Doom was heard (quietly) without the play mode, and not at all with it (test
+	 * cards 3 against 6..9): off by default, record=1 in doom.txt sets it as OpenX6X00 does */
+	bool ok = true;
+	if (x6100_record)
+		ok = base_write(fd, 20, 10u | (10u << 8)) &&  /* line in 10, line out 10, mics 0 */
+		     base_write(fd, 12, 0x8);                  /* play mode: the codec to the speaker */
+	else
+		ok = base_write(fd, 12, 0);                    /* play mode off (a test left it on) */
+	ok = ok && base_write(fd, 14, (uint32_t)vol);      /* AF volume */
+	/* The receiver's hiss, which the AF volume brings up too: RF gain 0 (register 15, TX power 1 W
+	 * kept). Not the squelch: it cut Doom's sound as well (chopped it, or silenced it) */
+	if (ok && x6100_rx_mute)
+		ok = base_write(fd, 15, 10u << 8);
+	/* The squelch at 0 (register 21: charger on, bit 4; built-in microphone): the base board keeps
+	 * its registers over a restart, and an earlier test left the squelch shut */
+	if (ok)
+		ok = base_write(fd, 21, 1u << 4);
+	fprintf(stderr, "sound: radio speaker %s (play mode %s, AF volume %d, receiver %s)\n",
+	        ok ? "set" : "NOT set", x6100_record ? "on" : "off", vol,
+	        x6100_rx_mute ? "RF gain 0" : "left as it was");
 	close(fd);
 }
 
 /* ------------------------------------------------------------------------------------------ */
 /* Mixing                                                                                     */
 /* ------------------------------------------------------------------------------------------ */
+static unsigned underruns;
+
+/* Loud peaks rounded off above 3/4 of full scale, not cut flat (a hard clip crackles) */
+static int16_t soft_clip(int32_t v)
+{
+	const int32_t knee = 24576, room = 32767 - 24576;
+	int32_t a = v < 0 ? -v : v;
+	if (a > knee) {
+		int32_t over = a - knee;
+		a = knee + (int32_t)((int64_t)room * over / (over + room));
+	}
+	return (int16_t)(v < 0 ? -a : a);
+}
+
 static void *mix_thread(void *arg)
 {
 	(void)arg;
@@ -164,9 +203,19 @@ static void *mix_thread(void *arg)
 	while (running) {
 		int32_t acc[PERIOD * 2];
 		memset(acc, 0, sizeof acc);
-		if (opl_x6100_render(music, PERIOD))  /* the OPL emulator is quiet: x3 at 100 % */
-			for (int i = 0; i < PERIOD * 2; i++)
-				acc[i] = music[i] * 3 * x6100_music_volume / 100;
+		int half = x6100_opl_rate && x6100_opl_rate * 2 == rate;
+		if (opl_x6100_render(music, half ? PERIOD / 2 : PERIOD)) {  /* quiet: x3 at 100 % */
+			for (int i = 0; i < PERIOD; i++) {
+				int j = half ? i / 2 : i;
+				int l = music[2 * j], rr = music[2 * j + 1];
+				if (half && (i & 1) && j + 1 < PERIOD / 2) {   /* between two OPL samples */
+					l = (l + music[2 * j + 2]) / 2;
+					rr = (rr + music[2 * j + 3]) / 2;
+				}
+				acc[2 * i] = l * 3 * x6100_music_volume / 100;
+				acc[2 * i + 1] = rr * 3 * x6100_music_volume / 100;
+			}
+		}
 		pthread_mutex_lock(&lock);
 		for (int c = 0; c < CHANNELS; c++) {
 			struct chan *ch = &chans[c];
@@ -178,7 +227,11 @@ static void *mix_thread(void *arg)
 					ch->on = false;
 					break;
 				}
-				int s = ((int)ch->data[idx] - 128) << 8;
+				/* between two samples, not the nearer one's step (the gritty edge of 11 kHz) */
+				int a = (int)ch->data[idx] - 128;
+				int b = idx + 1 < ch->len ? (int)ch->data[idx + 1] - 128 : a;
+				int fr = (int)(ch->pos & 0xffff);
+				int s = (a << 8) + (((b - a) * fr) >> 8);
 				acc[2 * i] += s * ch->lv / 255;
 				acc[2 * i + 1] += s * ch->rv / 255;
 				ch->pos += ch->step;
@@ -187,7 +240,7 @@ static void *mix_thread(void *arg)
 		pthread_mutex_unlock(&lock);
 		for (int i = 0; i < PERIOD * 2; i++) {
 			int32_t v = acc[i] * x6100_sound_volume / 100;
-			out[i] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
+			out[i] = soft_clip(v);
 		}
 		if (test_out) {                       /* the PC test: into a file, in real time */
 			fwrite(out, sizeof out, 1, test_out);
@@ -195,6 +248,8 @@ static void *mix_thread(void *arg)
 			usleep(PERIOD * 1000000u / rate);
 		} else if (pcm_writei(pcm, out, PERIOD) < 0) {
 			pcm_prepare(pcm);                 /* an underrun: on again */
+			if (++underruns == 1 || underruns % 50 == 0)
+				fprintf(stderr, "sound: %u underrun(s) so far (the mixing fell behind)\n", underruns);
 		}
 	}
 	return NULL;
@@ -205,11 +260,14 @@ static void *mix_thread(void *arg)
 /* ------------------------------------------------------------------------------------------ */
 static boolean snd_init(boolean use_sfx_prefix)
 {
-	static const unsigned rates[] = {48000, 44100, 32000, 22050, 16000};
+	/* 48 kHz only: on the radio the speaker had Doom at 48 kHz, nothing at 44.1 or 22.05 kHz
+	 * (the logs of test cards 3 and 5 against 6, 7 and 8), though the codec took all three */
+	static const unsigned rates[] = {48000};
 	sfx_prefix = use_sfx_prefix;
 	const char *test = getenv("DOOM_TEST_PCM");
 	if (test && (test_out = fopen(test, "wb"))) {
 		rate = x6100_sound_rate = 48000;
+		x6100_opl_rate = rate / 2;
 		running = true;
 		return pthread_create(&thread, NULL, mix_thread, NULL) == 0;
 	}
@@ -227,8 +285,8 @@ static boolean snd_init(boolean use_sfx_prefix)
 	}
 	for (size_t i = 0; i < sizeof rates / sizeof rates[0] && !pcm; i++) {
 		struct pcm_config cfg = {
-			.channels = 2, .rate = rates[i], .period_size = PERIOD, .period_count = 4,
-			.format = PCM_FORMAT_S16_LE, .start_threshold = PERIOD,
+			.channels = 2, .rate = rates[i], .period_size = PERIOD, .period_count = 6,
+			.format = PCM_FORMAT_S16_LE, .start_threshold = PERIOD * 2,
 		};
 		struct pcm *p = pcm_open(0, 0, PCM_OUT, &cfg);
 		if (p && pcm_is_ready(p)) {
@@ -245,6 +303,7 @@ static boolean snd_init(boolean use_sfx_prefix)
 	}
 	fprintf(stderr, "sound: playing at %u Hz\n", rate);
 	x6100_sound_rate = rate;
+	x6100_opl_rate = rate >= 32000 ? rate / 2 : rate;
 	running = true;
 	if (pthread_create(&thread, NULL, mix_thread, NULL)) {
 		running = false;

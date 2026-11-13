@@ -268,6 +268,10 @@ EN = {
     "# Doom: glosnosc efektow i muzyki 0..200 (%)": "# Doom: effects and music volume 0..200 (%)",
     "# Glosnosc glosnika radia (AF) 0..55, ustawiana przy starcie Dooma":
         "# The radio's speaker (AF) volume 0..55, set when Doom starts",
+    "# Wycisz odbiornik radia w Doomie (szum w tle); 0: zostaw jak byl":
+        "# Mute the radio's receiver in Doom (the background hiss); 0: leave it as it was",
+    "# Wyjscie dzwieku procesora do plyty radia 0..63": "# The SoC's sound output to the radio's board 0..63",
+    "# Tryb odtwarzania plyty radia (jak OpenX6X00); 0: wylaczony": "# The radio board's play mode (as OpenX6X00 uses it); 0: off",
     "# Dziennik startu Dooma: doom-log.txt na tej partycji": "# Doom's start log: doom-log.txt on this partition",
     "# Bluetooth: mysz i klawiatura sparowane w systemie, z ktorego Doom bierze jadro (0: wylaczony)":
         "# Bluetooth: mouse and keyboard paired in the system Doom takes its kernel from (0: off)",
@@ -293,20 +297,23 @@ Sterowanie radiem
 Mysz i klawiatura USB
   Podłącz do gniazda HOST radia (tego co klawiaturę w OpenX6X00). Obie naraz: przez mały hub
   USB albo jeden odbiornik bezprzewodowy zestawu klawiatura+mysz. Niczego nie trzeba włączać.
-  Mysz: lewo/prawo obraca, lewy przycisk strzela, prawy otwiera, kółko zmienia broń.
-  Klawiatura: strzałki chodzą i obracają, Ctrl strzela, spacja otwiera, Esc menu, F2/F3 zapis/odczyt.
+  Mysz: lewo/prawo obraca, góra/dół do przodu i do tyłu, lewy przycisk strzela, prawy otwiera,
+  kółko zmienia broń.
+  Klawiatura: W/S przód/tył, A/D w bok, strzałki chodzą i obracają, Ctrl strzela, spacja otwiera,
+  Esc menu, F2/F3 zapis/odczyt.
 
 Mysz i klawiatura Bluetooth
   1. Uruchom na radiu ten pierwszy system z listy (np. OpenX6X00) i sparuj w nim mysz
      i klawiaturę (OpenX6X00: Settings > Bluetooth > DEVICES).
   2. Wyłącz radio normalnie, uruchom Dooma.
-  3. Rusz myszą albo naciśnij klawisz: połączą się same po kilku sekundach.
+  3. Rusz myszą albo naciśnij klawisz: połączą się same w ciągu około minuty.
   Doom korzysta z Bluetooth tamtego systemu i jego zapisanych parowań, niczego w nim nie zmieniając.
   Działa z OpenX6X00, CX8ANM, OpenX6100 i 1KO125. Z klasycznym R1CBU działa tylko USB.
 
 Dźwięk
   Efekty i muzyka. Plik doom.txt na partycji BOOT karty: volume= i music= (0–200 %),
-  rxvol= (0–55, domyślnie 20) to głośność głośnika radia, bluetooth=0 wyłącza Bluetooth.
+  rxvol= (0–55, domyślnie 45) to głośność głośnika radia, headphone= (0–63) poziom wyjścia
+  do płyty radia (przy trzeszczeniu mniej), rxmute=1 przycisza odbiornik, bluetooth=0 wyłącza BT.
   Dziennik: doom-log.txt na partycji BOOT (co Doom zobaczył: dźwięk, USB, Bluetooth).
 """,
     "en": """Doom on the X6100
@@ -323,20 +330,23 @@ The radio's controls
 USB mouse and keyboard
   Plug them into the radio's HOST port (where a keyboard goes in OpenX6X00). Both at once: through
   a small USB hub, or one wireless receiver of a keyboard+mouse set. Nothing to switch on.
-  Mouse: left/right turns, the left button fires, the right one opens, the wheel picks the weapon.
-  Keyboard: the arrows walk and turn, Ctrl fires, Space opens, Esc menu, F2/F3 save/load.
+  Mouse: left/right turns, up/down walks forward/back, the left button fires, the right one opens,
+  the wheel picks the weapon.
+  Keyboard: W/S forward/back, A/D sideways, the arrows walk and turn, Ctrl fires, Space opens,
+  Esc menu, F2/F3 save/load.
 
 Bluetooth mouse and keyboard
   1. Start that first system of the list on the radio (e.g. OpenX6X00) and pair the mouse and the
      keyboard there (OpenX6X00: Settings > Bluetooth > DEVICES).
   2. Switch the radio off normally, start Doom.
-  3. Move the mouse or press a key: they connect by themselves after a few seconds.
+  3. Move the mouse or press a key: they connect by themselves within about a minute.
   Doom uses that system's Bluetooth and its saved pairings, changing nothing in it.
   Works with OpenX6X00, CX8ANM, OpenX6100 and 1KO125. With the classic R1CBU only USB works.
 
 Sound
   Effects and music. The doom.txt file on the card's BOOT partition: volume= and music= (0–200 %),
-  rxvol= (0–55, 20 by default) is the radio speaker's volume, bluetooth=0 switches Bluetooth off.
+  rxvol= (0–55, 45 by default) is the radio speaker's volume, headphone= (0–63) the level to the
+  radio's board (lower if it crackles), rxmute=1 quiets the receiver, bluetooth=0 switches BT off.
   Log: doom-log.txt on the BOOT partition (what Doom found: sound, USB, Bluetooth).
 """,
 }

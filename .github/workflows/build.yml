@@ -185,13 +185,17 @@ jobs:
 
             **Pobierz aplikację dla swojego komputera:**
             - Windows: `Xiegu-Multi-Patcher.exe`
-            - macOS: `Xiegu-Multi-Patcher-macOS.zip` (rozpakuj; za pierwszym razem prawy klik → Otwórz)
+            - macOS: `Xiegu-Multi-Patcher-macOS.zip` (rozpakuj; za pierwszym razem: Ustawienia systemowe → Prywatność i ochrona → Otwórz mimo to)
             - Linux: `Xiegu-Multi-Patcher-Linux` (`chmod +x`; do zapisu karty potrzebny pkexec)
 
             Systemy radia (OpenX6X00, OpenX6100, CX8ANM, 1KO125, IU1WXY, R1CBU) pobierasz w aplikacji
             przyciskiem **+ Z internetu…**, prosto z wydań ich autorów. Instrukcja: README w repozytorium.
 
-            W sekcji **Extras** aplikacji: klasyczny Doom na radiu (Freedoom).
+            W sekcji **Extras** aplikacji: klasyczny Doom na radiu (Freedoom), z dźwiękiem i muzyką na głośniku radia,
+            myszą i klawiaturą USB albo Bluetooth.
+
+            Nowe w tej wersji: menu jak na ekranie radia już w aplikacji, motyw jasny/ciemny, polski/angielski,
+            czas wyboru do 15 s albo czekanie na klawisz, klawisz POWER w menu startowym wyłącza radio.
 
             `u-boot-x6100-menu.bin`: U-Boot menu z obsługą ekranu X6100 (aplikacja ma go w sobie).
 
