@@ -114,6 +114,119 @@ class ColorButton(tk.Canvas):
             self._draw()
 
 
+class BigBar(tk.Canvas):
+    """A thick rounded progress bar; moving() makes a block run along it while there is no count"""
+
+    def __init__(self, parent, width=520, height=24):
+        super().__init__(parent, width=width, height=height, highlightthickness=0, bd=0, bg=PAGE_BG)
+        self.w, self.h, self.frac, self.run, self.pos = width, height, 0.0, False, 0.0
+        self._draw()
+
+    def _round(self, x0, x1, fill):
+        h, r = self.h, self.h // 2
+        if x1 - x0 < 2 * r:
+            x1 = x0 + 2 * r
+        pts = [x0 + r, 0, x1 - r, 0, x1, 0, x1, r, x1, h - r, x1, h, x1 - r, h, x0 + r, h, x0, h, x0, h - r,
+               x0, r, x0, 0]
+        self.create_polygon(pts, smooth=True, fill=fill, outline="")
+
+    def _draw(self):
+        self.delete("all")
+        self._round(0, self.w, "#d7dde3" if PAGE_BG.lower() > "#888888" else "#3a3f45")
+        if self.run:
+            x0 = (self.w + 160) * self.pos - 160
+            self._round(max(0, x0), min(self.w, x0 + 160), ACCENT)
+        elif self.frac > 0:
+            self._round(0, max(self.h, int(self.w * self.frac)), "#2e9d4f")
+
+    def set(self, frac):
+        self.run, self.frac = False, max(0.0, min(1.0, frac))
+        self._draw()
+
+    def moving(self):
+        if self.run:
+            return
+        self.run = True
+        self._tick()
+
+    def _tick(self):
+        if not self.run or not self.winfo_exists():
+            return
+        self.pos = (self.pos + 0.012) % 1.0
+        self._draw()
+        self.after(20, self._tick)
+
+
+class ProgressWindow:
+    """A clear window while the app works (fetching a system, unpacking, writing the card): a big bar,
+    the per cent, how much and how fast, and how long still; moving by itself while there is no
+    count yet (connecting to GitHub, looking at an image), so it never looks frozen"""
+
+    def __init__(self, root, text):
+        self.win = tk.Toplevel(root)
+        self.win.title(APP)
+        self.win.transient(root)
+        self.win.resizable(False, False)
+        self.win.protocol("WM_DELETE_WINDOW", lambda: None)
+        self.win.configure(bg=PAGE_BG)
+        f = ttk.Frame(self.win, padding=(28, 22))
+        f.pack(fill="both", expand=True)
+        self.title = ttk.Label(f, text=text, font=_font(15, "bold"))
+        self.title.pack(anchor="w")
+        self.bar = BigBar(f)
+        self.bar.pack(fill="x", pady=(16, 10))
+        row = ttk.Frame(f)
+        row.pack(fill="x")
+        self.pct = ttk.Label(row, text="", font=_font(22, "bold"), foreground=ACCENT)
+        self.pct.pack(side="left")
+        self.detail = ttk.Label(row, text=t("Łączenie…"), font=_font(11), foreground=HINT, justify="right")
+        self.detail.pack(side="right")
+        self.msg = ttk.Label(f, text="", font=_font(10), foreground=HINT, wraplength=520)
+        self.msg.pack(anchor="w", pady=(8, 0))
+        self.bar.moving()
+        self.moving, self.phase, self.t0, self.d0 = True, None, time.time(), 0
+        self.win.update_idletasks()
+        x = root.winfo_rootx() + (root.winfo_width() - self.win.winfo_reqwidth()) // 2
+        y = root.winfo_rooty() + (root.winfo_height() - self.win.winfo_reqheight()) // 3
+        self.win.geometry("+%d+%d" % (max(x, 0), max(y, 0)))
+        try:
+            self.win.grab_set()
+        except tk.TclError:
+            pass
+
+    def update(self, phase, done, total, msg=""):
+        if phase != self.phase:                       # a new step: its own speed and time
+            self.phase, self.t0, self.d0 = phase, time.time(), done
+            self.title.configure(text=t(PHASES.get(phase, phase)) + "…")
+        if total <= 0:
+            if not self.moving:
+                self.bar.moving()
+                self.moving = True
+            self.pct.configure(text="")
+            self.detail.configure(text="%d MB" % (done >> 20))
+        else:
+            self.moving = False
+            self.bar.set(done / total)
+            self.pct.configure(text="%d%%" % (done * 100 // total))
+            dt = time.time() - self.t0
+            speed = (done - self.d0) / dt if dt > 0.5 else 0
+            left = (total - done) / speed if speed > 0 else None
+            txt = "%d / %d MB" % (done >> 20, total >> 20)
+            if speed:
+                txt += "   %.1f MB/s" % (speed / 1e6)
+            if left is not None:
+                txt += "   " + t("zostało {t}", t="%d:%02d" % (left // 60, left % 60))
+            self.detail.configure(text=txt)
+        self.msg.configure(text=msg or "")
+
+    def close(self):
+        try:
+            self.win.grab_release()
+            self.win.destroy()
+        except tk.TclError:
+            pass
+
+
 class App:
     def __init__(self, root):
         self.root = root
@@ -819,6 +932,7 @@ class App:
         self.btn_img.state(["disabled"])
         self.status.set(text)
         self.bar["value"] = 0
+        self.progress_win = ProgressWindow(self.root, text)
 
         def run():
             try:
@@ -840,7 +954,12 @@ class App:
                     self.bar["value"] = 1000 * done // max(total, 1)
                     self.status.set(f"{t(PHASES.get(phase, phase))}: {done * 100 // max(total, 1)}%  "
                                     f"({done // 2**20} / {total // 2**20} MB)  {msg}")
+                    if getattr(self, "progress_win", None):
+                        self.progress_win.update(phase, done, total, msg)
                 elif m[0] in ("result", "error"):
+                    if getattr(self, "progress_win", None):
+                        self.progress_win.close()
+                        self.progress_win = None
                     self.busy = False
                     self.btn_card.state(["!disabled"])
                     self.btn_img.state(["!disabled"])

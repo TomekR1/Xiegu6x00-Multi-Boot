@@ -112,6 +112,8 @@ EN = {
         "Several systems on one SD card for the Xiegu X6100: a menu on the radio's screen at power-on, "
         "choose with the F1–F5 keys.",
     "Język:": "Language:",
+    "Łączenie…": "Connecting…",
+    "zostało {t}": "{t} left",
     "Kopia DATA na komputer…": "Back DATA up to the computer…",
     "Przenieś ustawienia ze starej karty (DATA: {p})": "Carry the old card's settings over (DATA: {p})",
     "Przenieś ustawienia: włóż starą kartę i kliknij Odśwież": "Carry settings over: put the old card in, click Refresh",
