@@ -18,7 +18,7 @@ import re
 
 from .extents import Data, FileRange, Plan, Zero
 from .fat import Fat32Builder
-from .image import SECTOR, UBOOT_END, UBOOT_OFFSET, make_ebr, make_mbr, make_script_image
+from .image import SECTOR, UBOOT_OFFSET, make_ebr, make_mbr, make_script_image
 
 MIB = 1024 * 1024
 ALIGN = MIB // SECTOR

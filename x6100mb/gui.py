@@ -997,43 +997,53 @@ class App:
         threading.Thread(target=run, daemon=True).start()
 
     def _poll(self):
+        """What the jobs' threads sent; whatever goes wrong with one message, the next poll still comes
+        (else the window stayed "busy" for good)"""
         try:
-            while True:
-                m = self.q.get_nowait()
-                if m[0] == "tile":
-                    self.tiles[m[1]] = m[2]
-                    self._render()
-                elif m[0] == "progress":
-                    _, phase, done, total, msg = m
-                    self.bar["value"] = 1000 * done // max(total, 1)
-                    self.status.set(f"{t(PHASES.get(phase, phase))}: {done * 100 // max(total, 1)}%  "
-                                    f"({done // 2**20} / {total // 2**20} MB)  {msg}")
-                    if getattr(self, "progress_win", None):
-                        self.progress_win.update(phase, done, total, msg)
-                elif m[0] in ("result", "error"):
-                    if getattr(self, "progress_win", None):
-                        self.progress_win.close()
-                        self.progress_win = None
-                    self.busy = False
-                    self.btn_card.state(["!disabled"])
-                    self.btn_img.state(["!disabled"])
-                    if m[0] == "error":
-                        self.bar["value"] = 0
-                        self.status.set(t("Błąd: ") + m[1])
-                        messagebox.showerror(APP, m[1])
-                    elif m[1][0] == "added":
-                        s = m[1][1]
-                        self.entries.append({"kind": "sd", "name": s.name[:28], "sys": s})
-                        self._redraw(len(self.entries) - 1)
-                        self.bar["value"] = 0
-                        self.status.set(t("Dodano {name}: {summary}", name=s.name, summary=s.summary()))
-                    else:
-                        self.bar["value"] = 1000
-                        self.status.set(m[1][1])
-                        messagebox.showinfo(APP, m[1][1])
+            self._poll_once()
         except queue.Empty:
             pass
-        self.root.after(100, self._poll)
+        except Exception:
+            backup.log_error("poll")
+        finally:
+            self.root.after(100, self._poll)
+
+    def _poll_once(self):
+        while True:
+            m = self.q.get_nowait()
+            if m[0] == "call":                  # from a thread: Tk only on its own thread
+                m[1](*m[2:])
+            elif m[0] == "tile":
+                self.tiles[m[1]] = m[2]
+                self._render()
+            elif m[0] == "progress":
+                _, phase, done, total, msg = m
+                self.bar["value"] = 1000 * done // max(total, 1)
+                self.status.set(f"{t(PHASES.get(phase, phase))}: {done * 100 // max(total, 1)}%  "
+                                f"({done // 2**20} / {total // 2**20} MB)  {msg}")
+                if getattr(self, "progress_win", None):
+                    self.progress_win.update(phase, done, total, msg)
+            elif m[0] in ("result", "error"):
+                if getattr(self, "progress_win", None):
+                    self.progress_win.close()
+                    self.progress_win = None
+                self.busy = False
+                self.btn_card.state(["!disabled"])
+                self.btn_img.state(["!disabled"])
+                if m[0] == "error":
+                    self.bar["value"] = 0
+                    self.status.set(t("Błąd: ") + m[1])
+                    messagebox.showerror(APP, m[1])
+                elif m[1][0] == "added":
+                    s = m[1][1]
+                    self.entries.append({"kind": "sd", "name": s.name[:28], "sys": s})
+                    self._redraw(len(self.entries) - 1)
+                    self.bar["value"] = 0
+                    self.status.set(t("Dodano {name}: {summary}", name=s.name, summary=s.summary()))
+                else:
+                    self.bar["value"] = 1000
+                    self.status.set(m[1][1])
+                    messagebox.showinfo(APP, m[1][1])
 
 
 class OnlineDialog:
@@ -1072,10 +1082,13 @@ class OnlineDialog:
             err = None if rels else t("brak obrazów X6100 w wydaniach")
         except Exception as e:
             rels, err = [], str(e)
-        self.app.root.after(0, self._loaded, src, rels, err)
+        self.app.q.put(("call", self._loaded, src, rels, err))
 
     def _loaded(self, src, rels, err):
-        if not self.win.winfo_exists():
+        try:
+            if not self.win.winfo_exists():
+                return
+        except tk.TclError:
             return
         box, btn = self.boxes[src["id"]]
         if err:

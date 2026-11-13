@@ -402,14 +402,16 @@ class WindowsQuiet:
         import ctypes
         import time
         WM_CLOSE = 0x0010
-        drive = re.compile(r"\([A-Z]:\)\s*$")          # "DATA (F:)", "Dysk USB (G:)"
+        drive = re.compile(r"\(([A-Z]):\)")             # "DATA (F:)", "DATA (F:) – Eksplorator plików"
         try:
             while self.stop_at is None or time.time() < self.stop_at:
                 for w in self._windows():
                     if w in self.before:
                         continue
                     hwnd, cls, title = w
-                    explorer_drive = cls == "CabinetWClass" and drive.search(title)
+                    m = drive.search(title) if cls == "CabinetWClass" else None
+                    # a card's drive only (removable), not a window of C: the user opens meanwhile
+                    explorer_drive = bool(m) and ctypes.windll.kernel32.GetDriveTypeW(m.group(1) + ":\\") == 2
                     format_question = cls == "#32770" and title == "Microsoft Windows"
                     if explorer_drive or format_question:
                         ctypes.windll.user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)

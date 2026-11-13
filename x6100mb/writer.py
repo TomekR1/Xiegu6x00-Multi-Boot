@@ -1,5 +1,4 @@
 """Writing a Plan to an image file or straight to a card, then reading it back to check it."""
-import hashlib
 import json
 import os
 import sys

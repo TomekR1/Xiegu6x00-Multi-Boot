@@ -151,6 +151,8 @@ def download(source, rel, cache_dir, progress=None):
                     progress(done, total)
     except urllib.error.URLError as e:
         raise CatalogError(t("pobieranie przerwane: {e}", e=getattr(e, "reason", e)))
+    except Exception as e:      # the connection dropped or timed out half way, IncompleteRead
+        raise CatalogError(t("pobieranie przerwane: {e}", e=e))
     if rel["size"] and os.path.getsize(tmp) != rel["size"]:
         os.remove(tmp)
         raise CatalogError(t("pobrany plik ma inny rozmiar niż na GitHubie (przerwane pobieranie?)"))

@@ -146,7 +146,6 @@ def _unxz(path, cache_dir, progress=None):
     if os.path.exists(out):
         return out
     tmp = out + ".part"
-    done = 0
     with open(path, "rb") as raw, lzma.open(raw) as src, open(tmp, "wb") as dst:
         while True:
             d = src.read(4 << 20)

@@ -7,6 +7,7 @@ read where the system mounted it, with no administrator rights: copied into a fo
 before the card is erased, kept as a .zip on the computer, and put on the new card's DATA.
 """
 import os
+import re
 import shutil
 import string
 import sys
@@ -28,20 +29,34 @@ def find_data_volumes():
     found = []
     if sys.platform.startswith("win"):
         import ctypes
-        ctypes.windll.kernel32.SetErrorMode(1)        # an empty card reader: no "insert a disk" box
+        k = ctypes.windll.kernel32
+        k.SetErrorMode(1)        # an empty card reader: no "insert a disk" box
         buf = ctypes.create_unicode_buffer(64)
+        fs = ctypes.create_unicode_buffer(64)
         for letter in string.ascii_uppercase:
             root = letter + ":\\"
             try:
-                if ctypes.windll.kernel32.GetVolumeInformationW(root, buf, 64, None, None, None, None, 0):
-                    if buf.value.upper() == "DATA":
+                # A card: a removable or fixed (some readers) FAT volume; not a hard disk's own
+                # partition that happens to be called DATA (NTFS), nor a network or CD drive
+                if k.GetDriveTypeW(root) not in (2, 3):
+                    continue
+                if k.GetVolumeInformationW(root, buf, 64, None, None, None, fs, 64):
+                    if buf.value.upper() == "DATA" and fs.value.upper().startswith(("FAT", "EXFAT")):
                         found.append({"path": root, "label": buf.value})
             except Exception:
                 pass
     elif sys.platform == "darwin":
+        fat = None
+        try:
+            import subprocess
+            out = subprocess.run(["mount"], capture_output=True, text=True, timeout=10).stdout
+            fat = {m.group(1) for m in re.finditer(r" on (/Volumes/.+?) \((msdos|exfat)\b", out)}
+        except Exception:
+            pass
         for name in sorted(os.listdir("/Volumes")) if os.path.isdir("/Volumes") else []:
-            if name.upper() == "DATA" or name.upper().startswith("DATA "):
-                found.append({"path": os.path.join("/Volumes", name), "label": name})
+            path = os.path.join("/Volumes", name)
+            if re.fullmatch(r"DATA( \d+)?", name, re.I) and (fat is None or path in fat):
+                found.append({"path": path, "label": name})
     else:
         try:
             with open("/proc/mounts") as f:
@@ -49,8 +64,7 @@ def find_data_volumes():
                     dev, mnt, fstype = line.split()[:3]
                     mnt = mnt.replace("\\040", " ")
                     base = os.path.basename(mnt)
-                    if fstype in ("vfat", "fat", "msdos", "exfat") and \
-                            (base.upper() == "DATA" or base.upper().startswith("DATA")):
+                    if fstype in ("vfat", "fat", "msdos", "exfat") and re.fullmatch(r"DATA\d*", base, re.I):
                         found.append({"path": mnt, "label": base})
         except OSError:
             pass
@@ -132,8 +146,14 @@ def restore_zip(zip_path, dest):
             if info.is_dir():
                 continue
             rel = info.filename.replace("\\", "/")
-            target = os.path.realpath(os.path.join(dest, *rel.split("/")))
-            if not target.startswith(root + os.sep):
+            parts = [x for x in rel.split("/") if x not in ("", ".")]
+            if not parts or ".." in parts or ":" in parts[0] or _skip(parts[-1]):
+                continue
+            target = os.path.realpath(os.path.join(dest, *parts))
+            try:                    # "I:\\" + "\\" never matched: every file was skipped on Windows
+                if os.path.commonpath([root, target]) != root:
+                    continue
+            except ValueError:
                 continue
             os.makedirs(os.path.dirname(target), exist_ok=True)
             with z.open(info) as src, open(target, "wb") as dst:
