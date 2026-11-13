@@ -408,8 +408,9 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         # Doom's settings, read at its start (extras/doom/x6100_sound.c)
         fat.add_file("doom.txt", (
             t("# Doom: glosnosc efektow i muzyki 0..200 (%)") + "\r\nvolume=100\r\nmusic=100\r\n" +
-            t("# Glosnosc radia (AF) 0..55, ustawiana przy starcie Dooma; usun # zeby wlaczyc") + "\r\n"
-            "# rxvol=20\r\n" +
+            t("# Glosnosc glosnika radia (AF) 0..55, ustawiana przy starcie Dooma") + "\r\n"
+            "rxvol=20\r\n" +
+            t("# Dziennik startu Dooma: doom-log.txt na tej partycji") + "\r\n" +
             t("# Bluetooth: mysz i klawiatura sparowane w systemie, z ktorego Doom bierze jadro (0: wylaczony)") +
             "\r\nbluetooth=1\r\n").encode())
     for e in sd:

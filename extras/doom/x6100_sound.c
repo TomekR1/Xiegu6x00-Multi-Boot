@@ -122,14 +122,18 @@ void x6100_set_rxvol(int vol)
 	if (vol < 0 || vol > 55)
 		return;
 	int fd = open("/dev/i2c-0", O_RDWR);
-	if (fd < 0)
+	if (fd < 0) {
+		fprintf(stderr, "sound: /dev/i2c-0: %s\n", strerror(errno));
 		return;
+	}
 	uint16_t addr = 14 * 4;                   /* x6100_rxvol, 32-bit registers */
 	uint8_t buf[6] = {(uint8_t)(addr >> 8), (uint8_t)addr, (uint8_t)vol, 0, 0, 0};
 	struct i2c_msg msg = {.addr = 0x72, .flags = 0, .len = sizeof buf, .buf = buf};
 	struct i2c_rdwr_ioctl_data d = {.msgs = &msg, .nmsgs = 1};
 	if (ioctl(fd, I2C_RDWR, &d) < 0)
 		fprintf(stderr, "sound: rxvol: %s\n", strerror(errno));
+	else
+		fprintf(stderr, "sound: radio AF volume (rxvol) set to %d\n", vol);
 	close(fd);
 }
 
@@ -193,6 +197,17 @@ static boolean snd_init(boolean use_sfx_prefix)
 		return pthread_create(&thread, NULL, mix_thread, NULL) == 0;
 	}
 	set_mixer();
+	{
+		FILE *c = fopen("/proc/asound/cards", "r");
+		char line[160];
+		fprintf(stderr, "sound: cards:\n");
+		while (c && fgets(line, sizeof line, c))
+			fprintf(stderr, "  %s", line);
+		if (c)
+			fclose(c);
+		else
+			fprintf(stderr, "  /proc/asound/cards: none\n");
+	}
 	for (size_t i = 0; i < sizeof rates / sizeof rates[0] && !pcm; i++) {
 		struct pcm_config cfg = {
 			.channels = 2, .rate = rates[i], .period_size = PERIOD, .period_count = 4,
@@ -207,8 +222,11 @@ static boolean snd_init(boolean use_sfx_prefix)
 			pcm_close(p);
 		}
 	}
-	if (!pcm)
+	if (!pcm) {
+		fprintf(stderr, "sound: no PCM output opened\n");
 		return false;
+	}
+	fprintf(stderr, "sound: playing at %u Hz\n", rate);
 	x6100_sound_rate = rate;
 	running = true;
 	if (pthread_create(&thread, NULL, mix_thread, NULL)) {

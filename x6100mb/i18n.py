@@ -265,8 +265,9 @@ EN = {
     "Bez automatycznego startu: system uruchamia się dopiero po wciśnięciu klawisza F":
         "No automatic start: a system starts only when its F key is pressed",
     "# Doom: glosnosc efektow i muzyki 0..200 (%)": "# Doom: effects and music volume 0..200 (%)",
-    "# Glosnosc radia (AF) 0..55, ustawiana przy starcie Dooma; usun # zeby wlaczyc":
-        "# The radio's (AF) volume 0..55, set when Doom starts; remove the # to use it",
+    "# Glosnosc glosnika radia (AF) 0..55, ustawiana przy starcie Dooma":
+        "# The radio's speaker (AF) volume 0..55, set when Doom starts",
+    "# Dziennik startu Dooma: doom-log.txt na tej partycji": "# Doom's start log: doom-log.txt on this partition",
     "# Bluetooth: mysz i klawiatura sparowane w systemie, z ktorego Doom bierze jadro (0: wylaczony)":
         "# Bluetooth: mouse and keyboard paired in the system Doom takes its kernel from (0: off)",
     "macOS nie dał dostępu do karty": "macOS did not give access to the card",
@@ -304,7 +305,8 @@ Mysz i klawiatura Bluetooth
 
 Dźwięk
   Efekty i muzyka. Plik doom.txt na partycji BOOT karty: volume= i music= (0–200 %),
-  rxvol=20 (po usunięciu #) gdyby nic nie było słychać, bluetooth=0 wyłącza Bluetooth.
+  rxvol= (0–55, domyślnie 20) to głośność głośnika radia, bluetooth=0 wyłącza Bluetooth.
+  Dziennik: doom-log.txt na partycji BOOT (co Doom zobaczył: dźwięk, USB, Bluetooth).
 """,
     "en": """Doom on the X6100
 
@@ -333,6 +335,7 @@ Bluetooth mouse and keyboard
 
 Sound
   Effects and music. The doom.txt file on the card's BOOT partition: volume= and music= (0–200 %),
-  rxvol=20 (without the #) if nothing can be heard, bluetooth=0 switches Bluetooth off.
+  rxvol= (0–55, 20 by default) is the radio speaker's volume, bluetooth=0 switches Bluetooth off.
+  Log: doom-log.txt on the BOOT partition (what Doom found: sound, USB, Bluetooth).
 """,
 }

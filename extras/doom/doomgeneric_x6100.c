@@ -64,6 +64,7 @@ enum {
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
+#include <sys/klog.h>
 #include <sys/utsname.h>
 #include <time.h>
 #include <unistd.h>
@@ -121,6 +122,110 @@ static void push(int pressed, unsigned char key)
 /* ------------------------------------------------------------------------------------------ */
 /* Leaving: back to the boot menu, or off                                                    */
 /* ------------------------------------------------------------------------------------------ */
+/* ------------------------------------------------------------------------------------------ */
+/* The log: doom-log.txt on the card's BOOT partition, readable on any computer               */
+/* ------------------------------------------------------------------------------------------ */
+static FILE *log_fp;
+static bool boot_rw;
+static bool late_dump_done;
+
+static void logmsg(const char *fmt, ...)
+{
+	if (!log_fp)
+		return;
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	fprintf(log_fp, "[%5ld.%01ld] ", (long)ts.tv_sec, ts.tv_nsec / 100000000);
+	va_list ap;
+	va_start(ap, fmt);
+	vfprintf(log_fp, fmt, ap);
+	va_end(ap);
+	fputc('\n', log_fp);
+	fflush(log_fp);
+	fsync(fileno(log_fp));
+}
+
+static void log_file(const char *title, const char *path, size_t max)
+{
+	FILE *f = fopen(path, "r");
+	if (!log_fp)
+		return;
+	fprintf(log_fp, "----- %s (%s)%s\n", title, path, f ? "" : ": none");
+	if (f) {
+		char buf[512];
+		size_t n, total = 0;
+		while (total < max && (n = fread(buf, 1, sizeof buf, f)) > 0) {
+			fwrite(buf, 1, n, log_fp);
+			total += n;
+		}
+		fclose(f);
+	}
+	fflush(log_fp);
+}
+
+static void log_dmesg(void)
+{
+	if (!log_fp)
+		return;
+	int len = klogctl(10, NULL, 0);             /* SYSLOG_ACTION_SIZE_BUFFER */
+	if (len <= 0)
+		return;
+	char *buf = malloc((size_t)len);
+	if (!buf)
+		return;
+	int n = klogctl(3, buf, len);               /* SYSLOG_ACTION_READ_ALL */
+	if (n > 0) {
+		int from = n > 24000 ? n - 24000 : 0;
+		fprintf(log_fp, "----- kernel messages (last %d bytes)\n", n - from);
+		fwrite(buf + from, 1, (size_t)(n - from), log_fp);
+		fputc('\n', log_fp);
+	}
+	free(buf);
+	fflush(log_fp);
+	fsync(fileno(log_fp));
+}
+
+static void log_usb_devices(void)
+{
+	DIR *d = opendir("/sys/bus/usb/devices");
+	struct dirent *e;
+	logmsg("USB devices:");
+	while (d && (e = readdir(d))) {
+		char path[300], prod[128] = "", id[16] = "", pid[16] = "";
+		if (e->d_name[0] == '.' || strchr(e->d_name, ':'))
+			continue;
+		FILE *f;
+		snprintf(path, sizeof path, "/sys/bus/usb/devices/%s/product", e->d_name);
+		if ((f = fopen(path, "r"))) { if (!fgets(prod, sizeof prod, f)) prod[0] = 0; fclose(f); }
+		snprintf(path, sizeof path, "/sys/bus/usb/devices/%s/idVendor", e->d_name);
+		if ((f = fopen(path, "r"))) { if (!fgets(id, sizeof id, f)) id[0] = 0; fclose(f); }
+		snprintf(path, sizeof path, "/sys/bus/usb/devices/%s/idProduct", e->d_name);
+		if ((f = fopen(path, "r"))) { if (!fgets(pid, sizeof pid, f)) pid[0] = 0; fclose(f); }
+		prod[strcspn(prod, "\n")] = id[strcspn(id, "\n")] = pid[strcspn(pid, "\n")] = 0;
+		logmsg("  %s  %s:%s  %s", e->d_name, id, pid, prod);
+	}
+	if (d)
+		closedir(d);
+}
+
+/* Everything said so far kept, the card's BOOT left clean before the radio restarts or stops */
+static void close_log(void)
+{
+	if (log_fp) {
+		log_file("Bluetooth script", "/bt/tmp/doom-bt.log", 8000);
+		log_file("bluetoothd", "/bt/tmp/bluetoothd.log", 8000);
+		log_dmesg();
+		logmsg("end");
+		fclose(log_fp);
+		log_fp = NULL;
+	}
+	if (boot_rw) {
+		sync();
+		umount("/boot");
+		boot_rw = false;
+	}
+}
+
 static void text_mode(void)
 {
 	if (tty_fd >= 0)
@@ -130,6 +235,8 @@ static void text_mode(void)
 static void leave(int cmd)
 {
 	text_mode();
+	logmsg(cmd == (int)RB_POWER_OFF ? "POWER: switching off" : "leaving: restart");
+	close_log();
 	sync();
 	if (getpid() == 1)
 		reboot(cmd);
@@ -156,6 +263,8 @@ static void at_exit(void)
 	text_mode();
 	if (getpid() == 1) {
 		say("\n  Doom: koniec. Restart do menu za 5 s...\n");
+		logmsg("Doom ended (quit or error)");
+		close_log();
 		sleep(5);
 		sync();
 		reboot(RB_AUTOBOOT);
@@ -362,6 +471,13 @@ static void poll_input(void)
 	if (t - last_scan > 1000) {               /* a mouse or keyboard plugged in meanwhile */
 		last_scan = t;
 		open_inputs();
+		if (!late_dump_done && t > 25000) {   /* once, when USB and Bluetooth have had their time */
+			late_dump_done = true;
+			log_usb_devices();
+			log_file("input devices", "/proc/bus/input/devices", 12000);
+			log_file("Bluetooth script so far", "/bt/tmp/doom-bt.log", 8000);
+			log_dmesg();
+		}
 	}
 	while (n_in && poll(pfd, (nfds_t)n_in, 0) > 0) {
 		bool any = false;
@@ -452,6 +568,12 @@ static void open_inputs(void)
 		ioctl(fd, EVIOCGRAB, 1);
 		snprintf(in_dev[n_in], sizeof in_dev[n_in], "%s", e->d_name);
 		in_role[n_in] = classify(fd);
+		{
+			char name[128] = "?";
+			ioctl(fd, EVIOCGNAME(sizeof name), name);
+			static const char *roles[] = {"radio", "mouse", "keyboard"};
+			logmsg("input %s: \"%s\" -> %s", e->d_name, name, roles[in_role[n_in]]);
+		}
 		pfd[n_in].fd = fd;
 		pfd[n_in].events = POLLIN;
 		in_fd[n_in++] = fd;
@@ -569,9 +691,21 @@ void x6100_set_rxvol(int vol);
 /* /boot/doom.txt on the card's BOOT partition: volume=0..200 (%), rxvol=0..55 (the radio's AF volume) */
 static void read_settings(void)
 {
+	int rxvol = 20;      /* the base board's AF volume: without the radio's own software it may be 0 */
 	mkdir("/boot", 0755);
-	if (mount("/dev/mmcblk0p1", "/boot", "vfat", MS_RDONLY, NULL) != 0)
+	if (mount("/dev/mmcblk0p1", "/boot", "vfat", MS_NOATIME, NULL) == 0) {
+		boot_rw = true;
+		log_fp = fopen("/boot/doom-log.txt", "w");
+		if (log_fp)
+			dup2(fileno(log_fp), 2);              /* what the sound and the modules say, too */
+	} else if (mount("/dev/mmcblk0p1", "/boot", "vfat", MS_RDONLY, NULL) != 0) {
+		x6100_set_rxvol(rxvol);
 		return;
+	}
+	struct utsname u;
+	if (uname(&u) == 0)
+		logmsg("Doom for the X6100, kernel %s", u.release);
+	log_file("kernel command line", "/proc/cmdline", 2000);
 	FILE *f = fopen("/boot/doom.txt", "r");
 	char line[128];
 	while (f && fgets(line, sizeof line, f)) {
@@ -583,11 +717,15 @@ static void read_settings(void)
 		else if (sscanf(line, " bluetooth = %d", &v) == 1)
 			bluetooth_on = v != 0;
 		else if (sscanf(line, " rxvol = %d", &v) == 1)
-			x6100_set_rxvol(v);
+			rxvol = v;
 	}
 	if (f)
 		fclose(f);
-	umount("/boot");
+	logmsg("settings: volume=%d music=%d bluetooth=%d rxvol=%d", x6100_sound_volume, x6100_music_volume,
+	       bluetooth_on, rxvol);
+	x6100_set_rxvol(rxvol);
+	if (!boot_rw)
+		umount("/boot");
 }
 
 /* The kernel's modules come from the root filesystem of the system the kernel is lent by
@@ -599,10 +737,14 @@ static void load_module(const char *rel)
 	char path[700];
 	snprintf(path, sizeof path, "%s/%s", mod_dir, rel);
 	int fd = open(path, O_RDONLY | O_CLOEXEC);
-	if (fd < 0)
+	if (fd < 0) {
+		logmsg("module %s: missing (%s)", rel, strerror(errno));
 		return;
+	}
 	if (syscall(SYS_finit_module, fd, "", 0) != 0 && errno != EEXIST)
-		fprintf(stderr, "Doom: module %s: %s\n", rel, strerror(errno));
+		logmsg("module %s: %s", rel, strerror(errno));
+	else
+		logmsg("module %s: loaded", rel);
 	close(fd);
 }
 
@@ -637,12 +779,17 @@ static bool mount_donor(void)
 {
 	const char *dev = getenv("doom_modules");
 	struct utsname u;
-	if (!dev || uname(&u) != 0)
+	if (!dev || uname(&u) != 0) {
+		logmsg("no doom_modules= on the command line: no USB HOST, no Bluetooth");
 		return false;
+	}
 	mkdir("/donor", 0755);
-	if (mount(dev, "/donor", "ext4", MS_RDONLY, NULL) != 0)
+	if (mount(dev, "/donor", "ext4", MS_RDONLY, NULL) != 0) {
+		logmsg("donor %s: mount failed: %s", dev, strerror(errno));
 		return false;
+	}
 	snprintf(mod_dir, sizeof mod_dir, "/donor/lib/modules/%s", u.release);
+	logmsg("donor %s mounted; modules %s: %s", dev, mod_dir, access(mod_dir, R_OK) == 0 ? "there" : "MISSING");
 	return true;
 }
 
@@ -658,6 +805,8 @@ static void load_usb_host(void)
  * devices, which the input scan picks up like USB ones. */
 
 static const char bt_script[] =
+	"exec >/tmp/doom-bt.log 2>&1\n"
+	"set -x\n"
 	"export PATH=/usr/sbin:/usr/bin:/sbin:/bin\n"
 	"mkdir -p /run/dbus /var/lock/subsys /tmp/dbus /var/run\n"
 	"modprobe btusb 2>/dev/null; modprobe hidp 2>/dev/null; modprobe uhid 2>/dev/null\n"
@@ -667,13 +816,18 @@ static const char bt_script[] =
 	"sleep 1\n"
 	"/usr/libexec/bluetooth/bluetoothd -n >/tmp/bluetoothd.log 2>&1 &\n"
 	"sleep 3\n"
-	"bluetoothctl power on >/dev/null 2>&1\n"
+	"bluetoothctl power on\n"
+	"bluetoothctl devices Paired\n"
+	"ls /var/lib/bluetooth 2>&1\n"
 	"wait\n";
 
 static void start_bluetooth(void)
 {
-	if (!bluetooth_on)
+	if (!bluetooth_on) {
+		logmsg("Bluetooth: off in doom.txt");
 		return;
+	}
+	logmsg("Bluetooth: starting the donor's BlueZ");
 	/* the chip's firmware, for a driver probing outside the chroot */
 	FILE *fw = fopen("/sys/module/firmware_class/parameters/path", "w");
 	if (fw) {
@@ -688,7 +842,7 @@ static void start_bluetooth(void)
 	mkdir("/ovl/up", 0755);
 	mkdir("/ovl/work", 0755);
 	if (mount("overlay", "/bt", "overlay", 0, "lowerdir=/donor,upperdir=/ovl/up,workdir=/ovl/work") != 0) {
-		fprintf(stderr, "Doom: overlay: %s\n", strerror(errno));
+		logmsg("Bluetooth: overlay: %s", strerror(errno));
 		return;
 	}
 	mount("/proc", "/bt/proc", NULL, MS_BIND, NULL);
