@@ -3,10 +3,12 @@
  * Doom's sound effects on the Xiegu X6100: the DMX sound lumps mixed in a thread of their own and
  * played through the SoC's codec with tinyalsa (BSD-3-Clause), the codec's mixer set as
  * OpenX6X00 sets it (its /var/lib/alsa/asound.state: AIF1 DA0 -> DAC -> Headphone, which goes on
- * to the radio board). No music: Doom's needs an OPL synthesiser.
+ * to the radio board). The music: Chocolate Doom's OPL player and the Nuked OPL3 emulator
+ * (opl_x6100.c), rendered in the same thread and mixed in.
  *
  * /boot/doom.txt (the card's BOOT partition, read by doomgeneric_x6100.c) may hold
  *   volume=N   the effects' loudness, 0..200 (%; 100 by default)
+ *   music=N    the music's, the same way
  *   rxvol=N    the radio board's AF volume, 0..55, set over I2C as the radio's own software does
  *              (bus 0, address 0x72, register x6100_rxvol); left alone when not given
  */
@@ -37,7 +39,20 @@ int use_libsamplerate = 0;
 float libsamplerate_scale = 0.65f;
 void I_InitTimidityConfig(void) {}
 
+/* What Chocolate Doom's MIDI reader expects of i_system.c */
+void I_Error(char *error, ...);
+void *I_Realloc(void *ptr, size_t size)
+{
+	void *p = realloc(ptr, size);
+	if (p == NULL && size != 0)
+		I_Error("I_Realloc: failed on reallocation of %zu bytes", size);
+	return p;
+}
+
 int x6100_sound_volume = 100;   /* set from /boot/doom.txt before the sound starts */
+int x6100_music_volume = 100;   /* the same, for the music */
+unsigned int x6100_sound_rate;  /* the output rate once the sound runs (the OPL emulator's too) */
+int opl_x6100_render(int16_t *buffer, unsigned int frames);
 
 #define CHANNELS 16
 #define PERIOD   512
@@ -58,6 +73,7 @@ static volatile bool running;
 static struct pcm *pcm;
 static unsigned rate;
 static boolean sfx_prefix;
+static FILE *test_out;          /* DOOM_TEST_PCM=file: the PC test writes the sound there */
 
 /* ------------------------------------------------------------------------------------------ */
 /* The codec's mixer, as OpenX6X00 leaves it                                                   */
@@ -123,10 +139,13 @@ void x6100_set_rxvol(int vol)
 static void *mix_thread(void *arg)
 {
 	(void)arg;
-	static int16_t out[PERIOD * 2];
+	static int16_t out[PERIOD * 2], music[PERIOD * 2];
 	while (running) {
 		int32_t acc[PERIOD * 2];
 		memset(acc, 0, sizeof acc);
+		if (opl_x6100_render(music, PERIOD))  /* the OPL emulator is quiet: x3 at 100 % */
+			for (int i = 0; i < PERIOD * 2; i++)
+				acc[i] = music[i] * 3 * x6100_music_volume / 100;
 		pthread_mutex_lock(&lock);
 		for (int c = 0; c < CHANNELS; c++) {
 			struct chan *ch = &chans[c];
@@ -149,8 +168,13 @@ static void *mix_thread(void *arg)
 			int32_t v = acc[i] * x6100_sound_volume / 100;
 			out[i] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
 		}
-		if (pcm_writei(pcm, out, PERIOD) < 0)
+		if (test_out) {                       /* the PC test: into a file, in real time */
+			fwrite(out, sizeof out, 1, test_out);
+			fflush(test_out);
+			usleep(PERIOD * 1000000u / rate);
+		} else if (pcm_writei(pcm, out, PERIOD) < 0) {
 			pcm_prepare(pcm);                 /* an underrun: on again */
+		}
 	}
 	return NULL;
 }
@@ -162,6 +186,12 @@ static boolean snd_init(boolean use_sfx_prefix)
 {
 	static const unsigned rates[] = {48000, 44100, 32000, 22050, 16000};
 	sfx_prefix = use_sfx_prefix;
+	const char *test = getenv("DOOM_TEST_PCM");
+	if (test && (test_out = fopen(test, "wb"))) {
+		rate = x6100_sound_rate = 48000;
+		running = true;
+		return pthread_create(&thread, NULL, mix_thread, NULL) == 0;
+	}
 	set_mixer();
 	for (size_t i = 0; i < sizeof rates / sizeof rates[0] && !pcm; i++) {
 		struct pcm_config cfg = {
@@ -179,6 +209,7 @@ static boolean snd_init(boolean use_sfx_prefix)
 	}
 	if (!pcm)
 		return false;
+	x6100_sound_rate = rate;
 	running = true;
 	if (pthread_create(&thread, NULL, mix_thread, NULL)) {
 		running = false;
@@ -285,18 +316,4 @@ sound_module_t DG_sound_module = {
 	devices, sizeof devices / sizeof devices[0],
 	snd_init, snd_shutdown, snd_lump, snd_update, snd_params, snd_start, snd_stop, snd_playing,
 	snd_cache,
-};
-
-/* No music */
-static boolean mus_init(void) { return false; }
-static void mus_none(void) {}
-static void mus_vol(int v) { (void)v; }
-static void *mus_reg(void *d, int l) { (void)d; (void)l; return NULL; }
-static void mus_unreg(void *h) { (void)h; }
-static void mus_play(void *h, boolean l) { (void)h; (void)l; }
-static boolean mus_playing(void) { return false; }
-
-music_module_t DG_music_module = {
-	NULL, 0, mus_init, mus_none, mus_vol, mus_none, mus_none, mus_reg, mus_unreg, mus_play,
-	mus_none, mus_playing, mus_none,
 };

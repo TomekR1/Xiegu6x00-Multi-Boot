@@ -381,9 +381,15 @@ class ExtraSystem:
         self.has_uboot, self.uboot, self.uboot_version = False, None, None
         self.bootargs = re.sub(r"\binit=\S+", "", donor.bootargs).strip()
 
+    donor_part = None     # the donor's root partition on the card (compose sets it)
+
     def bootargs_for(self, partition_number):
         args = re.sub(r"\broot=\S+", f"root=/dev/mmcblk0p{partition_number}", self.bootargs)
-        return args + " rootfstype=ext4"
+        args += " rootfstype=ext4"
+        if self.donor_part:
+            # its kernel's modules (the HOST port's USB driver) come from there
+            args += f" doom_modules=/dev/mmcblk0p{self.donor_part}"
+        return args
 
     def summary(self):
         return f"rootfs {self.root_size >> 20} MB, jądro z: {self.donor.name}"

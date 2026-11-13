@@ -62,7 +62,9 @@ enum {
 #include <sys/mount.h>
 #include <sys/reboot.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/time.h>
+#include <sys/utsname.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -86,7 +88,7 @@ static int rotate = 3;                          /* 3: as fbcon=rotate:3; 1: the 
 enum role { ROLE_RADIO, ROLE_MOUSE, ROLE_KEYBOARD };
 static int in_fd[MAX_DEVS], in_role[MAX_DEVS], n_in;
 static char in_dev[MAX_DEVS][24];
-static int mouse_dx, mouse_dy, mouse_buttons;
+static int mouse_dx, mouse_buttons;
 static uint32_t last_scan;
 static struct pollfd pfd[MAX_DEVS];
 static unsigned short queue[QSIZE];
@@ -318,23 +320,23 @@ static unsigned char kb_key(unsigned code)
 static void open_inputs(void);
 static void drop_input(int i);
 
-/* A USB mouse: left/right turns, forward/back walks, the left button fires, the wheel picks the
- * weapon (Doom's own mouse handling: right button strafes, middle walks forward) */
+/* A USB mouse: left/right turns (forward and back are the keyboard's), the left button fires, the
+ * right one uses (doors, switches), the wheel picks the weapon */
 static void mouse_event(const struct input_event *ev)
 {
 	if (ev->type == EV_REL) {
 		if (ev->code == REL_X) mouse_dx += ev->value;
-		else if (ev->code == REL_Y) mouse_dy += ev->value;
 		else if (ev->code == REL_WHEEL && ev->value) knob(2, -ev->value);
 	} else if (ev->type == EV_KEY) {
-		int bit = ev->code == BTN_LEFT ? 1 : ev->code == BTN_RIGHT ? 2 : ev->code == BTN_MIDDLE ? 4 : 0;
-		if (bit)
-			mouse_buttons = ev->value ? (mouse_buttons | bit) : (mouse_buttons & ~bit);
+		if (ev->code == BTN_LEFT)
+			mouse_buttons = ev->value ? (mouse_buttons | 1) : (mouse_buttons & ~1);
+		else if (ev->code == BTN_RIGHT && (ev->value == 0 || ev->value == 1))
+			push(ev->value, DK_USE);
 	} else if (ev->type == EV_SYN && ev->code == SYN_REPORT) {
 		event_t e = {.type = ev_mouse, .data1 = mouse_buttons, .data2 = mouse_dx * 3,
-		             .data3 = -mouse_dy * 3, .data4 = 0};
+		             .data3 = 0, .data4 = 0};
 		D_PostEvent(&e);
-		mouse_dx = mouse_dy = 0;
+		mouse_dx = 0;
 	}
 }
 
@@ -560,7 +562,7 @@ void DG_SetWindowTitle(const char *title)
 }
 
 /* As init: the filesystems it needs, writable for the settings and saved games */
-extern int x6100_sound_volume;
+extern int x6100_sound_volume, x6100_music_volume;
 void x6100_set_rxvol(int vol);
 
 /* /boot/doom.txt on the card's BOOT partition: volume=0..200 (%), rxvol=0..55 (the radio's AF volume) */
@@ -575,12 +577,63 @@ static void read_settings(void)
 		int v;
 		if (sscanf(line, " volume = %d", &v) == 1 && v >= 0 && v <= 200)
 			x6100_sound_volume = v;
+		else if (sscanf(line, " music = %d", &v) == 1 && v >= 0 && v <= 200)
+			x6100_music_volume = v;
 		else if (sscanf(line, " rxvol = %d", &v) == 1)
 			x6100_set_rxvol(v);
 	}
 	if (f)
 		fclose(f);
 	umount("/boot");
+}
+
+/* The radio's HOST port is the SoC's OTG port, whose driver (musb) the kernel has as a module: it is
+ * loaded from the root filesystem of the system the kernel comes from (doom_modules=/dev/mmcblk0pN
+ * on the kernel's command line), with what modules.dep says it needs first */
+static void load_module(const char *root, const char *rel)
+{
+	char path[512];
+	snprintf(path, sizeof path, "%s/%s", root, rel);
+	int fd = open(path, O_RDONLY | O_CLOEXEC);
+	if (fd < 0)
+		return;
+	if (syscall(SYS_finit_module, fd, "", 0) != 0 && errno != EEXIST)
+		fprintf(stderr, "Doom: module %s: %s\n", rel, strerror(errno));
+	close(fd);
+}
+
+static void load_usb_host(void)
+{
+	const char *dev = getenv("doom_modules");
+	struct utsname u;
+	char dep[512], line[2048];
+	if (!dev || uname(&u) != 0)
+		return;
+	mkdir("/donor", 0755);
+	if (mount(dev, "/donor", "ext4", MS_RDONLY, NULL) != 0)
+		return;
+	snprintf(dep, sizeof dep, "/donor/lib/modules/%s", u.release);
+	char depfile[600];
+	snprintf(depfile, sizeof depfile, "%s/modules.dep", dep);
+	FILE *f = fopen(depfile, "r");
+	while (f && fgets(line, sizeof line, f)) {
+		/* "kernel/drivers/usb/musb/sunxi.ko: dep1.ko dep2.ko ..." */
+		char *colon = strchr(line, ':');
+		if (!colon || !strstr(line, "/usb/musb/sunxi.ko"))
+			continue;
+		*colon = '\0';
+		char *deps[16];
+		int n = 0;
+		for (char *t = strtok(colon + 1, " \n"); t && n < 16; t = strtok(NULL, " \n"))
+			deps[n++] = t;
+		for (int i = n - 1; i >= 0; i--)     /* the last listed is needed first */
+			load_module(dep, deps[i]);
+		load_module(dep, line);
+		break;
+	}
+	if (f)
+		fclose(f);
+	umount("/donor");
 }
 
 static void as_init(void)
@@ -597,6 +650,7 @@ static void as_init(void)
 	if (chdir("/doom") != 0)
 		say("Doom: no /doom\n");
 	read_settings();
+	load_usb_host();
 }
 
 static const char *find_iwad(void)

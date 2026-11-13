@@ -278,6 +278,10 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     for i, e in enumerate(sd):
         e["dir"] = "SYS%d" % (i + 1)
         e["part"] = 2 if i == 0 else 4 + i      # p2, then p5, p6, ...
+    for e in sd:                                # an extra (Doom) learns where its kernel's system is
+        donor = getattr(e["sys"], "donor", None)
+        if donor is not None:
+            e["sys"].donor_part = next((x["part"] for x in sd if x["sys"] is donor), None)
 
     kernels = sum(sum(len(v) for v in e["sys"].files.values()) for e in sd)
     pictures = (len(entries) + 1) * 400 * 1024 if gfx else 0
@@ -369,7 +373,7 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     if any(getattr(e.get("sys"), "donor", None) is not None for e in sd):
         # Doom's settings, read at its start (extras/doom/x6100_sound.c)
         fat.add_file("doom.txt", (
-            "# Doom: glosnosc efektow 0..200 (%)\r\nvolume=100\r\n"
+            "# Doom: glosnosc efektow i muzyki 0..200 (%)\r\nvolume=100\r\nmusic=100\r\n"
             "# Glosnosc radia (AF) 0..55, ustawiana przy starcie Dooma; usun # zeby wlaczyc\r\n"
             "# rxvol=20\r\n").encode())
     for e in sd:

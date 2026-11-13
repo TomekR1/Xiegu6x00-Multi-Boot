@@ -59,13 +59,17 @@ karcie co najmniej jeden system z obrazu, bo Doom uruchamia się z jego jądrem)
 | AM | bieg |
 | POWER | wyłączenie radia |
 
-Działa też **myszka USB** (ruch w bok obraca, do przodu/do tyłu idzie, lewy przycisk strzela,
-kółko zmienia broń) i **klawiatura USB** (strzałki, Ctrl strzela, spacja otwiera, Esc to menu),
-również podłączone w trakcie gry.
+Działa też **myszka USB** (ruch w lewo/prawo obraca, lewy przycisk strzela, prawy otwiera drzwi,
+kółko zmienia broń) i **klawiatura USB** (strzałki: do przodu/do tyłu i obrót, Ctrl strzela, spacja
+otwiera, Esc to menu, F2/F3 zapis i wczytanie gry). Podłącza się je do gniazda **HOST** radia
+(tego samego co klawiaturę w OpenX6X00), obie naraz przez mały hub USB albo jeden odbiornik
+bezprzewodowy zestawu klawiatura+mysz. Niczego nie trzeba włączać w menu radia: Doom sam ładuje
+sterownik gniazda HOST z systemu, z którego bierze jądro. Działają też podłączone w trakcie gry.
 
-Dźwięk: efekty z gry, bez muzyki. Na partycji `BOOT` karty jest plik `doom.txt`:
-`volume=` to głośność efektów (0–200 %), a `rxvol=` (po usunięciu `#`) ustawia przy starcie
-Dooma głośność radia (0–55), gdyby efektów nie było słychać.
+Dźwięk: efekty i **muzyka** (syntezator OPL3, jak karta AdLib/Sound Blaster, emulowany przez
+Nuked OPL3). Na partycji `BOOT` karty jest plik `doom.txt`: `volume=` i `music=` to głośność
+efektów i muzyki (0–200 %), a `rxvol=` (po usunięciu `#`) ustawia przy starcie Dooma głośność
+radia (0–55), gdyby nic nie było słychać.
 
 Wyjście z gry wraca do menu startowego.
 
@@ -182,6 +186,8 @@ v2026.07 z:
 ### Doom (`extras/doom/`)
 
 `doomgeneric_x6100.c` to warstwa [doomgeneric](https://github.com/ozkl/doomgeneric) dla radia,
+(`x6100_sound.c`: efekty przez tinyalsa, muzyka z odtwarzacza OPL [Chocolate Doom](https://github.com/chocolate-doom/chocolate-doom)
+z emulatorem Nuked OPL3, `opl_x6100.c`),
 uruchamiana jako `/sbin/init` własnego, małego systemu plików: obraz 320×200 skalowany do 640×480
 na obróconym framebufferze, klawisze i gałki z `/dev/input`. `build.sh` buduje ją statycznie na
 ARM, dokłada Freedoom i składa partycję ext4; aplikacja ma ją w sobie i uruchamia z jądrem

@@ -139,6 +139,8 @@ class ComposeTest(unittest.TestCase):
             self.assertEqual(boot.read_file("SYS2/ZIMAGE"), b"K" * 4000)      # the donor's kernel
             script = parse_script_image(boot.read_file("boot.scr"))
             self.assertIn("root=/dev/mmcblk0p5", script)
+            self.assertIn("doom_modules=/dev/mmcblk0p2", script)                  # the donor's modules
+            self.assertIn(b"music=100", boot.read_file("doom.txt"))
             f.seek(parts[5][2] * SECTOR)
             self.assertEqual(f.read(4), b"DDDD")
         with self.assertRaises(Exception):                                 # no system to lend a kernel
