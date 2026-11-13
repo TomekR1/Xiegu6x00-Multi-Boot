@@ -1,5 +1,6 @@
 # Aplikacje na Windows, macOS i Linux oraz testowy obraz karty, wystawiane w Releases.
-# Start: tag v* (git tag v0.1.0 && git push origin v0.1.0) albo ręcznie: Actions > Build > Run workflow.
+# Każdy push na main robi od razu publiczne wydanie z kolejnym numerem (v0.2.7 -> v0.2.8);
+# do tego tag v* albo ręcznie: Actions > Build > Run workflow (z numerem wersji).
 name: Build
 on:
   push:
@@ -151,16 +152,29 @@ jobs:
           grep -q "'name': 'DOOM'" build.log
           rm -f "$RUNNER_TEMP/check.img"
 
-  # A release from a tag v*, or from Actions > Build > Run workflow with a version number (GitHub then
-  # makes the tag): the apps and the menu's U-Boot. A push to main builds and checks everything only.
+  # A public release from every push to main (the next version number), from a tag v*, or from
+  # Actions > Build > Run workflow with a version number: the apps and the menu's U-Boot.
   release:
     needs: [apps, live-check, uboot, doom]
     # One app that did not build (GitHub's macOS queue) does not hold back the others
-    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '') && needs.uboot.result == 'success' && needs.live-check.result == 'success' }}
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || inputs.release_tag != '') && needs.uboot.result == 'success' && needs.live-check.result == 'success' }}
     runs-on: ubuntu-latest
-    env:
-      REL_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag }}
     steps:
+      - name: Version number
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIVEN: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag }}
+        run: |
+          tag="$GIVEN"
+          if [ -z "$tag" ]; then
+            last=$(gh api "repos/${{ github.repository }}/tags?per_page=100" --paginate --jq '.[].name' |
+                   grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+            last=${last:-v0.0.0}
+            IFS=. read -r a b c <<< "${last#v}"
+            tag="v$a.$b.$((c + 1))"
+          fi
+          echo "REL_TAG=$tag" >> "$GITHUB_ENV"
+          echo "release: $tag"
       - uses: actions/download-artifact@v4
         with: {path: art, pattern: "Xiegu-Multi-Patcher-*", merge-multiple: true}
       - name: At least one app
@@ -194,7 +208,9 @@ jobs:
             W sekcji **Extras** aplikacji: klasyczny Doom na radiu (Freedoom), z dźwiękiem i muzyką na głośniku radia,
             myszą i klawiaturą USB albo Bluetooth.
 
-            Nowe w tej wersji: menu jak na ekranie radia już w aplikacji, motyw jasny/ciemny, polski/angielski,
+            Ostatnia zmiana: ${{ github.event.head_commit.message || 'zobacz historię zmian' }}
+
+            Wcześniej: menu jak na ekranie radia już w aplikacji, motyw jasny/ciemny, polski/angielski,
             czas wyboru do 15 s albo czekanie na klawisz, klawisz POWER w menu startowym wyłącza radio.
 
             `u-boot-x6100-menu.bin`: U-Boot menu z obsługą ekranu X6100 (aplikacja ma go w sobie).
