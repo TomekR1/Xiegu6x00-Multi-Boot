@@ -48,7 +48,7 @@ In function 'snprintf',
       |                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    56 |                                    __va_arg_pack ());
       |                                    ~~~~~~~~~~~~~~~~~
-PC test sound: 6.1 s, 92% of samples above -36 dBFS
+PC test sound: 6.0 s, 92% of samples above -36 dBFS
 Creating regular file /tmp/claude-0/-home-user-Kart-dash/5954ca1d-c613-516c-8363-854b40506993/scratchpad/x6100-multiboot/extras/doom/out/doom-x6100-rootfs.ext4
 e2fsck 1.47.0 (5-Feb-2023)
 Pass 1: Checking inodes, blocks, and sizes
@@ -56,11 +56,11 @@ Pass 2: Checking directory structure
 Pass 3: Checking directory connectivity
 Pass 4: Checking reference counts
 Pass 5: Checking group summary information
-DOOM: 24/16384 files (4.2% non-contiguous), 9315/16384 blocks
+DOOM: 24/16384 files (4.2% non-contiguous), 9317/16384 blocks
 xz: Reduced the number of threads from 4 to 3 to not exceed the memory usage limit of 4022 MiB
 total 8888
-drwxr-xr-x 2 root root    4096 Nov 13 08:50 .
-drwxr-xr-x 5 root root    4096 Nov 13 08:49 ..
--rw-r--r-- 1 root root 7549840 Nov 13 08:50 doom-x6100-rootfs.ext4.xz
--rw-r--r-- 1 root root     207 Nov 13 08:50 doom-x6100-rootfs.ext4.xz.sha256
--rw-r--r-- 1 root root 1536000 Nov 13 08:50 test-frame-480x800-bgrx.raw
+drwxr-xr-x 2 root root    4096 Nov 13 08:56 .
+drwxr-xr-x 5 root root    4096 Nov 13 08:55 ..
+-rw-r--r-- 1 root root 7551148 Nov 13 08:55 doom-x6100-rootfs.ext4.xz
+-rw-r--r-- 1 root root     207 Nov 13 08:56 doom-x6100-rootfs.ext4.xz.sha256
+-rw-r--r-- 1 root root 1536000 Nov 13 08:55 test-frame-480x800-bgrx.raw

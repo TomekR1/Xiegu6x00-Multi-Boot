@@ -147,5 +147,23 @@ class ComposeTest(unittest.TestCase):
             resolve_extras([{"kind": "doom", "name": "DOOM"}], rootfs)
 
 
+    def test_doom_shares_donor_data(self):
+        import lzma
+        from x6100mb.compose import resolve_extras
+        a, b = os.path.join(self.tmp, "a.img"), os.path.join(self.tmp, "b.img")
+        fake_card(a)
+        fake_card(b)
+        rootfs = os.path.join(self.tmp, "doom.ext4.xz")
+        with lzma.open(rootfs, "wb") as f:
+            f.write(b"D" * (1 << 20))
+        sa, sb = SourceSystem(a, a), SourceSystem(b, b)
+        ents = resolve_extras([{"kind": "sd", "name": "A", "sys": sa}, {"kind": "sd", "name": "B", "sys": sb},
+                               {"kind": "doom", "name": "DOOM"}], rootfs)
+        plan = compose(ents, data_mb=40, data_mode="separate")
+        self.assertEqual(plan.info["data_partitions"], 2)                   # A and B, not Doom
+        script = plan.script
+        self.assertIn("setenv bm_boot3 'mmc dev 0; mmc read 0x45000000 0 1; if fatload mmc 0:1 0x45100000 SYS1/MBR.BIN", script)
+
+
 if __name__ == "__main__":
     unittest.main()

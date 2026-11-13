@@ -66,6 +66,12 @@ otwiera, Esc to menu, F2/F3 zapis i wczytanie gry). Podłącza się je do gniazd
 bezprzewodowy zestawu klawiatura+mysz. Niczego nie trzeba włączać w menu radia: Doom sam ładuje
 sterownik gniazda HOST z systemu, z którego bierze jądro. Działają też podłączone w trakcie gry.
 
+**Mysz i klawiatura Bluetooth:** sparuj je raz w systemie, z którego Doom bierze jądro (np. OpenX6X00:
+Settings > Bluetooth > DEVICES). W Doomie łączą się same: Doom uruchamia obsługę Bluetooth tamtego
+systemu (z jego zapisanymi parowaniami z partycji DATA), niczego w nim nie zmieniając. Przy
+osobnych partycjach DATA Doom korzysta z DATA tego systemu. `bluetooth=0` w `doom.txt` wyłącza
+Bluetooth w Doomie.
+
 Dźwięk: efekty i **muzyka** (syntezator OPL3, jak karta AdLib/Sound Blaster, emulowany przez
 Nuked OPL3). Na partycji `BOOT` karty jest plik `doom.txt`: `volume=` i `music=` to głośność
 efektów i muzyki (0–200 %), a `rxvol=` (po usunięciu `#`) ustawia przy starcie Dooma głośność

@@ -306,7 +306,9 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
             lba = _up(start + n)
         ext_end = lba
     data_lba = lba
-    n_data = len(sd) if data_mode == "separate" else 1
+    # Extras (Doom) have no DATA of their own: they see their donor's (its Bluetooth pairings)
+    owners = [e for e in sd if getattr(e["sys"], "donor", None) is None]
+    n_data = len(owners) if data_mode == "separate" else 1
     if card_bytes:
         card_sectors = card_bytes // SECTOR
         data_sectors = (card_sectors - data_lba) // n_data // ALIGN * ALIGN
@@ -320,8 +322,11 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     plan = Plan(size)
     # The DATA areas: one, or one per system on the card (only the running one is in the table)
     data_areas = [data_lba + k * data_sectors for k in range(n_data)]
+    def owner(e):
+        donor = getattr(e["sys"], "donor", None)
+        return next((x for x in owners if x["sys"] is donor), owners[0]) if donor is not None else e
     def_sd = entries[default] if entries[default]["kind"] == "sd" else sd[0]
-    active = data_areas[sd.index(def_sd)] if n_data > 1 else data_areas[0]
+    active = data_areas[owners.index(owner(def_sd))] if n_data > 1 else data_areas[0]
 
     # MBR, the gap up to U-Boot cleared (an old GPT header lives there), U-Boot
     def primary(data_at):
@@ -332,9 +337,12 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     disk_id = random.getrandbits(32)
     plan.add(0, Data(make_mbr(primary(active), disk_id)))
     if n_data > 1:
-        for k, e in enumerate(sd):
+        for k, e in enumerate(owners):
             e["mbr"] = e["dir"] + "/MBR.BIN"
             e["mbr_data"] = make_mbr(primary(data_areas[k]), disk_id)
+        for e in sd:
+            if e not in owners:
+                e["mbr"] = owner(e)["mbr"]      # the donor's table: its DATA
     plan.add(SECTOR, Zero(UBOOT_OFFSET - SECTOR))
     plan.add(UBOOT_OFFSET, Data(ub.uboot))
 
@@ -375,7 +383,9 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         fat.add_file("doom.txt", (
             "# Doom: glosnosc efektow i muzyki 0..200 (%)\r\nvolume=100\r\nmusic=100\r\n"
             "# Glosnosc radia (AF) 0..55, ustawiana przy starcie Dooma; usun # zeby wlaczyc\r\n"
-            "# rxvol=20\r\n").encode())
+            "# rxvol=20\r\n"
+            "# Bluetooth: mysz i klawiatura sparowane w systemie, z ktorego Doom bierze jadro (0: wylaczony)\r\n"
+            "bluetooth=1\r\n").encode())
     for e in sd:
         s = e["sys"]
         fat.add_file(e["dir"] + "/ZIMAGE", s.files["kernel"])
@@ -383,7 +393,7 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
             fat.add_file(e["dir"] + "/BOARD.DTB", s.files["fdt"])
         if "initrd" in s.files:
             fat.add_file(e["dir"] + "/INITRD", s.files["initrd"])
-        if e.get("mbr"):
+        if e.get("mbr_data"):
             fat.add_file(e["mbr"], e["mbr_data"])
     for off, piece in fat.extents():
         plan.add(boot_lba * SECTOR + off, piece)

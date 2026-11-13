@@ -563,6 +563,7 @@ void DG_SetWindowTitle(const char *title)
 
 /* As init: the filesystems it needs, writable for the settings and saved games */
 extern int x6100_sound_volume, x6100_music_volume;
+static int bluetooth_on = 1;   /* bluetooth=0 in doom.txt: no Bluetooth */
 void x6100_set_rxvol(int vol);
 
 /* /boot/doom.txt on the card's BOOT partition: volume=0..200 (%), rxvol=0..55 (the radio's AF volume) */
@@ -579,6 +580,8 @@ static void read_settings(void)
 			x6100_sound_volume = v;
 		else if (sscanf(line, " music = %d", &v) == 1 && v >= 0 && v <= 200)
 			x6100_music_volume = v;
+		else if (sscanf(line, " bluetooth = %d", &v) == 1)
+			bluetooth_on = v != 0;
 		else if (sscanf(line, " rxvol = %d", &v) == 1)
 			x6100_set_rxvol(v);
 	}
@@ -587,13 +590,14 @@ static void read_settings(void)
 	umount("/boot");
 }
 
-/* The radio's HOST port is the SoC's OTG port, whose driver (musb) the kernel has as a module: it is
- * loaded from the root filesystem of the system the kernel comes from (doom_modules=/dev/mmcblk0pN
- * on the kernel's command line), with what modules.dep says it needs first */
-static void load_module(const char *root, const char *rel)
+/* The kernel's modules come from the root filesystem of the system the kernel is lent by
+ * (doom_modules=/dev/mmcblk0pN on the kernel's command line), mounted read-only on /donor */
+static char mod_dir[300];
+
+static void load_module(const char *rel)
 {
-	char path[512];
-	snprintf(path, sizeof path, "%s/%s", root, rel);
+	char path[700];
+	snprintf(path, sizeof path, "%s/%s", mod_dir, rel);
 	int fd = open(path, O_RDONLY | O_CLOEXEC);
 	if (fd < 0)
 		return;
@@ -602,38 +606,116 @@ static void load_module(const char *root, const char *rel)
 	close(fd);
 }
 
-static void load_usb_host(void)
+/* A module and, first, what modules.dep says it needs ("the last listed is needed first") */
+static void load_with_deps(const char *suffix)
 {
-	const char *dev = getenv("doom_modules");
-	struct utsname u;
-	char dep[512], line[2048];
-	if (!dev || uname(&u) != 0)
-		return;
-	mkdir("/donor", 0755);
-	if (mount(dev, "/donor", "ext4", MS_RDONLY, NULL) != 0)
-		return;
-	snprintf(dep, sizeof dep, "/donor/lib/modules/%s", u.release);
-	char depfile[600];
-	snprintf(depfile, sizeof depfile, "%s/modules.dep", dep);
+	char depfile[400], line[2048];
+	snprintf(depfile, sizeof depfile, "%s/modules.dep", mod_dir);
 	FILE *f = fopen(depfile, "r");
 	while (f && fgets(line, sizeof line, f)) {
-		/* "kernel/drivers/usb/musb/sunxi.ko: dep1.ko dep2.ko ..." */
 		char *colon = strchr(line, ':');
-		if (!colon || !strstr(line, "/usb/musb/sunxi.ko"))
+		if (!colon)
 			continue;
 		*colon = '\0';
+		size_t ln = strlen(line), ls = strlen(suffix);
+		if (ln < ls || strcmp(line + ln - ls, suffix))
+			continue;
 		char *deps[16];
 		int n = 0;
 		for (char *t = strtok(colon + 1, " \n"); t && n < 16; t = strtok(NULL, " \n"))
 			deps[n++] = t;
-		for (int i = n - 1; i >= 0; i--)     /* the last listed is needed first */
-			load_module(dep, deps[i]);
-		load_module(dep, line);
+		for (int i = n - 1; i >= 0; i--)
+			load_module(deps[i]);
+		load_module(line);
 		break;
 	}
 	if (f)
 		fclose(f);
-	umount("/donor");
+}
+
+static bool mount_donor(void)
+{
+	const char *dev = getenv("doom_modules");
+	struct utsname u;
+	if (!dev || uname(&u) != 0)
+		return false;
+	mkdir("/donor", 0755);
+	if (mount(dev, "/donor", "ext4", MS_RDONLY, NULL) != 0)
+		return false;
+	snprintf(mod_dir, sizeof mod_dir, "/donor/lib/modules/%s", u.release);
+	return true;
+}
+
+/* The radio's HOST port is the SoC's OTG port, whose driver (musb) the kernel has as a module */
+static void load_usb_host(void)
+{
+	load_with_deps("/usb/musb/sunxi.ko");
+}
+
+/* Bluetooth keyboards and mice: the lending system's own Bluetooth (BlueZ, D-Bus, its pairings
+ * kept on DATA) run in a chroot of its root filesystem under a RAM overlay, so nothing on it
+ * changes. Devices paired in that system connect by themselves; the kernel makes them input
+ * devices, which the input scan picks up like USB ones. */
+
+static const char bt_script[] =
+	"export PATH=/usr/sbin:/usr/bin:/sbin:/bin\n"
+	"mkdir -p /run/dbus /var/lock/subsys /tmp/dbus /var/run\n"
+	"modprobe btusb 2>/dev/null; modprobe hidp 2>/dev/null; modprobe uhid 2>/dev/null\n"
+	"[ -x /etc/init.d/S39btpairings ] && /etc/init.d/S39btpairings start >/dev/null 2>&1\n"
+	"dbus-uuidgen --ensure 2>/dev/null\n"
+	"dbus-daemon --system\n"
+	"sleep 1\n"
+	"/usr/libexec/bluetooth/bluetoothd -n >/tmp/bluetoothd.log 2>&1 &\n"
+	"sleep 3\n"
+	"bluetoothctl power on >/dev/null 2>&1\n"
+	"wait\n";
+
+static void start_bluetooth(void)
+{
+	if (!bluetooth_on)
+		return;
+	/* the chip's firmware, for a driver probing outside the chroot */
+	FILE *fw = fopen("/sys/module/firmware_class/parameters/path", "w");
+	if (fw) {
+		fputs("/donor/lib/firmware", fw);
+		fclose(fw);
+	}
+	load_with_deps("/fs/overlayfs/overlay.ko");
+	mkdir("/ovl", 0755);
+	mkdir("/bt", 0755);
+	if (mount("tmpfs", "/ovl", "tmpfs", 0, "size=16m") != 0)
+		return;
+	mkdir("/ovl/up", 0755);
+	mkdir("/ovl/work", 0755);
+	if (mount("overlay", "/bt", "overlay", 0, "lowerdir=/donor,upperdir=/ovl/up,workdir=/ovl/work") != 0) {
+		fprintf(stderr, "Doom: overlay: %s\n", strerror(errno));
+		return;
+	}
+	mount("/proc", "/bt/proc", NULL, MS_BIND, NULL);
+	mount("/sys", "/bt/sys", NULL, MS_BIND, NULL);
+	mount("/dev", "/bt/dev", NULL, MS_BIND, NULL);
+	mount("tmpfs", "/bt/run", "tmpfs", 0, "size=4m");
+	mount("tmpfs", "/bt/tmp", "tmpfs", 0, "size=8m");
+	/* the pairings: DATA, where the lending system keeps their copy (/mnt/backups) */
+	mount("/dev/mmcblk0p3", "/bt/mnt", "vfat", MS_RDONLY, NULL);
+	FILE *f = fopen("/bt/tmp/doom-bt.sh", "w");
+	if (!f)
+		return;
+	fputs(bt_script, f);
+	fclose(f);
+	signal(SIGCHLD, SIG_IGN);                 /* init reaps nothing else: let them go */
+	pid_t pid = fork();
+	if (pid == 0) {
+		int null = open("/dev/null", O_RDWR);
+		if (null >= 0) {
+			dup2(null, 0);
+			dup2(null, 1);
+			dup2(null, 2);
+		}
+		if (chroot("/bt") == 0 && chdir("/") == 0)
+			execl("/bin/sh", "sh", "/tmp/doom-bt.sh", (char *)NULL);
+		_exit(1);
+	}
 }
 
 static void as_init(void)
@@ -650,7 +732,10 @@ static void as_init(void)
 	if (chdir("/doom") != 0)
 		say("Doom: no /doom\n");
 	read_settings();
-	load_usb_host();
+	if (mount_donor()) {
+		load_usb_host();
+		start_bluetooth();
+	}
 }
 
 static const char *find_iwad(void)
