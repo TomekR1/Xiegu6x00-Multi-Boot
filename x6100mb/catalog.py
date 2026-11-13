@@ -9,6 +9,7 @@ more than one repository (CX8ANM moved its newer releases): their lists are merg
 import hashlib
 import json
 import os
+from .i18n import t
 import re
 import urllib.error
 import urllib.request
@@ -84,10 +85,10 @@ def _get(url, timeout=20):
             return json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         if e.code == 403 and e.headers.get("X-RateLimit-Remaining") == "0":
-            raise CatalogError("GitHub chwilowo ogranicza zapytania (limit na godzinę). Spróbuj za kilka minut.")
+            raise CatalogError(t("GitHub chwilowo ogranicza zapytania (limit na godzinę). Spróbuj za kilka minut."))
         raise CatalogError(f"GitHub: {e.code} {e.reason}")
     except urllib.error.URLError as e:
-        raise CatalogError(f"brak połączenia z GitHubem: {e.reason}")
+        raise CatalogError(t("brak połączenia z GitHubem: {e}", e=e.reason))
 
 
 def releases(source, n=15, fetch=_get):
@@ -97,7 +98,7 @@ def releases(source, n=15, fetch=_get):
     for repo, asset in source["feeds"]:
         data = fetch(API.format(repo=repo, n=n))
         if not isinstance(data, list):
-            raise CatalogError("nieoczekiwana odpowiedź GitHuba")
+            raise CatalogError(t("nieoczekiwana odpowiedź GitHuba"))
         pat = re.compile(asset, re.I)
         for r in data:
             if r.get("draft"):
@@ -149,13 +150,13 @@ def download(source, rel, cache_dir, progress=None):
                 if progress:
                     progress(done, total)
     except urllib.error.URLError as e:
-        raise CatalogError(f"pobieranie przerwane: {getattr(e, 'reason', e)}")
+        raise CatalogError(t("pobieranie przerwane: {e}", e=getattr(e, "reason", e)))
     if rel["size"] and os.path.getsize(tmp) != rel["size"]:
         os.remove(tmp)
-        raise CatalogError("pobrany plik ma inny rozmiar niż na GitHubie (przerwane pobieranie?)")
+        raise CatalogError(t("pobrany plik ma inny rozmiar niż na GitHubie (przerwane pobieranie?)"))
     if rel["sha256"] and h.hexdigest() != rel["sha256"]:
         os.remove(tmp)
-        raise CatalogError("suma kontrolna pobranego pliku się nie zgadza")
+        raise CatalogError(t("suma kontrolna pobranego pliku się nie zgadza"))
     os.replace(tmp, path)
     return path
 

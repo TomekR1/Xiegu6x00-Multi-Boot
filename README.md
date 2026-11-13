@@ -5,7 +5,7 @@ pojawia się menu z logo każdego systemu, a system wybierasz klawiszem **F1–F
 Bez wciśnięcia klawisza po kilku sekundach startuje system domyślny. W menu może być też
 oryginalny **system Xiegu z pamięci radia (eMMC)**; aplikacja niczego w eMMC nie zmienia.
 
-Autor aplikacji: [SQ6RT](https://www.qrz.com/db/SQ6RT)
+Autor aplikacji: [SQ6RT](https://www.qrz.com/db/SQ6RT) · [English below](#english)
 
 ## Pobieranie
 
@@ -17,7 +17,8 @@ Najnowsza wersja jest w zakładce **[Releases](../../releases/latest)**:
 | `Xiegu-Multi-Patcher-macOS.zip` | macOS: rozpakuj, przy pierwszym uruchomieniu prawy klik → **Otwórz** |
 | `Xiegu-Multi-Patcher-Linux` | Linux x86-64: `chmod +x Xiegu-Multi-Patcher-Linux`; do zapisu karty potrzebny `pkexec` |
 
-Nic nie trzeba instalować. Systemów radia nie ma w wydaniu: wybierasz je i pobierasz
+Nic nie trzeba instalować. Aplikacja jest po polsku i po angielsku (wybór języka w prawym górnym
+rogu okna). Systemów radia nie ma w wydaniu: wybierasz je i pobierasz
 w aplikacji, prosto z wydań ich autorów.
 
 ## Jak przygotować kartę
@@ -66,11 +67,13 @@ otwiera, Esc to menu, F2/F3 zapis i wczytanie gry). Podłącza się je do gniazd
 bezprzewodowy zestawu klawiatura+mysz. Niczego nie trzeba włączać w menu radia: Doom sam ładuje
 sterownik gniazda HOST z systemu, z którego bierze jądro. Działają też podłączone w trakcie gry.
 
-**Mysz i klawiatura Bluetooth:** sparuj je raz w systemie, z którego Doom bierze jądro (np. OpenX6X00:
-Settings > Bluetooth > DEVICES). W Doomie łączą się same: Doom uruchamia obsługę Bluetooth tamtego
-systemu (z jego zapisanymi parowaniami z partycji DATA), niczego w nim nie zmieniając. Przy
-osobnych partycjach DATA Doom korzysta z DATA tego systemu. `bluetooth=0` w `doom.txt` wyłącza
-Bluetooth w Doomie.
+**Mysz i klawiatura Bluetooth:** Doom bierze jądro z **pierwszego systemu z obrazu na liście**
+i to w nim trzeba je raz sparować (np. OpenX6X00: Settings > Bluetooth > DEVICES). Potem wyłącz
+radio, uruchom Dooma i rusz myszą albo naciśnij klawisz: połączą się same po kilku sekundach. Doom
+uruchamia obsługę Bluetooth tamtego systemu z jego zapisanymi parowaniami, niczego w nim nie
+zmieniając. Działa z OpenX6X00, CX8ANM, OpenX6100 i 1KO125; z klasycznym R1CBU działa tylko USB.
+`bluetooth=0` w `doom.txt` wyłącza Bluetooth w Doomie. To samo opisuje w aplikacji przycisk
+**Przeczytaj najpierw** obok kafelka Dooma.
 
 Dźwięk: efekty i **muzyka** (syntezator OPL3, jak karta AdLib/Sound Blaster, emulowany przez
 Nuked OPL3). Na partycji `BOOT` karty jest plik `doom.txt`: `volume=` i `music=` to głośność
@@ -129,6 +132,30 @@ Zgłaszaj je w zakładce **[Issues](../../issues)**. Pomaga:
 
 Jeśli system Xiegu z eMMC się nie uruchomi, menu pokaże na ekranie zawartość eMMC:
 zrób zdjęcie i dołącz je do zgłoszenia.
+
+## English
+
+Several systems on one SD card for the **Xiegu X6100**: at power-on the radio shows a menu with
+each system's logo, and you choose with the **F1–F5** keys under the screen. Without a key the
+default system starts after a few seconds. The menu can also start Xiegu's original system from
+the radio's internal memory (eMMC); the app changes nothing there.
+
+The app (Windows, macOS, Linux; from **[Releases](../../releases/latest)**, nothing to install)
+speaks English and Polish: pick the language at the top right of its window.
+
+1. **+ From the internet…** fetches a system's image straight from its authors' GitHub releases
+   (OpenX6X00, OpenX6100, CX8ANM, 1KO125, IU1WXY, R1CBU); **+ Card image…** adds one from disk.
+2. **+ Xiegu from eMMC** adds the radio's own system.
+3. Set the order, the names (double-click), the default (★), a logo of your own if you like;
+   **Menu preview** shows the radio's screen.
+4. Choose the time to choose and a **shared** or **per-system DATA** partition.
+5. **Write to the card** (it asks for the administrator password, then checks what it wrote),
+   or **Save as an .img file…** for balenaEtcher. Writing erases the whole card.
+
+**Extras: Doom.** Classic Doom with [Freedoom](https://freedoom.github.io/)'s maps, sound and OPL3
+music, on the radio's knobs and keys, a USB mouse and keyboard on the HOST port, or Bluetooth ones
+paired in the first image-based system of the list. The **Read first** button next to the Doom
+tile explains the controls and the pairing; `doom.txt` on the card's BOOT partition sets the volume.
 
 ## Licencja
 

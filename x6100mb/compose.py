@@ -12,6 +12,7 @@ OpenX6X00 finds DATA by its label and mounts the third partition in fstab: both 
 system gets root=/dev/mmcblk0pN for its own partition.
 """
 import os
+from .i18n import t
 import random
 import re
 
@@ -24,6 +25,8 @@ ALIGN = MIB // SECTOR
 
 # Front-panel keys in U-Boot: the X6100 key matrix from the device tree. As in j0ju's
 # x6100-fw-mangler multiboot (used on radios): the row is driven low, the column read (0 = pressed); F1..F5 from OpenX6X00's src/front_keys.c (BTN_TRIGGER_HAPPY13..15, 19, 20)
+COUNTDOWN = "Start F${bm_default} za ${bm_left} s"
+
 KEYS = [("F1", "PE16", "PG6"), ("F2", "PE17", "PG6"), ("F3", "PE11", "PG6"),
         ("F4", "PE16", "PG8"), ("F5", "PE17", "PG8")]
 MAX_ENTRIES = len(KEYS)
@@ -137,7 +140,7 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
     if ansi:
         text.append("%s[1;1H%s[30;46m  %s%s%s[0;37;40m" % (ESC, ESC, title, " " * (47 - len(title)), ESC))
         for i, e in enumerate(entries):
-            mark = ("  %s[36m<- domyslny" % ESC) if i == default else ""
+            mark = ("  %s[36m<- %s" % (ESC, t("domyslny"))) if i == default else ""
             text.append("%s[%d;3H%s[1;33m%s%s[0;37;40m   %s%s%s[0;37;40m" % (
                 ESC, i + 3, ESC, KEYS[i][0], ESC, _ascii(e["name"]), mark, ESC))
         for i, e in enumerate(entries):
@@ -148,8 +151,8 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
         for i, e in enumerate(entries):
             text.append("  %s   %s\\n" % (KEYS[i][0], _ascii(e["name"])))
     a("if itest ${bm_gfx} -eq 0; then")
-    for t in text:
-        a("    " + _shown(t))
+    for line in text:
+        a("    " + _shown(line))
     a("fi")
     a("")
     a("# Keys, with a countdown each second; gpio prints every pin it reads, hence serial only")
@@ -160,8 +163,8 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
     a("    if itest ${bm_r} -eq 0; then")
     a("        setexpr bm_left ${bm_ticks} - ${i}")
     a("        setexpr bm_left ${bm_left} / a")
-    a("        " + _shown("%s[%s%s[0;37;40mStart F${bm_default} za ${bm_left} s   " % (e_, count_row, e_) if ansi
-                          else "Start F${bm_default} za ${bm_left} s\\n"))
+    a("        " + _shown("%s[%s%s[0;37;40m%s   " % (e_, count_row, e_, t(COUNTDOWN)) if ansi
+                          else t(COUNTDOWN) + "\\n"))
     a("    fi")
     rows = []
     for i in range(len(entries)):
@@ -381,11 +384,11 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     if any(getattr(e.get("sys"), "donor", None) is not None for e in sd):
         # Doom's settings, read at its start (extras/doom/x6100_sound.c)
         fat.add_file("doom.txt", (
-            "# Doom: glosnosc efektow i muzyki 0..200 (%)\r\nvolume=100\r\nmusic=100\r\n"
-            "# Glosnosc radia (AF) 0..55, ustawiana przy starcie Dooma; usun # zeby wlaczyc\r\n"
-            "# rxvol=20\r\n"
-            "# Bluetooth: mysz i klawiatura sparowane w systemie, z ktorego Doom bierze jadro (0: wylaczony)\r\n"
-            "bluetooth=1\r\n").encode())
+            t("# Doom: glosnosc efektow i muzyki 0..200 (%)") + "\r\nvolume=100\r\nmusic=100\r\n" +
+            t("# Glosnosc radia (AF) 0..55, ustawiana przy starcie Dooma; usun # zeby wlaczyc") + "\r\n"
+            "# rxvol=20\r\n" +
+            t("# Bluetooth: mysz i klawiatura sparowane w systemie, z ktorego Doom bierze jadro (0: wylaczony)") +
+            "\r\nbluetooth=1\r\n").encode())
     for e in sd:
         s = e["sys"]
         fat.add_file(e["dir"] + "/ZIMAGE", s.files["kernel"])

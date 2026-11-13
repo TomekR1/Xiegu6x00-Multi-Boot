@@ -1,5 +1,6 @@
 """Source card images: what is on them (MBR, Allwinner U-Boot, the boot script, kernel, rootfs)."""
 import os
+from .i18n import t
 import re
 import shutil
 import struct
@@ -207,8 +208,8 @@ class SourceSystem:
             for p in boots[1:]:
                 try:
                     if FatReader(f, p[2] * SECTOR).find("rootfs.tar"):
-                        raise ImageError("to obraz instalacyjny Xiegu (wgrywa system do eMMC radia), nie system "
-                                         "do uruchamiania z karty. Dodaj pozycję \"Xiegu z eMMC\".")
+                        raise ImageError(t("to obraz instalacyjny Xiegu (wgrywa system do eMMC radia), nie system "
+                                           "do uruchamiania z karty. Dodaj pozycję \"Xiegu z eMMC\"."))
                 except FatError:
                     pass
             fat = FatReader(f, self.boot_part[2] * SECTOR)
@@ -222,7 +223,7 @@ class SourceSystem:
                 raise ImageError("no boot.scr on the boot partition (extlinux / uEnv not supported)")
             self.script = script
             if "x6100-multiboot" in script or "X6100 multiboot menu" in script:
-                raise ImageError("to już karta multiboot (z tej aplikacji); dodaj obrazy pojedynczych systemów")
+                raise ImageError(t("to już karta multiboot (z tej aplikacji); dodaj obrazy pojedynczych systemów"))
             self._parse_script(fat)
 
         root_parts = [p for p in self.parts if p[0] == self.root_number]
@@ -363,8 +364,8 @@ class ExtraSystem:
 
     def __init__(self, name, rootfs_path, donor):
         if donor is None or not getattr(donor, "files", None) or "kernel" not in donor.files:
-            raise ImageError("Doom potrzebuje na karcie także systemu z obrazu (np. OpenX6X00): "
-                             "uruchamia się z jego jądrem")
+            raise ImageError(t("Doom potrzebuje na karcie także systemu z obrazu (np. OpenX6X00): "
+                               "uruchamia się z jego jądrem"))
         self.name = name
         self.path = rootfs_path
         self.raw = rootfs_path
@@ -392,7 +393,7 @@ class ExtraSystem:
         return args
 
     def summary(self):
-        return f"rootfs {self.root_size >> 20} MB, jądro z: {self.donor.name}"
+        return t("rootfs {mb} MB, jądro z: {name}", mb=self.root_size >> 20, name=self.donor.name)
 
 
 def extra_rootfs(cache, xz_path=None, progress=None):
@@ -406,7 +407,7 @@ def extra_rootfs(cache, xz_path=None, progress=None):
         xz_path = next((os.path.join(b, "doom-x6100-rootfs.ext4.xz") for b in bases
                         if os.path.isfile(os.path.join(b, "doom-x6100-rootfs.ext4.xz"))), None)
         if xz_path is None:
-            raise ImageError("ta wersja aplikacji nie ma w sobie Dooma")
+            raise ImageError(t("ta wersja aplikacji nie ma w sobie Dooma"))
     st = os.stat(xz_path)
     os.makedirs(cache, exist_ok=True)
     out = os.path.join(cache, f"doom-x6100-rootfs.{int(st.st_mtime)}.{st.st_size}.ext4")

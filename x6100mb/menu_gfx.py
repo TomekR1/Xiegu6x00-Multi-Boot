@@ -9,6 +9,7 @@ Needs Pillow; without it the menu is text only (compose.py).
 """
 import hashlib
 import io
+from .i18n import t
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -188,7 +189,7 @@ def render_menu(entries, default, selected=None, title="X6100 MULTIBOOT"):
         if is_sel:
             d.text((cx, 340), "START", font=_font(18), fill=GO, anchor="mm")
         elif is_def and selected is None:
-            d.text((cx, 340), "domyslny", font=_font(16), fill=ACCENT, anchor="mm")
+            d.text((cx, 340), t("domyslny"), font=_font(16), fill=ACCENT, anchor="mm")
         # the key, right above the radio's button
         kc = GO if is_sel else (ACCENT if is_def and selected is None else (60, 68, 88))
         d.rounded_rectangle([cx - 52, 404, cx + 52, 466], radius=10, fill=kc)

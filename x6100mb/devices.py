@@ -5,6 +5,7 @@ MAX_CARD bytes (a USB hard disk is no SD card).
 """
 import json
 import os
+from .i18n import t
 import plistlib
 import re
 import subprocess
@@ -186,8 +187,8 @@ def _authopen(path, flags):
     finally:
         parent.close()
     if not fds:
-        raise DeviceError("macOS nie dał dostępu do karty" + (f" ({err})" if err else
-                          " (odmowa hasła administratora?)"))
+        raise DeviceError(t("macOS nie dał dostępu do karty") + (f" ({err})" if err else
+                          t(" (odmowa hasła administratora?)")))
     fd = fds[0]
     try:
         import fcntl
