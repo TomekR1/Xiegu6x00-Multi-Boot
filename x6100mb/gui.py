@@ -193,6 +193,23 @@ class ProgressWindow:
             self.win.grab_set()
         except tk.TclError:
             pass
+        # On top of the main window, also when it was opened from a dialog that just closed
+        # (on Windows it otherwise ended up behind the main window, out of sight)
+        self.win.deiconify()
+        self.win.lift()
+        try:
+            self.win.attributes("-topmost", True)
+            self.win.after(1500, self._not_topmost)
+        except tk.TclError:
+            pass
+        self.win.focus_force()
+
+    def _not_topmost(self):
+        try:
+            self.win.attributes("-topmost", False)
+            self.win.lift()
+        except tk.TclError:
+            pass
 
     def update(self, phase, done, total, msg=""):
         if phase != self.phase:                       # a new step: its own speed and time
@@ -1045,8 +1062,9 @@ class OnlineDialog:
             return
         box, _ = self.boxes[src["id"]]
         rel = self.rels[src["id"]][box.current()]
-        self.app._job(t("Pobieranie {name} {tag}…", name=src["name"], tag=rel["tag"]), self.app._fetch_and_add, src, rel)
-        self.win.destroy()
+        self.win.destroy()          # first: the progress window then comes up over the main window
+        app, text = self.app, t("Pobieranie {name} {tag}…", name=src["name"], tag=rel["tag"])
+        app.root.after(50, lambda: app._job(text, app._fetch_and_add, src, rel))
 
 
 def _filetypes(types):
