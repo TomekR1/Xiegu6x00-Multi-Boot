@@ -166,6 +166,20 @@ void x6100_radio_audio(int vol)
 /* ------------------------------------------------------------------------------------------ */
 /* Mixing                                                                                     */
 /* ------------------------------------------------------------------------------------------ */
+unsigned int x6100_xruns;        /* the sound's gaps (the card's buffer ran dry), for the log */
+
+/* Up to 20000 as it is, above that bent smoothly towards 32767: loud moments get rounder, not cut */
+static int16_t soft_limit(int32_t v)
+{
+	const int32_t knee = 20000, room = 32767 - 20000;
+	int32_t a = v < 0 ? -v : v;
+	if (a > knee) {
+		int64_t over = a - knee;
+		a = knee + (int32_t)(over * room / (over + room));
+	}
+	return (int16_t)(v < 0 ? -a : a);
+}
+
 static void *mix_thread(void *arg)
 {
 	(void)arg;
@@ -187,22 +201,28 @@ static void *mix_thread(void *arg)
 					ch->on = false;
 					break;
 				}
-				int s = ((int)ch->data[idx] - 128) << 8;
+				/* linear between two samples: Doom's 11 kHz effects at 48 kHz without the grit */
+				int a = (int)ch->data[idx] - 128;
+				int b = idx + 1 < ch->len ? (int)ch->data[idx + 1] - 128 : a;
+				int s = (a << 8) + (((b - a) * (int)(ch->pos & 0xFFFF)) >> 8);
 				acc[2 * i] += s * ch->lv / 255;
 				acc[2 * i + 1] += s * ch->rv / 255;
 				ch->pos += ch->step;
 			}
 		}
 		pthread_mutex_unlock(&lock);
-		for (int i = 0; i < PERIOD * 2; i++) {
-			int32_t v = acc[i] * x6100_sound_volume / 100;
-			out[i] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
+		/* One speaker: both channels the same (the codec mixes them to mono and two loud channels
+		 * overflowed there), and a soft limiter instead of cutting the peaks flat (that crackled) */
+		for (int i = 0; i < PERIOD; i++) {
+			int32_t v = (acc[2 * i] + acc[2 * i + 1]) / 2 * x6100_sound_volume / 100;
+			out[2 * i] = out[2 * i + 1] = soft_limit(v);
 		}
 		if (test_out) {                       /* the PC test: into a file, in real time */
 			fwrite(out, sizeof out, 1, test_out);
 			fflush(test_out);
 			usleep(PERIOD * 1000000u / rate);
 		} else if (pcm_writei(pcm, out, PERIOD) < 0) {
+			x6100_xruns++;
 			pcm_prepare(pcm);                 /* an underrun: on again */
 		}
 	}

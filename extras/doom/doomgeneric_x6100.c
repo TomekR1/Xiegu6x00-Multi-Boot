@@ -70,6 +70,7 @@ enum {
 #include <sys/utsname.h>
 #include <time.h>
 #include <unistd.h>
+extern unsigned int x6100_xruns;   /* x6100_sound.c: the sound's gaps */
 
 #define OUT_W   640             /* 320x200 shown at 4:3 */
 #define OUT_H   480
@@ -495,7 +496,8 @@ static void poll_input(void)
 		static unsigned fps_frames;
 		if (t - fps_t >= 10000) {             /* the game's speed, every 10 s */
 			if (fps_t)
-				logmsg("%.1f frames/s", (frames_drawn - fps_frames) * 1000.0 / (t - fps_t));
+				logmsg("%.1f frames/s, sound gaps so far: %u", (frames_drawn - fps_frames) * 1000.0 / (t - fps_t),
+				       x6100_xruns);
 			fps_t = t;
 			fps_frames = frames_drawn;
 		}
