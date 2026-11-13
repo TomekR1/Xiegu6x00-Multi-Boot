@@ -262,6 +262,7 @@ EN = {
     # the card
     "Start F${bm_default} za ${bm_left} s": "Start F${bm_default} in ${bm_left} s",
     "Wybierz system klawiszem F1-F{n}": "Choose a system with F1-F{n}",
+    "Wylaczanie radia...": "Switching the radio off...",
     "Bez automatycznego startu: system uruchamia się dopiero po wciśnięciu klawisza F":
         "No automatic start: a system starts only when its F key is pressed",
     "# Doom: glosnosc efektow i muzyki 0..200 (%)": "# Doom: effects and music volume 0..200 (%)",

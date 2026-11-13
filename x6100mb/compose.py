@@ -28,6 +28,7 @@ ALIGN = MIB // SECTOR
 COUNTDOWN = "Start F${bm_default} za ${bm_left} s"
 WAITING = "Wybierz system klawiszem F1-F{n}"
 MAX_SECS = 15
+POWERING_OFF = "Wylaczanie radia..."
 
 KEYS = [("F1", "PE16", "PG6"), ("F2", "PE17", "PG6"), ("F3", "PE11", "PG6"),
         ("F4", "PE16", "PG8"), ("F5", "PE17", "PG8")]
@@ -170,6 +171,7 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
     a("# Keys, with a countdown each second; gpio prints every pin it reads, hence serial only")
     a("setenv bm_choice")
     a("setenv i 0")
+    a("pek clear")                          # the press that switched the radio on (menu's U-Boot only)
     a('while test -z "${bm_choice}"; do')
     a("    setexpr bm_r ${i} % a")
     a("    if itest ${bm_r} -eq 0; then")
@@ -195,6 +197,9 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
             if r == row:
                 a("    if gpio input %s; then setenv bm_choice %d; fi" % (col, i + 1))
         a("    gpio input %s" % row)
+    # POWER switches the radio off here too (the menu's U-Boot: pek, poweroff on the AXP223)
+    a("    if pek; then " + _shown(("%s[%s%s[1;31m%s          %s[0;37;40m" % (ESC, count_row, ESC, t(POWERING_OFF), ESC))
+                              if ansi else t(POWERING_OFF) + "\\n") + "; sleep 1; poweroff; fi")
     a('    if test -z "${bm_choice}"; then')
     a("        if itest ${bm_wait} -eq 1; then sleep 0.1; setexpr i ${i} + 1; setexpr i ${i} % a")
     a("        elif itest ${i} -ge ${bm_ticks}; then setenv bm_choice ${bm_default}; else sleep 0.1; setexpr i ${i} + 1; fi")

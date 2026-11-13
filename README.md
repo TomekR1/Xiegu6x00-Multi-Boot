@@ -2,7 +2,8 @@
 
 Kilka systemów na jednej karcie SD dla **Xiegu X6100**. Przy włączaniu radia na ekranie
 pojawia się menu z logo każdego systemu, a system wybierasz klawiszem **F1–F5** pod ekranem.
-Bez wciśnięcia klawisza po kilku sekundach startuje system domyślny. W menu może być też
+Bez wciśnięcia klawisza po kilku sekundach startuje system domyślny, a klawisz **POWER** w menu
+wyłącza radio. W menu może być też
 oryginalny **system Xiegu z pamięci radia (eMMC)**; aplikacja niczego w eMMC nie zmienia.
 
 Autor aplikacji: [SQ6RT](https://www.qrz.com/db/SQ6RT) · [English below](#english)

@@ -13,6 +13,9 @@ rm -rf "$W" && mkdir -p "$W" "$HERE/out"
 git clone -q --depth 1 --branch $VER https://github.com/u-boot/u-boot "$W/u-boot"
 cd "$W/u-boot"
 git apply "$HERE"/0001-*.patch
+# pek: the POWER key in the menu (x6100_pek.c)
+cp "$HERE/x6100_pek.c" cmd/
+echo 'obj-y += x6100_pek.o' >> cmd/Makefile
 cp "$HERE/sun8i-r16-x6100.dts" "$HERE/sun8i-r16-x6100-u-boot.dtsi" arch/arm/dts/
 sed -i 's/\tsun8i-r16-parrot.dtb/\tsun8i-r16-parrot.dtb \\\n\tsun8i-r16-x6100.dtb/' arch/arm/dts/Makefile
 grep -q sun8i-r16-x6100.dtb arch/arm/dts/Makefile
@@ -22,10 +25,11 @@ sed 's/^CONFIG_VIDEO_LCD_MODE=.*/CONFIG_VIDEO_LCD_MODE="x:480,y:800,depth:18,pcl
 cat "$HERE/menu.config" >> configs/x6100_menu_defconfig
 export CROSS_COMPILE=arm-linux-gnueabihf-
 make -s x6100_menu_defconfig
-for o in VIDEO_LCD_ST7701S_X6100 CONSOLE_ROTATION VIDEO_FONT_16X32 CMD_GPIO VIDEO_ANSI; do
+for o in VIDEO_LCD_ST7701S_X6100 CONSOLE_ROTATION VIDEO_FONT_16X32 CMD_GPIO VIDEO_ANSI AXP221_POWER CMD_POWEROFF; do
     grep -q "^CONFIG_$o=y" .config || { echo "CONFIG_$o not set"; exit 1; }
 done
 make -s -j"$(nproc)"
 cp u-boot-sunxi-with-spl.bin "$HERE/out/u-boot-x6100-menu.bin"
 strings "$HERE/out/u-boot-x6100-menu.bin" | grep -m1 "U-Boot SPL"
+strings "$HERE/out/u-boot-x6100-menu.bin" | grep -q "X6100 POWER key" || { echo "no pek command"; exit 1; }
 ls -la "$HERE/out"
