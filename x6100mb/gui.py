@@ -10,7 +10,7 @@ import tkinter as tk
 import webbrowser
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from . import devices, i18n
+from . import backup, devices, i18n
 from .compose import DOOM_LOGO, DOOM_NAME, MAX_ENTRIES, MAX_SECS, XIEGU_DEFAULTS, compose, resolve_extras
 from .i18n import t
 from .image import SourceSystem, cache_dir, open_source
@@ -748,7 +748,7 @@ class App:
 
     def _find_data(self):
         """The DATA partition of a card in the reader, mounted by the computer"""
-        from . import backup
+
         try:
             vols = backup.find_data_volumes()
         except Exception:
@@ -762,7 +762,7 @@ class App:
                                     state="disabled")
 
     def backup_data(self):
-        from . import backup
+
         self._find_data()
         if not self.data_vol:
             messagebox.showinfo(APP, t("Nie widać partycji DATA. Włóż kartę z radia do czytnika, poczekaj, aż "
@@ -777,7 +777,7 @@ class App:
 
     def _take_data(self, tmp):
         """Before the card is erased: its DATA copied aside and kept as a .zip; the files for the new card"""
-        from . import backup
+
         if not (self.keep_data.get() and self.data_vol and os.path.isdir(self.data_vol)):
             return None, None
         src = self.data_vol
@@ -938,7 +938,8 @@ class App:
             try:
                 self.q.put(("result", fn(*args)))
             except Exception as e:
-                self.q.put(("error", str(e)))
+                log = backup.log_error(text)
+                self.q.put(("error", str(e) + ("\n\n" + t("Szczegóły: {p}", p=log) if log else "")))
 
         threading.Thread(target=run, daemon=True).start()
 

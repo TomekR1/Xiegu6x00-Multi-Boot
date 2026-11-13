@@ -188,6 +188,7 @@ EN = {
         "Add a system from an image first (e.g. OpenX6X00): Doom starts with its kernel.",
     "Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.":
         "Bluetooth in Doom does not work with {name}'s kernel (USB does). Move e.g. OpenX6X00 above it.",
+    "Szczegóły: {p}": "Details: {p}",
     "Mysz i klawiatura Bluetooth: sparuj je najpierw w {name}, pierwszym systemie z obrazu na liście. Szczegóły: Przeczytaj najpierw.":
         "Bluetooth mouse and keyboard: pair them first in {name}, the first system from an image on the "
         "list. More: Read first.",

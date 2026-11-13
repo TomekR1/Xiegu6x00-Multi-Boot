@@ -414,8 +414,8 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         fat.add_file("doom.txt", (
             t("# Doom: glosnosc efektow i muzyki 0..200 (%)") + "\r\nvolume=100\r\nmusic=100\r\n" +
             t("# Glosnosc glosnika radia (AF) 0..55, ustawiana przy starcie Dooma") + "\r\n"
-            "rxvol=45\r\n" +
-            t("# Wycisz odbiornik radia w Doomie (szum w tle); 0: zostaw jak byl") + "\r\nrxmute=1\r\n" +
+            "rxvol=20\r\n" +
+            t("# Wycisz odbiornik radia w Doomie (szum w tle); 0: zostaw jak byl") + "\r\nrxmute=0\r\n" +
             t("# Wyjscie dzwieku procesora do plyty radia 0..63") + "\r\nheadphone=47\r\n" +
             t("# Tryb odtwarzania plyty radia (jak OpenX6X00); 0: wylaczony") + "\r\nrecord=1\r\n" +
             t("# Dziennik startu Dooma: doom-log.txt na tej partycji") + "\r\n" +

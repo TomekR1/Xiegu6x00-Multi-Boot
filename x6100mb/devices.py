@@ -22,6 +22,8 @@ class DeviceError(Exception):
 
 def _run(cmd, **kw):
     kw.setdefault("capture_output", True)
+    if "input" not in kw:
+        kw.setdefault("stdin", subprocess.DEVNULL)      # a windowed app has no console to inherit
     if WIN:
         kw.setdefault("creationflags", 0x08000000)       # CREATE_NO_WINDOW
     return subprocess.run(cmd, **kw)
@@ -251,6 +253,16 @@ def pread(fd, n, pos):
 
 
 def sync(fd):
+    if WIN:
+        # os.fsync on a whole disk (\\.\PhysicalDriveN) fails as "[Errno 9] Bad file descriptor" when
+        # Windows' flush of it fails; the disk is opened unbuffered anyway and the read-back checks it
+        try:
+            import ctypes
+            import msvcrt
+            ctypes.windll.kernel32.FlushFileBuffers(msvcrt.get_osfhandle(fd))
+        except Exception:
+            pass
+        return
     os.fsync(fd)
     if not WIN and not MAC and hasattr(os, "posix_fadvise"):
         try:
@@ -291,7 +303,8 @@ def run_elevated(args):
     """Starts the helper with admin rights; returns a Popen (or None on Windows, where it is detached)"""
     cmd = helper_command(args)
     if is_admin():
-        return subprocess.Popen(cmd, cwd=_src_dir())
+        null = subprocess.DEVNULL
+        return subprocess.Popen(cmd, cwd=_src_dir(), stdin=null, stdout=null, stderr=null)
     if WIN:
         import ctypes
         params = subprocess.list2cmdline(cmd[1:])

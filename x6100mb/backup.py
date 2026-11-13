@@ -80,6 +80,20 @@ def backups_dir():
     return os.path.join(docs if os.path.isdir(docs) else home, "Xiegu Multi Patcher", "DATA")
 
 
+def log_error(where):
+    """The current exception's traceback appended to log.txt next to the backups; its path (or None)"""
+    import traceback
+    try:
+        path = os.path.join(os.path.dirname(backups_dir()), "log.txt")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + where + " (" + sys.platform + ")\n")
+            f.write(traceback.format_exc() + "\n")
+        return path
+    except Exception:
+        return None
+
+
 def save_zip(src, zip_path=None):
     """The volume's files as a .zip on the computer; its path"""
     if zip_path is None:

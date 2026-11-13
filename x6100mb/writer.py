@@ -46,7 +46,10 @@ def write_image_file(plan, path, progress=None):
                 done += len(c)
                 progress("write", done, total)
         f.flush()
-        os.fsync(f.fileno())
+        try:
+            os.fsync(f.fileno())
+        except OSError:             # Windows: a failed flush reads as "Bad file descriptor"; verified below
+            pass
     os.replace(tmp, path)
     verify(plan, path, progress)
     progress("done", total, total)
@@ -118,6 +121,8 @@ def main_write_plan(argv):
         write_device(plan, dev, progress, allow_file=allow_file)
         return 0
     except Exception as e:      # reported to the GUI through the progress file
+        from .backup import log_error
+        log_error("write-plan " + dev)
         progress("error", 0, 1, str(e))
         print(f"error: {e}", file=sys.stderr)
         return 1
