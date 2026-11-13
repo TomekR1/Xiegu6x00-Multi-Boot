@@ -120,5 +120,30 @@ class ComposeTest(unittest.TestCase):
             self.assertIn("mmc write 0x45100000 0 1", script)
 
 
+    def test_doom_extra(self):
+        import lzma
+        from x6100mb.compose import resolve_extras
+        a = os.path.join(self.tmp, "a.img")
+        fake_card(a, kernel=b"K" * 4000)
+        rootfs = os.path.join(self.tmp, "doom.ext4.xz")
+        with lzma.open(rootfs, "wb") as f:
+            f.write(b"D" * (2 << 20))
+        sa = SourceSystem(a, a)
+        ents = resolve_extras([{"kind": "sd", "name": "A", "sys": sa}, {"kind": "doom", "name": "DOOM"}], rootfs)
+        plan = compose(ents, data_mb=40)
+        out = os.path.join(self.tmp, "doom.img")
+        write_image_file(plan, out)
+        with open(out, "rb") as f:
+            parts = {p[0]: p for p in read_mbr(f)}
+            boot = FatReader(f, parts[1][2] * SECTOR)
+            self.assertEqual(boot.read_file("SYS2/ZIMAGE"), b"K" * 4000)      # the donor's kernel
+            script = parse_script_image(boot.read_file("boot.scr"))
+            self.assertIn("root=/dev/mmcblk0p5", script)
+            f.seek(parts[5][2] * SECTOR)
+            self.assertEqual(f.read(4), b"DDDD")
+        with self.assertRaises(Exception):                                 # no system to lend a kernel
+            resolve_extras([{"kind": "doom", "name": "DOOM"}], rootfs)
+
+
 if __name__ == "__main__":
     unittest.main()

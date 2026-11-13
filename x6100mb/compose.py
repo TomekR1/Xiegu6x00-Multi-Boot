@@ -50,6 +50,24 @@ def project_logo(entry):
     return catalog.fetch_logo(catalog.source_for(entry["name"]), cache_dir())
 
 
+DOOM_NAME = "DOOM"
+
+
+def resolve_extras(entries, rootfs_xz=None):
+    """The app's extras (Doom) as systems of their own: their root filesystem, booted with the
+    kernel and device tree of the first system from an image on the list"""
+    if not any(e["kind"] == "doom" for e in entries):
+        return entries
+    from .image import ExtraSystem, cache_dir, extra_rootfs
+    donor = next((e["sys"] for e in entries if e["kind"] == "sd"), None)
+    out = []
+    for e in entries:
+        if e["kind"] == "doom":
+            e = dict(e, kind="sd", sys=ExtraSystem(e["name"], extra_rootfs(cache_dir(), rootfs_xz), donor))
+        out.append(e)
+    return out
+
+
 def tile(entry):
     """What the graphic menu shows for an entry: its name, a logo of one's own, else the project's"""
     if entry.get("logo"):

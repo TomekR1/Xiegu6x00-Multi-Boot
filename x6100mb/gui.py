@@ -11,7 +11,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import devices
-from .compose import KEYS, MAX_ENTRIES, XIEGU_DEFAULTS, compose
+from .compose import DOOM_NAME, KEYS, MAX_ENTRIES, XIEGU_DEFAULTS, compose, resolve_extras
 from .image import SourceSystem, cache_dir, open_source
 from .writer import Progress, write_device, write_image_file
 
@@ -73,6 +73,8 @@ class App:
                           ("W dół", lambda: self.move(1)), ("Domyślny", self.set_default),
                           ("Logo…", self.choose_logo), ("Podgląd menu", self.preview), ("Usuń", self.remove)):
             ttk.Button(btns, text=text, command=cmd, width=17).pack(fill="x", pady=2)
+
+        self._build_extras(top)
 
         opts = ttk.LabelFrame(top, text="2. Ustawienia menu")
         opts.pack(fill="x", pady=(8, 0))
@@ -139,6 +141,8 @@ class App:
             key = KEYS[i][0] + ("  ★" if i == self.default else "")
             if e["kind"] == "xiegu":
                 info = "system Xiegu z pamięci wewnętrznej radia (nic tam nie jest zmieniane)"
+            elif e["kind"] == "doom":
+                info = "klasyczny Doom (Freedoom), z jądrem pierwszego systemu z obrazu na liście"
             else:
                 info = e["sys"].summary()
                 if e["sys"].warnings:
@@ -189,6 +193,40 @@ class App:
             self.q.put(("progress", "download", done, total, rel["asset"]))
         path = catalog.download(source, rel, cache_dir(), prog)
         return self._analyse(path, catalog.label(source, rel))
+
+    def _build_extras(self, top):
+        """Extras: Doom, the easter egg (a tile of its own, not among the systems to fetch)"""
+        box = ttk.LabelFrame(top, text="Extras")
+        box.pack(fill="x", pady=(8, 0))
+        self._doom_img = None
+        try:
+            from . import menu_gfx
+            if menu_gfx.HAVE_PIL:
+                import base64
+                import io
+                buf = io.BytesIO()
+                menu_gfx.default_logo(DOOM_NAME, size=56, bg=(220, 220, 220)).save(buf, "PNG")
+                self._doom_img = tk.PhotoImage(data=base64.b64encode(buf.getvalue()))
+        except Exception:
+            self._doom_img = None
+        b = ttk.Button(box, text="  Doom", image=self._doom_img, compound="left", command=self.add_doom)
+        b.pack(side="left", padx=8, pady=6)
+        ttk.Label(box, text="Klasyczny Doom na radiu (Freedoom). Gałka VFO obraca, F1 lub PTT strzela, "
+                            "F2 otwiera drzwi, GEN to menu gry.", wraplength=560,
+                  foreground="#555").pack(side="left", padx=4)
+
+    def add_doom(self):
+        if any(e["kind"] == "doom" for e in self.entries):
+            return
+        if len(self.entries) >= MAX_ENTRIES:
+            messagebox.showwarning(APP, f"Menu ma najwyżej {MAX_ENTRIES} pozycji.")
+            return
+        if not any(e["kind"] == "sd" for e in self.entries):
+            messagebox.showinfo(APP, "Doom uruchamia się z jądrem systemu z obrazu (np. OpenX6X00). "
+                                     "Dodaj najpierw taki system, potem Dooma.")
+            return
+        self.entries.append({"kind": "doom", "name": DOOM_NAME})
+        self._redraw(len(self.entries) - 1)
 
     def add_xiegu(self):
         if any(e["kind"] == "xiegu" for e in self.entries):
@@ -306,7 +344,7 @@ class App:
 
     def _plan(self, card_bytes=None):
         timeout, data_mb, xiegu = self._settings()
-        ents = [dict(e) for e in self.entries]
+        ents = resolve_extras([dict(e) for e in self.entries])
         return compose(ents, default=self.default, timeout_s=timeout, data_mb=data_mb,
                        card_bytes=card_bytes, xiegu=xiegu, data_mode=self.data_mode.get())
 

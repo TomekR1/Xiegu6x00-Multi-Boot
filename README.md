@@ -37,6 +37,30 @@ w aplikacji, prosto z wydań ich autorów.
 Zapis kasuje całą zawartość wybranej karty. Aplikacja pokazuje tylko karty wymienne
 i nigdy dysku systemowego, ale sprawdź nazwę i rozmiar karty przed potwierdzeniem.
 
+## Extras: Doom
+
+W sekcji **Extras** jest kafelek **Doom**: klasyczny Doom na X6100, z darmowymi mapami i grafiką
+[Freedoom](https://freedoom.github.io/). Dodaje się go do menu jak system (potrzebny jest na
+karcie co najmniej jeden system z obrazu, bo Doom uruchamia się z jego jądrem).
+
+| Na radiu | W grze |
+|---|---|
+| gałka VFO | obrót |
+| gałka VOL | do przodu / do tyłu, w menu góra / dół |
+| gałka MFK | zmiana broni |
+| BAND ▲ / ▼ | do przodu / do tyłu |
+| F1 albo PTT | strzał |
+| F2 | użyj (drzwi, przełączniki) |
+| F3 | Enter |
+| F4 / F5 | krok w bok |
+| GEN | menu gry |
+| APP | mapa |
+| KEY / MSG | tak / nie |
+| AM | bieg |
+| POWER | wyłączenie radia |
+
+Wyjście z gry wraca do menu startowego. Gra jest bez dźwięku.
+
 ## Systemy do pobrania w aplikacji
 
 | System | Źródło |
@@ -146,6 +170,14 @@ v2026.07 z:
 - inicjalizacją ST7701S przeniesioną ze sterownika Linuksa (`panel-jinglitai-jlt4013a.c`,
   GPL-2.0), wysyłaną programowym SPI na pinach PL7 (CS), PL8 (MOSI), PL9 (SCK), PL10 (D/C);
 - konsolą obróconą o 270° (jak `fbcon=rotate:3`), czcionką 16×32, kolorami ANSI i `bmp display`.
+
+### Doom (`extras/doom/`)
+
+`doomgeneric_x6100.c` to warstwa [doomgeneric](https://github.com/ozkl/doomgeneric) dla radia,
+uruchamiana jako `/sbin/init` własnego, małego systemu plików: obraz 320×200 skalowany do 640×480
+na obróconym framebufferze, klawisze i gałki z `/dev/input`. `build.sh` buduje ją statycznie na
+ARM, dokłada Freedoom i składa partycję ext4; aplikacja ma ją w sobie i uruchamia z jądrem
+pierwszego systemu z obrazu na karcie (wszystkie potrzebne sterowniki są w nim wbudowane).
 
 ### Budowanie
 

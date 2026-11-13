@@ -45,8 +45,23 @@ jobs:
           name: u-boot-x6100-menu
           path: uboot/out/u-boot-x6100-menu.bin
 
+  doom:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q gcc-arm-linux-gnueabihf e2fsprogs unzip xz-utils
+      - name: Doom for the X6100 (the Extras easter egg)
+        run: ./extras/doom/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: doom-x6100-rootfs
+          path: extras/doom/out/doom-x6100-rootfs.ext4.xz
+
   apps:
-    needs: [test, uboot]
+    needs: [test, uboot, doom]
     strategy:
       fail-fast: false
       matrix:
@@ -70,6 +85,8 @@ jobs:
         run: python -c "import tkinter; print(tkinter.TkVersion)"
       - uses: actions/download-artifact@v4
         with: {name: u-boot-x6100-menu, path: x6100mb/data}
+      - uses: actions/download-artifact@v4
+        with: {name: doom-x6100-rootfs, path: x6100mb/data}
       - run: pip install pyinstaller==6.11.1 pillow==11.0.0 certifi
       - name: Build
         shell: bash
@@ -109,12 +126,14 @@ jobs:
   # The app fetches the newest systems itself and builds a card from them: a check only, nothing
   # of it is published (the release carries the app; users fetch the systems they want in it)
   live-check:
-    needs: [test, uboot]
+    needs: [test, uboot, doom]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: {name: u-boot-x6100-menu, path: x6100mb/data}
+      - uses: actions/download-artifact@v4
+        with: {name: doom-x6100-rootfs, path: x6100mb/data}
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - name: Catalog (live, newest releases on GitHub)
@@ -124,17 +143,18 @@ jobs:
         env: {GITHUB_TOKEN: "${{ github.token }}"}
         run: |
           pip install pillow==11.0.0 certifi
-          python x6100_multiboot.py build -o "$RUNNER_TEMP/check.img" --xiegu --data separate --data-mb 64 \
+          python x6100_multiboot.py build -o "$RUNNER_TEMP/check.img" --doom --xiegu --data separate --data-mb 64 \
             openx6x00@latest openx6100@latest cx8anm@latest > build.log
           tail -c 700 build.log
           grep -q "menu, ekran" build.log
           grep -q "'graphics': True" build.log
+          grep -q "'name': 'DOOM'" build.log
           rm -f "$RUNNER_TEMP/check.img"
 
   # A release from a tag v*, or from Actions > Build > Run workflow with a version number (GitHub then
   # makes the tag): the apps and the menu's U-Boot. A push to main builds and checks everything only.
   release:
-    needs: [apps, live-check, uboot]
+    needs: [apps, live-check, uboot, doom]
     # One app that did not build (GitHub's macOS queue) does not hold back the others
     if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || inputs.release_tag != '') && needs.uboot.result == 'success' && needs.live-check.result == 'success' }}
     runs-on: ubuntu-latest
@@ -170,6 +190,8 @@ jobs:
 
             Systemy radia (OpenX6X00, OpenX6100, CX8ANM, 1KO125, IU1WXY, R1CBU) pobierasz w aplikacji
             przyciskiem **+ Z internetu…**, prosto z wydań ich autorów. Instrukcja: README w repozytorium.
+
+            W sekcji **Extras** aplikacji: klasyczny Doom na radiu (Freedoom).
 
             `u-boot-x6100-menu.bin`: U-Boot menu z obsługą ekranu X6100 (aplikacja ma go w sobie).
 

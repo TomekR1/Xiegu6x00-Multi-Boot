@@ -59,6 +59,8 @@ def cli(argv):
     b = sub.add_parser("build")
     b.add_argument("-o", "--output", required=True)
     b.add_argument("--xiegu", action="store_true", help="an entry for Xiegu's system on the eMMC (last)")
+    b.add_argument("--doom", action="store_true", help="the Doom easter egg (with the first system's kernel)")
+    b.add_argument("--doom-rootfs", help="its root filesystem (.ext4.xz; default: the one in the app)")
     b.add_argument("--default", type=int, default=1, help="default entry, 1 = F1")
     b.add_argument("--timeout", type=int, default=5, help="seconds before the default starts (0-9)")
     b.add_argument("--data", choices=["shared", "separate"], default="shared",
@@ -103,6 +105,9 @@ def cli(argv):
         systems = _load(a.images)
         names = a.names.split(",") if a.names else [s.name for s in systems]
         entries = [{"kind": "sd", "name": n, "sys": s} for n, s in zip(names, systems)]
+        if a.doom:
+            from .compose import DOOM_NAME
+            entries.append({"kind": "doom", "name": DOOM_NAME})
         if a.xiegu:
             entries.append({"kind": "xiegu", "name": "Xiegu (eMMC)"})
         for spec in a.logo:
@@ -116,6 +121,8 @@ def cli(argv):
         elif a.uboot:
             from .image import UBoot
             ub = UBoot(a.uboot)
+        from .compose import resolve_extras
+        entries = resolve_extras(entries, a.doom_rootfs)
         plan = compose(entries, default=a.default - 1, timeout_s=a.timeout, data_mb=a.data_mb, uboot_from=ub,
                        data_mode=a.data, graphics=not a.no_graphics)
         if a.script_only:
