@@ -120,3 +120,23 @@ def snapshot(src, dest):
             os.chmod(os.path.join(dirpath, f), 0o644)
     return copied
 
+
+
+def restore_zip(zip_path, dest):
+    """A backup .zip unpacked onto the DATA partition dest (files of the same name replaced); how many.
+    Only plain relative paths: nothing outside dest."""
+    n = 0
+    root = os.path.realpath(dest)
+    with zipfile.ZipFile(zip_path) as z:
+        for info in z.infolist():
+            if info.is_dir():
+                continue
+            rel = info.filename.replace("\\", "/")
+            target = os.path.realpath(os.path.join(dest, *rel.split("/")))
+            if not target.startswith(root + os.sep):
+                continue
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with z.open(info) as src, open(target, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            n += 1
+    return n

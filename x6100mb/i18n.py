@@ -189,6 +189,13 @@ EN = {
     "Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.":
         "Bluetooth in Doom does not work with {name}'s kernel (USB does). Move e.g. OpenX6X00 above it.",
     "Szczegóły: {p}": "Details: {p}",
+    "Przywróć DATA na kartę…": "Restore DATA to the card…",
+    "Kopia DATA do przywrócenia": "DATA backup to restore",
+    "Kopie DATA": "DATA backups",
+    "Przywrócić ustawienia z {zip} na {vol}?\nPliki o tych samych nazwach zostaną zastąpione.":
+        "Restore the settings from {zip} onto {vol}?\nFiles of the same name will be replaced.",
+    "Przywrócono {n} plików na {vol}. Wysuń kartę bezpiecznie i włóż ją do radia.":
+        "{n} files restored onto {vol}. Eject the card safely and put it in the radio.",
     "Mysz i klawiatura Bluetooth: sparuj je najpierw w {name}, pierwszym systemie z obrazu na liście. Szczegóły: Przeczytaj najpierw.":
         "Bluetooth mouse and keyboard: pair them first in {name}, the first system from an image on the "
         "list. More: Read first.",

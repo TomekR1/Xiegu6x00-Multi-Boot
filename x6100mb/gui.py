@@ -441,7 +441,8 @@ class App:
         self.keep_data = tk.BooleanVar(value=True)
         self.keep_box = ttk.Checkbutton(keep, variable=self.keep_data, text="")
         self.keep_box.pack(side="left")
-        ttk.Button(keep, text=t("Kopia DATA na komputer…"), command=self.backup_data).pack(side="right")
+        ttk.Button(keep, text=t("Przywróć DATA na kartę…"), command=self.restore_data).pack(side="right")
+        ttk.Button(keep, text=t("Kopia DATA na komputer…"), command=self.backup_data).pack(side="right", padx=(0, 6))
 
         self.status = tk.StringVar(value=t("Dodaj obraz karty systemu (.img, .img.zip lub .img.xz), np. OpenX6X00."))
         foot = ttk.Frame(top, style="Card.TFrame", padding=(12, 8))
@@ -802,6 +803,30 @@ class App:
             messagebox.showerror(APP, str(e))
             return
         messagebox.showinfo(APP, t("Kopia ustawień zapisana:\n{path}", path=path))
+
+    def restore_data(self):
+        """A backup .zip (made here, or kept when a card was written) back onto the card's DATA partition"""
+        self._find_data()
+        if not self.data_vol:
+            messagebox.showinfo(APP, t("Nie widać partycji DATA. Włóż kartę z radia do czytnika, poczekaj, aż "
+                                       "komputer ją pokaże, i kliknij Odśwież."))
+            return
+        os.makedirs(backup.backups_dir(), exist_ok=True)
+        path = filedialog.askopenfilename(title=t("Kopia DATA do przywrócenia"), initialdir=backup.backups_dir(),
+                                          **_filetypes([(t("Kopie DATA"), "*.zip")]))
+        if not path:
+            return
+        if not messagebox.askyesno(APP, t("Przywrócić ustawienia z {zip} na {vol}?\nPliki o tych samych nazwach "
+                                          "zostaną zastąpione.", zip=os.path.basename(path), vol=self.data_vol)):
+            return
+        try:
+            n = backup.restore_zip(path, self.data_vol)
+        except Exception as e:
+            log = backup.log_error("restore DATA")
+            messagebox.showerror(APP, str(e) + ("\n\n" + t("Szczegóły: {p}", p=log) if log else ""))
+            return
+        messagebox.showinfo(APP, t("Przywrócono {n} plików na {vol}. Wysuń kartę bezpiecznie i włóż ją do radia.",
+                                   n=n, vol=self.data_vol))
 
     def _take_data(self, tmp):
         """Before the card is erased: its DATA copied aside and kept as a .zip; the files for the new card"""
