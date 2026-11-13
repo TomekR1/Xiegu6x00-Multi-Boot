@@ -90,6 +90,11 @@ EN = {
     "Język:": "Language:",
     "1. Systemy w menu": "1. Systems in the menu",
     "Systemy w menu": "Systems in the menu",
+    "Menu na ekranie radia": "The menu on the radio's screen",
+    "Kliknij kafelek, żeby go zaznaczyć; dwuklik zmienia nazwę.": "Click a tile to select it; double-click renames it.",
+    "Tu zobaczysz menu dokładnie tak, jak pokaże je radio. Zacznij od „+ Z internetu…”: wybierz system, a aplikacja sama go pobierze.":
+        "Here you see the menu just as the radio will show it. Start with “+ From the internet…”: pick a "
+        "system and the app fetches it.",
     "Ustawienia menu": "Menu settings",
     "Zapis karty": "Writing the card",
     "Lista jest pusta. Zacznij od „+ Z internetu…”: wybierz system, a aplikacja sama go pobierze.":
@@ -246,7 +251,7 @@ DOOM_README = {
     "pl": """Doom na X6100
 
 Doom uruchamia się z jądrem PIERWSZEGO systemu z obrazu na liście (np. OpenX6X00). Kolejność
-zmienisz przyciskami W górę / W dół.
+zmienisz strzałkami ← → pod menu.
 
 Sterowanie radiem
   Gałka VFO: obrót    Gałka VOL: przód/tył, w menu góra/dół    Gałka MFK: broń
@@ -275,7 +280,7 @@ Dźwięk
     "en": """Doom on the X6100
 
 Doom starts with the kernel of the FIRST system from an image on the list (e.g. OpenX6X00). Change
-the order with Up / Down.
+the order with the ← → arrows under the menu.
 
 The radio's controls
   VFO knob: turn    VOL knob: forward/back, up/down in the menus    MFK knob: weapon

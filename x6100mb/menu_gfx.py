@@ -163,7 +163,8 @@ def render_menu(entries, default, selected=None, title="X6100 MULTIBOOT"):
     img = Image.new("RGB", (W, H), (0, 0, 0))
     d = ImageDraw.Draw(img)
     d.text((16, 16), title, font=_font(24), fill=WHITE, anchor="lm")
-    d.text((W - 16, 16), "F1-F%d" % max(1, len(entries)), font=_font(18), fill=GREY, anchor="rm")
+    if entries:
+        d.text((W - 16, 16), "F1-F%d" % len(entries), font=_font(18), fill=GREY, anchor="rm")
     d.line([(0, 31), (W, 31)], fill=TILE_EDGE, width=1)
     # row 1 (32..63) is the countdown's: left black
     for i, e in enumerate(entries):

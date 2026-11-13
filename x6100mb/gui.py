@@ -11,7 +11,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import devices, i18n
-from .compose import DOOM_LOGO, DOOM_NAME, KEYS, MAX_ENTRIES, XIEGU_DEFAULTS, compose, resolve_extras
+from .compose import DOOM_LOGO, DOOM_NAME, MAX_ENTRIES, XIEGU_DEFAULTS, compose, resolve_extras
 from .i18n import t
 from .image import SourceSystem, cache_dir, open_source
 from .writer import Progress, write_device, write_image_file
@@ -20,9 +20,9 @@ APP = "Xiegu Multi Patcher"
 AUTHOR_URL = "https://www.qrz.com/db/SQ6RT"
 HEAD_BG, HEAD_FG, HEAD_SUB, LINK = "#0f2742", "#ffffff", "#a9bcd3", "#8fc3ff"
 HINT = "#9aa3ad"
+SCREEN_W, SCREEN_H = 600, 360          # the radio's 800x480, at 3/4
 RED, RED_HOVER = "#d32f2f", "#ef4444"
 ACCENT = "#57c8ff"
-STRIPE = "#232323"
 PAGE_BG, TEXT_FG = "#1c1c1c", "#e6e6e6"
 PHASES = {"download": "Pobieranie", "prepare": "Przygotowanie karty", "write": "Zapis",
           "sync": "Opróżnianie bufora karty",
@@ -43,8 +43,8 @@ class App:
         self.q = queue.Queue()
         self.busy = False
         self.cards = []
-        self.thumbs = {}                  # key -> PhotoImage of the list's logos
-        self._thumb_jobs = set()
+        self.tiles = {}                   # key -> what the radio's screen shows for an entry
+        self._tile_jobs = set()
         self._build_all()
         self.refresh_cards()
         self.root.after(100, self._poll)
@@ -58,6 +58,7 @@ class App:
             for name, value in keep.items():
                 getattr(self, name).set(value)
             self._toggle_adv()
+        self._redraw()
 
     def switch_lang(self, code):
         """The window again in the other language, with everything set so far"""
@@ -109,44 +110,37 @@ class App:
         author.bind("<Button-1>", lambda e: webbrowser.open(AUTHOR_URL))
         tk.Frame(head, bg=ACCENT, height=3).pack(fill="x", side="bottom")
 
-        box = self._section(top, 1, t("Systemy w menu"), expand=True)
-        cols = ("key", "name", "info")
-        self.tree = ttk.Treeview(box, columns=cols, show="tree headings", height=4, selectmode="browse",
-                                 style="Systems.Treeview")
-        self.tree.column("#0", width=64, stretch=False, anchor="center")
-        self.tree.tag_configure("odd", background=STRIPE)
-        for c, h, w in (("key", "Klawisz", 70), ("name", "Nazwa w menu", 170), ("info", "Zawartość", 330)):
-            self.tree.heading(c, text=t(h))
-            self.tree.column(c, width=w, stretch=(c == "info"), anchor="center" if c == "key" else "w")
+        box = self._section(top, 1, t("Menu na ekranie radia"), expand=True)
         btns = ttk.Frame(box)
-        btns.pack(side="right", fill="y", padx=(10, 4), pady=4)
+        btns.pack(side="right", fill="y", padx=(12, 2), pady=2)
         for text, cmd, accent in (("+ Z internetu…", self.add_online, True), ("+ Obraz karty…", self.add_image, False),
                                   ("+ Xiegu z eMMC", self.add_xiegu, False)):
             ttk.Button(btns, text=t(text), command=cmd, width=18,
                        style="Accent.TButton" if accent else "TButton").pack(fill="x", pady=2)
-        ttk.Separator(btns).pack(fill="x", pady=6)
-        ttk.Button(btns, text="▶  " + t("Podgląd menu"), command=self.preview, width=18).pack(fill="x", pady=2)
+        self._build_extras(btns)
         left = ttk.Frame(box)
         left.pack(side="left", fill="both", expand=True)
+        self.screen = tk.Canvas(left, width=SCREEN_W, height=SCREEN_H, bg="#000000", highlightthickness=2,
+                                highlightbackground="#3a3a3a", cursor="hand2")
+        self.screen.pack(side="top", anchor="w")
+        self.screen.bind("<Button-1>", self._screen_click)
+        self.screen.bind("<Double-1>", lambda e: (self._screen_click(e), self.rename()))
+        self.info = ttk.Label(left, text="", foreground=HINT, wraplength=SCREEN_W, justify="left")
+        self.info.pack(side="top", anchor="w", pady=(6, 0))
         tools = ttk.Frame(left)
-        tools.pack(side="bottom", fill="x", padx=4, pady=(6, 2))
-        for text, cmd in (("↑", lambda: self.move(-1)), ("↓", lambda: self.move(1)),
+        tools.pack(side="top", fill="x", pady=(6, 0))
+        for text, cmd in (("←", lambda: self.move(-1)), ("→", lambda: self.move(1)),
                           ("★  " + t("Domyślny"), self.set_default), ("✎  " + t("Zmień nazwę"), self.rename),
                           ("▣  " + t("Logo…"), self.choose_logo)):
             ttk.Button(tools, text=text, command=cmd, width=3 if len(text) == 1 else 0).pack(side="left", padx=(0, 6))
-        ttk.Button(tools, text="✕  " + t("Usuń"), command=self.remove).pack(side="right")
-        self.tree.pack(in_=left, side="top", fill="both", expand=True, padx=(4, 0), pady=(4, 0))
-        self.tree.lift(left)
-        self.empty = ttk.Label(self.tree, text=t("Lista jest pusta. Zacznij od „+ Z internetu…”: wybierz system, "
-                                                 "a aplikacja sama go pobierze."), foreground=HINT,
-                               wraplength=380, justify="center", font=_font(11))
-        self.tree.bind("<Double-1>", lambda e: self.rename())
+        ttk.Button(tools, text="✕  " + t("Usuń"), command=self.remove).pack(side="left", padx=(12, 0))
+        self.selected = None
 
-        self._build_extras(top)
 
         opts = self._section(top, 2, t("Ustawienia menu"))
         ttk.Label(opts, text=t("Czas na wybór (s):")).grid(row=0, column=0, sticky="w", **pad)
         self.timeout = tk.StringVar(value="5")
+        self.timeout.trace_add("write", lambda *a: self._render() if hasattr(self, "screen") else None)
         ttk.Spinbox(opts, from_=0, to=9, textvariable=self.timeout, width=6).grid(row=0, column=1, sticky="w")
         ttk.Label(opts, text=t("DATA w pliku .img (MB):")).grid(row=0, column=2, sticky="w", **pad)
         self.data_mb = tk.StringVar(value="1024")
@@ -216,65 +210,101 @@ class App:
         else:
             self.adv.grid_forget()
 
-    # ---------------------------------------------------------------- list
+    # ---------------------------------------------------------------- the screen
     def _redraw(self, select=None):
-        self.tree.delete(*self.tree.get_children())
-        for i, e in enumerate(self.entries):
-            key = KEYS[i][0] + ("  ★" if i == self.default else "")
-            if e["kind"] == "xiegu":
-                info = t("system Xiegu z pamięci wewnętrznej radia (nic tam nie jest zmieniane)")
-            elif e["kind"] == "doom":
-                donor = next((x for x in self.entries if x["kind"] == "sd"), None)
-                info = (t("klasyczny Doom (Freedoom); jądro i parowania Bluetooth z: {name}", name=donor["name"])
-                        if donor else t("klasyczny Doom (Freedoom), z jądrem pierwszego systemu z obrazu na liście"))
-            else:
-                info = e["sys"].summary()
-                if e["sys"].warnings:
-                    info += "  ⚠ " + "; ".join(e["sys"].warnings)
-            if e.get("logo"):
-                info = "[logo: %s]  %s" % (os.path.basename(e["logo"]), info)
-            self.tree.insert("", "end", iid=str(i), image=self._thumb(e), values=(key, e["name"], info),
-                             tags=("odd",) if i % 2 else ())
-        if self.entries:
-            self.empty.place_forget()
-        else:
-            self.empty.place(relx=0.5, rely=0.55, anchor="center")
-        if select is not None and 0 <= select < len(self.entries):
-            self.tree.selection_set(str(select))
+        if select is not None:
+            self.selected = select
+        if self.selected is not None and not 0 <= self.selected < len(self.entries):
+            self.selected = len(self.entries) - 1 if self.entries else None
+        if self.selected is None and self.entries:
+            self.selected = 0
+        self._render()
+        self._show_info()
 
-    # ---------------------------------------------------------------- logos on the list
-    def _thumb_key(self, e):
+    def _entry_info(self, e):
+        if e["kind"] == "xiegu":
+            return t("system Xiegu z pamięci wewnętrznej radia (nic tam nie jest zmieniane)")
+        if e["kind"] == "doom":
+            donor = next((x for x in self.entries if x["kind"] == "sd"), None)
+            return (t("klasyczny Doom (Freedoom); jądro i parowania Bluetooth z: {name}", name=donor["name"])
+                    if donor else t("klasyczny Doom (Freedoom), z jądrem pierwszego systemu z obrazu na liście"))
+        info = e["sys"].summary()
+        if e["sys"].warnings:
+            info += "  ⚠ " + "; ".join(e["sys"].warnings)
+        return info
+
+    def _show_info(self):
+        i = self.selected
+        if i is None:
+            self.info.configure(text=t("Kliknij kafelek, żeby go zaznaczyć; dwuklik zmienia nazwę."))
+            return
+        e = self.entries[i]
+        text = "F%d  %s%s  ·  %s" % (i + 1, e["name"], "  ★" if i == self.default else "", self._entry_info(e))
+        if e.get("logo"):
+            text += "  ·  logo: " + os.path.basename(e["logo"])
+        self.info.configure(text=text)
+
+    def _tile_key(self, e):
         return (e["kind"], e["name"], e.get("logo"))
 
-    def _thumb(self, e):
-        """The entry's logo, small: the project's is fetched in the background the first time"""
-        from . import menu_gfx
-        if not menu_gfx.HAVE_PIL:
-            return ""
-        key = self._thumb_key(e)
-        if key in self.thumbs:
-            return self.thumbs[key]
-        name = DOOM_NAME if e["kind"] == "doom" else ("Xiegu" if e["kind"] == "xiegu" else e["name"])
-        dkey = ("default",) + key
-        if dkey not in self.thumbs:
-            self.thumbs[dkey] = self._photo(menu_gfx.default_logo(name, size=40, bg=_tree_bg()))
-        img = self.thumbs[dkey]
-        if (e.get("logo") or e["kind"] in ("sd", "doom")) and key not in self._thumb_jobs:
-            self._thumb_jobs.add(key)
-            threading.Thread(target=self._thumb_job, args=(dict(e), key, _tree_bg()), daemon=True).start()
-        return img
+    def _tile(self, e):
+        """What the radio shows for an entry; the project's logo is fetched in the background once"""
+        key = self._tile_key(e)
+        if key in self.tiles:
+            return self.tiles[key]
+        if key not in self._tile_jobs:
+            self._tile_jobs.add(key)
+            threading.Thread(target=self._tile_job, args=(dict(e), key), daemon=True).start()
+        return {"name": e["name"], "logo": e.get("logo") or (DOOM_LOGO if e["kind"] == "doom" else None)}
 
-    def _thumb_job(self, e, key, bg):
-        from . import menu_gfx
+    def _tile_job(self, e, key):
         from .compose import tile
         try:
-            tl = tile(e)
-            if not tl.get("logo"):
-                return
-            img = menu_gfx.load_logo(tl["logo"], size=40, bg=bg, crop=tl.get("crop"))
-            self.q.put(("thumb", key, img))
+            self.q.put(("tile", key, tile(e)))
         except Exception:
-            pass
+            self.q.put(("tile", key, {"name": e["name"], "logo": None}))
+
+    def _render(self):
+        from . import menu_gfx
+        c = self.screen
+        c.delete("all")
+        sx, sy = SCREEN_W / menu_gfx.W, SCREEN_H / menu_gfx.H
+        if menu_gfx.HAVE_PIL:
+            from PIL import Image
+            img = menu_gfx.render_menu([self._tile(e) for e in self.entries],
+                                       min(self.default, max(len(self.entries) - 1, 0)))
+            self._screen_img = self._photo(img.resize((SCREEN_W, SCREEN_H), Image.LANCZOS))
+            c.create_image(0, 0, image=self._screen_img, anchor="nw")
+        else:                               # no Pillow (running from source): names in boxes
+            for i, e in enumerate(self.entries):
+                cx = (menu_gfx.COL_W * i + menu_gfx.COL_W // 2) * sx
+                c.create_rectangle(cx - 72 * sx, 76 * sy, cx + 72 * sx, 372 * sy, outline="#3a4560", width=2)
+                c.create_text(cx, 220 * sy, text=e["name"], fill="#ffffff", width=130 * sx)
+                c.create_text(cx, 435 * sy, text="F%d" % (i + 1), fill="#ffffff", font=_font(14, "bold"))
+        if self.entries:                    # what U-Boot writes in the second row, in its 16x32 font
+            try:
+                secs = max(0, min(9, int(float(self.timeout.get().replace(",", ".")))))
+            except (ValueError, AttributeError):
+                secs = 5
+            from .compose import COUNTDOWN
+            text = t(COUNTDOWN).replace("${bm_default}", str(self.default + 1)).replace("${bm_left}", str(secs))
+            c.create_text(16 * sx, 48 * sy, text=text, anchor="w", fill="#d0d0d0", font=("Courier", 13, "bold"))
+        if not self.entries:
+            c.create_text(SCREEN_W // 2, SCREEN_H // 2, fill="#9aa3ad", width=SCREEN_W - 80, justify="center",
+                          font=_font(12), text=t("Tu zobaczysz menu dokładnie tak, jak pokaże je radio. Zacznij od "
+                                                 "„+ Z internetu…”: wybierz system, a aplikacja sama go pobierze."))
+        if self.selected is not None:
+            cx = menu_gfx.COL_W * self.selected + menu_gfx.COL_W // 2
+            c.create_rectangle((cx - 78) * sx, 70 * sy, (cx + 78) * sx, 472 * sy, outline=ACCENT, width=3,
+                               dash=(6, 4))
+
+    def _screen_click(self, ev):
+        from . import menu_gfx
+        i = int(ev.x / (SCREEN_W / menu_gfx.W) // menu_gfx.COL_W)
+        if 0 <= i < len(self.entries):
+            self.selected = i
+            self._render()
+            self._show_info()
 
     def _photo(self, pil_img):
         import base64
@@ -284,8 +314,7 @@ class App:
         return tk.PhotoImage(data=base64.b64encode(buf.getvalue()))
 
     def _sel(self):
-        s = self.tree.selection()
-        return int(s[0]) if s else None
+        return self.selected
 
     def add_image(self):
         if self.busy:
@@ -324,25 +353,21 @@ class App:
         path = catalog.download(source, rel, cache_dir(), prog)
         return self._analyse(path, catalog.label(source, rel))
 
-    def _build_extras(self, top):
+    def _build_extras(self, col):
         """Extras: Doom, the easter egg (a tile of its own, not among the systems to fetch)"""
-        box = self._section(top, "★", "Extras")
+        ttk.Separator(col).pack(fill="x", pady=(10, 6))
+        ttk.Label(col, text="★  Extras", font=_font(11, "bold")).pack(anchor="w", pady=(0, 4))
         self._doom_img = None
         try:
             from . import menu_gfx
             if menu_gfx.HAVE_PIL:
-                import base64
-                import io
-                buf = io.BytesIO()
-                menu_gfx.load_logo(DOOM_LOGO, size=56, bg=_tree_bg()).save(buf, "PNG")
-                self._doom_img = tk.PhotoImage(data=base64.b64encode(buf.getvalue()))
+                self._doom_img = self._photo(menu_gfx.load_logo(DOOM_LOGO, size=44, bg=_tree_bg()))
         except Exception:
             self._doom_img = None
-        b = ttk.Button(box, text="  Doom", image=self._doom_img, compound="left", command=self.add_doom)
-        b.pack(side="left", padx=8, pady=6)
-        read = tk.Label(box, text="⚠  " + t("Przeczytaj najpierw"), bg=RED, fg="#ffffff", cursor="hand2",
-                        font=_font(13, "bold"), padx=18, pady=12)
-        read.pack(side="left", padx=(4, 8), pady=6)
+        ttk.Button(col, text="  + Doom", image=self._doom_img, compound="left", command=self.add_doom).pack(fill="x")
+        read = tk.Label(col, text="⚠  " + t("Przeczytaj najpierw"), bg=RED, fg="#ffffff", cursor="hand2",
+                        font=_font(12, "bold"), padx=10, pady=9)
+        read.pack(fill="x", pady=(6, 0))
         read.bind("<Button-1>", lambda e: self.doom_readme())
         read.bind("<Enter>", lambda e: read.configure(bg=RED_HOVER))
         read.bind("<Leave>", lambda e: read.configure(bg=RED))
@@ -448,29 +473,6 @@ class App:
             return
         self.entries[i]["logo"] = path
         self._redraw(i)
-
-    def preview(self):
-        from . import menu_gfx
-        if not self.entries:
-            messagebox.showinfo(APP, t("Najpierw dodaj systemy."))
-            return
-        if not menu_gfx.HAVE_PIL:
-            messagebox.showinfo(APP, t("Podgląd wymaga biblioteki Pillow (jest w gotowych aplikacjach)."))
-            return
-        import base64
-        import io
-        from .compose import tile
-        tiles = [tile(e) for e in self.entries]
-        img = menu_gfx.render_menu(tiles, min(self.default, len(tiles) - 1))
-        buf = io.BytesIO()
-        img.save(buf, "PNG")
-        win = tk.Toplevel(self.root)
-        win.title(t("Podgląd menu na ekranie radia (800×480)"))
-        photo = tk.PhotoImage(data=base64.b64encode(buf.getvalue()))
-        lbl = ttk.Label(win, image=photo)
-        lbl.image = photo
-        lbl.pack(padx=8, pady=8)
-        ttk.Label(win, text=t("Na radiu w drugim wierszu odlicza się czas do startu domyślnego systemu.")).pack(pady=(0, 8))
 
     # ---------------------------------------------------------------- cards
     def refresh_cards(self):
@@ -617,10 +619,9 @@ class App:
         try:
             while True:
                 m = self.q.get_nowait()
-                if m[0] == "thumb":
-                    self.thumbs[m[1]] = self._photo(m[2])
-                    sel = self._sel()
-                    self._redraw(sel)
+                if m[0] == "tile":
+                    self.tiles[m[1]] = m[2]
+                    self._render()
                 elif m[0] == "progress":
                     _, phase, done, total, msg = m
                     self.bar["value"] = 1000 * done // max(total, 1)

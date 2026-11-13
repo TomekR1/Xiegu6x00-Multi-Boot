@@ -27,9 +27,9 @@ w aplikacji, prosto z wydań ich autorów.
    Aplikacja pobierze obraz i sprawdzi go. Możesz dodać do 5 pozycji.
    Obraz z dysku dodasz przyciskiem **+ Obraz karty…** (`.img`, `.img.zip`, `.img.xz`).
 2. **+ Xiegu z eMMC**: pozycja w menu, która uruchamia oryginalny system radia.
-3. Ustaw kolejność (**W górę / W dół**), nazwy (dwuklik na liście) i system domyślny
-   (**Domyślny**, ★). **Logo…** podmienia logo na własny obrazek PNG/JPG.
-   **Podgląd menu** pokazuje, jak menu będzie wyglądać na ekranie radia.
+3. Aplikacja od razu pokazuje menu dokładnie tak, jak wyświetli je radio. Kliknij kafelek, żeby go
+   zaznaczyć: strzałkami **← →** zmienisz kolejność, **★ Domyślny** ustawia system startujący sam,
+   dwuklik albo **Zmień nazwę** zmienia napis, a **Logo…** podmienia logo na własny obrazek PNG/JPG.
 4. Wybierz **czas na wybór** (0–9 s) i **partycję DATA** (patrz niżej).
 5. Włóż kartę SD do komputera, wybierz ją na liście i kliknij **Wgraj na kartę**.
    System poprosi o hasło administratora; po zapisie aplikacja sprawdza, czy wszystko się zgadza.
@@ -146,8 +146,8 @@ speaks English and Polish: pick the language at the top right of its window.
 1. **+ From the internet…** fetches a system's image straight from its authors' GitHub releases
    (OpenX6X00, OpenX6100, CX8ANM, 1KO125, IU1WXY, R1CBU); **+ Card image…** adds one from disk.
 2. **+ Xiegu from eMMC** adds the radio's own system.
-3. Set the order, the names (double-click), the default (★), a logo of your own if you like;
-   **Menu preview** shows the radio's screen.
+3. The app shows the menu just as the radio will: click a tile, then move it (**← →**), make it
+   the default (★), rename it (double-click) or give it a logo of your own.
 4. Choose the time to choose and a **shared** or **per-system DATA** partition.
 5. **Write to the card** (it asks for the administrator password, then checks what it wrote),
    or **Save as an .img file…** for balenaEtcher. Writing erases the whole card.
