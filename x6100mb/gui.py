@@ -18,8 +18,10 @@ from .writer import Progress, write_device, write_image_file
 
 APP = "Xiegu Multi Patcher"
 AUTHOR_URL = "https://www.qrz.com/db/SQ6RT"
-HEAD_BG, HEAD_FG, HEAD_SUB, LINK = "#16324f", "#ffffff", "#b9c8da", "#8fc3ff"
-HINT, WARN = "#5b6573", "#b35c00"
+HEAD_BG, HEAD_FG, HEAD_SUB, LINK = "#0f2742", "#ffffff", "#a9bcd3", "#8fc3ff"
+HINT = "#9aa3ad"
+RED, RED_HOVER = "#d32f2f", "#ef4444"
+PAGE_BG, TEXT_FG = "#1c1c1c", "#e6e6e6"
 PHASES = {"download": "Pobieranie", "prepare": "Przygotowanie karty", "write": "Zapis",
           "sync": "Opróżnianie bufora karty",
           "verify": "Weryfikacja", "unzip": "Rozpakowywanie", "done": "Gotowe"}
@@ -211,21 +213,6 @@ class App:
             self.tree.insert("", "end", iid=str(i), image=self._thumb(e), values=(key, e["name"], info))
         if select is not None and 0 <= select < len(self.entries):
             self.tree.selection_set(str(select))
-        self._update_doom_hint()
-
-    def _update_doom_hint(self):
-        """Where Doom's Bluetooth mouse and keyboard must be paired: said where it is seen"""
-        from . import catalog
-        donor = next((x for x in self.entries if x["kind"] == "sd"), None)
-        if donor is None:
-            text, colour = t("Najpierw dodaj system z obrazu (np. OpenX6X00): Doom uruchamia się z jego jądrem."), HINT
-        elif (catalog.source_for(donor["name"]) or {}).get("id") == "r1cbu":
-            text, colour = t("Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.",
-                             name=donor["name"]), WARN
-        else:
-            text, colour = t("Mysz i klawiatura Bluetooth: sparuj je najpierw w {name}, pierwszym systemie z obrazu "
-                             "na liście. Szczegóły: Przeczytaj najpierw.", name=donor["name"]), WARN
-        self.doom_hint.configure(text="ⓘ  " + text, foreground=colour)
 
     # ---------------------------------------------------------------- logos on the list
     def _thumb_key(self, e):
@@ -320,20 +307,18 @@ class App:
                 import base64
                 import io
                 buf = io.BytesIO()
-                menu_gfx.default_logo(DOOM_NAME, size=56, bg=(220, 220, 220)).save(buf, "PNG")
+                menu_gfx.default_logo(DOOM_NAME, size=56, bg=_tree_bg()).save(buf, "PNG")
                 self._doom_img = tk.PhotoImage(data=base64.b64encode(buf.getvalue()))
         except Exception:
             self._doom_img = None
         b = ttk.Button(box, text="  Doom", image=self._doom_img, compound="left", command=self.add_doom)
         b.pack(side="left", padx=8, pady=6)
-        ttk.Button(box, text=t("Przeczytaj najpierw"), command=self.doom_readme).pack(side="left", padx=(0, 8))
-        texts = ttk.Frame(box)
-        texts.pack(side="left", fill="x", expand=True, padx=4)
-        ttk.Label(texts, text=t("Klasyczny Doom na radiu (Freedoom). Gałka VFO obraca, F1 lub PTT strzela, "
-                                "F2 otwiera drzwi, GEN to menu gry."), wraplength=470,
-                  foreground=HINT).pack(anchor="w")
-        self.doom_hint = ttk.Label(texts, text="", wraplength=470)
-        self.doom_hint.pack(anchor="w", pady=(4, 0))
+        read = tk.Label(box, text="⚠  " + t("Przeczytaj najpierw"), bg=RED, fg="#ffffff", cursor="hand2",
+                        font=_font(13, "bold"), padx=18, pady=12)
+        read.pack(side="left", padx=(4, 8), pady=6)
+        read.bind("<Button-1>", lambda e: self.doom_readme())
+        read.bind("<Enter>", lambda e: read.configure(bg=RED_HOVER))
+        read.bind("<Leave>", lambda e: read.configure(bg=RED))
 
     def add_doom(self):
         if any(e["kind"] == "doom" for e in self.entries):
@@ -353,7 +338,8 @@ class App:
         win.title(t("Doom: przeczytaj najpierw"))
         win.transient(self.root)
         txt = tk.Text(win, wrap="word", width=96, height=34, padx=16, pady=12, relief="flat",
-                      font=_font(11), bg="#ffffff", fg="#1c1c1c", highlightthickness=0)
+                      font=_font(11), bg=PAGE_BG, fg=TEXT_FG, highlightthickness=0,
+                      insertbackground=TEXT_FG)
         sb = ttk.Scrollbar(win, orient="vertical", command=txt.yview)
         txt.configure(yscrollcommand=sb.set)
         body = i18n.DOOM_README[i18n.lang()]
@@ -363,8 +349,8 @@ class App:
         for k, line in enumerate(lines):
             heading = line and not line.startswith(" ") and k + 1 < len(lines) and lines[k + 1].startswith(" ")
             txt.insert("end", line + "\n", "h2" if heading else ())
-        txt.tag_configure("h1", font=_font(16, "bold"), foreground=HEAD_BG)
-        txt.tag_configure("h2", font=_font(12, "bold"), foreground=HEAD_BG, spacing1=8)
+        txt.tag_configure("h1", font=_font(16, "bold"), foreground="#ff6b6b")
+        txt.tag_configure("h2", font=_font(12, "bold"), foreground=LINK, spacing1=8)
         txt.configure(state="disabled")
         ttk.Button(win, text="OK", command=win.destroy, style="Accent.TButton", width=12).pack(side="bottom", pady=10)
         sb.pack(side="right", fill="y")
@@ -715,7 +701,14 @@ def _font(size, *style):
 
 
 def _tree_bg():
-    return (255, 255, 255)
+    """The list's background, for the logos' corners"""
+    try:
+        c = ttk.Style().lookup("Treeview", "background") or PAGE_BG
+        if c.startswith("#") and len(c) == 7:
+            return tuple(int(c[i:i + 2], 16) for i in (1, 3, 5))
+    except tk.TclError:
+        pass
+    return (28, 28, 28)
 
 
 def _icon_image(root, size):
@@ -740,10 +733,10 @@ def _icon_image(root, size):
 
 
 def _theme(root):
-    """Sun Valley (sv-ttk, MIT): a light, modern look on all three systems; plain ttk without it"""
+    """Sun Valley (sv-ttk, MIT), dark: a modern look on all three systems; plain ttk without it"""
     try:
         import sv_ttk
-        sv_ttk.set_theme("light", root)
+        sv_ttk.set_theme("dark", root)
     except Exception:
         try:
             ttk.Style().theme_use("clam" if not devices.WIN else "vista")
@@ -752,7 +745,7 @@ def _theme(root):
     st = ttk.Style()
     st.configure("Systems.Treeview", rowheight=48)
     st.configure("TLabelframe.Label", font=_font(11, "bold"))
-    root.configure(bg=st.lookup("TFrame", "background") or "#fafafa")
+    root.configure(bg=PAGE_BG)
 
 
 def _set_icon(root):
