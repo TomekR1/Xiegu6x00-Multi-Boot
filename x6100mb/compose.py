@@ -54,6 +54,8 @@ def project_logo(entry):
 
 
 DOOM_NAME = "DOOM"
+# Freedoom's title picture (its TITLEPIC, BSD-3-Clause, (c) the Freedoom contributors), squared
+DOOM_LOGO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "doom.png")
 
 
 def resolve_extras(entries, rootfs_xz=None):
@@ -75,6 +77,8 @@ def tile(entry):
     """What the graphic menu shows for an entry: its name, a logo of one's own, else the project's"""
     if entry.get("logo"):
         return {"name": entry["name"], "logo": entry["logo"]}
+    if entry["kind"] == "doom" or getattr(entry.get("sys"), "donor", None) is not None:
+        return {"name": entry["name"], "logo": DOOM_LOGO}
     logo = project_logo(entry)
     crop = None
     if logo:

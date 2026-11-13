@@ -11,7 +11,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import devices, i18n
-from .compose import DOOM_NAME, KEYS, MAX_ENTRIES, XIEGU_DEFAULTS, compose, resolve_extras
+from .compose import DOOM_LOGO, DOOM_NAME, KEYS, MAX_ENTRIES, XIEGU_DEFAULTS, compose, resolve_extras
 from .i18n import t
 from .image import SourceSystem, cache_dir, open_source
 from .writer import Progress, write_device, write_image_file
@@ -231,19 +231,19 @@ class App:
         if dkey not in self.thumbs:
             self.thumbs[dkey] = self._photo(menu_gfx.default_logo(name, size=40, bg=_tree_bg()))
         img = self.thumbs[dkey]
-        if (e.get("logo") or e["kind"] == "sd") and key not in self._thumb_jobs:
+        if (e.get("logo") or e["kind"] in ("sd", "doom")) and key not in self._thumb_jobs:
             self._thumb_jobs.add(key)
-            threading.Thread(target=self._thumb_job, args=(dict(e), key), daemon=True).start()
+            threading.Thread(target=self._thumb_job, args=(dict(e), key, _tree_bg()), daemon=True).start()
         return img
 
-    def _thumb_job(self, e, key):
+    def _thumb_job(self, e, key, bg):
         from . import menu_gfx
         from .compose import tile
         try:
             tl = tile(e)
             if not tl.get("logo"):
                 return
-            img = menu_gfx.load_logo(tl["logo"], size=40, bg=_tree_bg(), crop=tl.get("crop"))
+            img = menu_gfx.load_logo(tl["logo"], size=40, bg=bg, crop=tl.get("crop"))
             self.q.put(("thumb", key, img))
         except Exception:
             pass
@@ -307,7 +307,7 @@ class App:
                 import base64
                 import io
                 buf = io.BytesIO()
-                menu_gfx.default_logo(DOOM_NAME, size=56, bg=_tree_bg()).save(buf, "PNG")
+                menu_gfx.load_logo(DOOM_LOGO, size=56, bg=_tree_bg()).save(buf, "PNG")
                 self._doom_img = tk.PhotoImage(data=base64.b64encode(buf.getvalue()))
         except Exception:
             self._doom_img = None
