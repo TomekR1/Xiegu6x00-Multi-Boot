@@ -355,3 +355,58 @@ def clear_cache():
 
 def temp_dir():
     return tempfile.mkdtemp(prefix="x6100mb-")
+
+
+class ExtraSystem:
+    """A system of the app's own extras (the Doom easter egg): its root filesystem image, booted
+    with the kernel and device tree of a system already on the card (the donor)"""
+
+    def __init__(self, name, rootfs_path, donor):
+        if donor is None or not getattr(donor, "files", None) or "kernel" not in donor.files:
+            raise ImageError("Doom potrzebuje na karcie także systemu z obrazu (np. OpenX6X00): "
+                             "uruchamia się z jego jądrem")
+        self.name = name
+        self.path = rootfs_path
+        self.raw = rootfs_path
+        self.donor = donor
+        self.warnings = []
+        self.files = {k: v for k, v in donor.files.items() if k in ("kernel", "fdt")}
+        self.boot_cmd = donor.boot_cmd
+        self.kernel_addr, self.kernel_file = donor.kernel_addr, donor.kernel_file
+        self.fdt_addr, self.fdt_file = donor.fdt_addr, donor.fdt_file
+        self.initrd_addr = self.initrd_file = None
+        self.root_offset = 0
+        self.root_size = os.path.getsize(rootfs_path) // SECTOR * SECTOR
+        self.root_type = 0x83
+        self.has_uboot, self.uboot, self.uboot_version = False, None, None
+        self.bootargs = re.sub(r"\binit=\S+", "", donor.bootargs).strip()
+
+    def bootargs_for(self, partition_number):
+        args = re.sub(r"\broot=\S+", f"root=/dev/mmcblk0p{partition_number}", self.bootargs)
+        return args + " rootfstype=ext4"
+
+    def summary(self):
+        return f"rootfs {self.root_size >> 20} MB, jądro z: {self.donor.name}"
+
+
+def extra_rootfs(cache, xz_path=None, progress=None):
+    """The Doom root filesystem, unpacked into the cache (from xz_path, or the bundled one)"""
+    import lzma
+    if xz_path is None:
+        import sys
+        bases = [os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")]
+        if hasattr(sys, "_MEIPASS"):
+            bases.insert(0, os.path.join(sys._MEIPASS, "x6100mb", "data"))
+        xz_path = next((os.path.join(b, "doom-x6100-rootfs.ext4.xz") for b in bases
+                        if os.path.isfile(os.path.join(b, "doom-x6100-rootfs.ext4.xz"))), None)
+        if xz_path is None:
+            raise ImageError("ta wersja aplikacji nie ma w sobie Dooma")
+    st = os.stat(xz_path)
+    os.makedirs(cache, exist_ok=True)
+    out = os.path.join(cache, f"doom-x6100-rootfs.{int(st.st_mtime)}.{st.st_size}.ext4")
+    if os.path.exists(out):
+        return out
+    with lzma.open(xz_path) as src, open(out + ".part", "wb") as dst:
+        shutil.copyfileobj(src, dst, 4 << 20)
+    os.replace(out + ".part", out)
+    return out

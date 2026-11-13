@@ -28,6 +28,7 @@ GREY = (150, 158, 175)
 
 # Colours of the generated logos by system family (a logo of one's own can be chosen in the app)
 FAMILIES = [
+    ("doom", "DOOM", ((90, 0, 0), (200, 30, 20))),
     ("cx8anm", "CX8ANM", ((20, 120, 70), (60, 200, 120))),
     ("1ko125", "1KO125", ((0, 110, 140), (40, 170, 210))),
     ("iu1wxy", "IU1WXY", ((70, 80, 100), (130, 140, 160))),
