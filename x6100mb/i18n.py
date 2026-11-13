@@ -76,6 +76,30 @@ def set_lang(code):
         pass
 
 
+def setting(key, default=None):
+    """A value kept in settings.json (the theme, ...)"""
+    try:
+        with open(_config_file()) as f:
+            return json.load(f).get(key, default)
+    except (OSError, ValueError):
+        return default
+
+
+def set_setting(key, value):
+    path = _config_file()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        data = {}
+        if os.path.exists(path):
+            with open(path) as f:
+                data = json.load(f)
+        data[key] = value
+        with open(path, "w") as f:
+            json.dump(data, f)
+    except (OSError, ValueError):
+        pass
+
+
 def t(text, **kw):
     s = EN.get(text, text) if lang() == "en" else text
     return s.format(**kw) if kw else s
@@ -88,6 +112,8 @@ EN = {
         "Several systems on one SD card for the Xiegu X6100: a menu on the radio's screen at power-on, "
         "choose with the F1–F5 keys.",
     "Język:": "Language:",
+    "Jasny": "Light",
+    "Ciemny": "Dark",
     "1. Systemy w menu": "1. Systems in the menu",
     "Systemy w menu": "Systems in the menu",
     "Menu na ekranie radia": "The menu on the radio's screen",

@@ -19,11 +19,29 @@ from .writer import Progress, write_device, write_image_file
 APP = "Xiegu Multi Patcher"
 AUTHOR_URL = "https://www.qrz.com/db/SQ6RT"
 HEAD_BG, HEAD_FG, HEAD_SUB, LINK = "#0f2742", "#ffffff", "#a9bcd3", "#8fc3ff"
-HINT = "#9aa3ad"
+# Colours of the light and the dark theme; _apply_colours() sets the module's names from one
+THEMES = {
+    "light": {"HINT": "#5b6573", "ACCENT": "#0067c0", "BADGE_FG": "#ffffff", "PAGE_BG": "#fafafa",
+              "TEXT_FG": "#1c1c1c", "H1": "#c62828", "H2": "#0f2742", "TREE_BG": (255, 255, 255)},
+    "dark": {"HINT": "#9aa3ad", "ACCENT": "#57c8ff", "BADGE_FG": "#0b1a2a", "PAGE_BG": "#1c1c1c",
+             "TEXT_FG": "#e6e6e6", "H1": "#ff6b6b", "H2": "#8fc3ff", "TREE_BG": (28, 28, 28)},
+}
+THEME_NAMES = {"light": "Jasny", "dark": "Ciemny"}
+HINT = "#5b6573"
+BADGE_FG, H1, H2, TREE_BG = "#ffffff", "#c62828", "#0f2742", (255, 255, 255)
 SCREEN_W, SCREEN_H = 600, 360          # the radio's 800x480, at 3/4
 RED, RED_HOVER = "#d32f2f", "#ef4444"
-ACCENT = "#57c8ff"
-PAGE_BG, TEXT_FG = "#1c1c1c", "#e6e6e6"
+ACCENT = "#0067c0"
+PAGE_BG, TEXT_FG = "#fafafa", "#1c1c1c"
+
+
+def _theme_name():
+    name = i18n.setting("theme", "light")
+    return name if name in THEMES else "light"
+
+
+def _apply_colours(name):
+    globals().update(THEMES[name])
 PHASES = {"download": "Pobieranie", "prepare": "Przygotowanie karty", "write": "Zapis",
           "sync": "Opróżnianie bufora karty",
           "verify": "Weryfikacja", "unzip": "Rozpakowywanie", "done": "Gotowe"}
@@ -61,12 +79,23 @@ class App:
             self.timeout_box.state(["disabled"] if self.wait.get() else ["!disabled"])
         self._redraw()
 
+    def switch_theme(self, name):
+        if name == _theme_name() or self.busy:
+            self.theme_var.set(t(THEME_NAMES[_theme_name()]))
+            return
+        i18n.set_setting("theme", name)
+        _theme(self.root)
+        self._rebuild()
+
     def switch_lang(self, code):
         """The window again in the other language, with everything set so far"""
         if code == i18n.lang() or self.busy:
             self.lang_var.set(i18n.LANGS[i18n.lang()])
             return
         i18n.set_lang(code)
+        self._rebuild()
+
+    def _rebuild(self):
         keep = {n: getattr(self, n).get() for n in ("timeout", "data_mb", "data_mode", "show_adv", "wait", "status")}
         xiegu = {k: v.get() for k, v in self.xiegu_vars.items()}
         card = self.card_box.current()
@@ -100,11 +129,19 @@ class App:
         side = tk.Frame(inner, bg=HEAD_BG)
         side.pack(side="right", anchor="n")
         self.lang_var = tk.StringVar(value=i18n.LANGS[i18n.lang()])
-        langs = ttk.Combobox(side, textvariable=self.lang_var, values=list(i18n.LANGS.values()),
+        pick = tk.Frame(side, bg=HEAD_BG)
+        pick.pack(anchor="e")
+        langs = ttk.Combobox(pick, textvariable=self.lang_var, values=list(i18n.LANGS.values()),
                              state="readonly", width=8)
-        langs.pack(anchor="e")
+        langs.pack(side="right")
         langs.bind("<<ComboboxSelected>>", lambda e: self.switch_lang(
             next(k for k, v in i18n.LANGS.items() if v == self.lang_var.get())))
+        self.theme_var = tk.StringVar(value=t(THEME_NAMES[_theme_name()]))
+        themes = ttk.Combobox(pick, textvariable=self.theme_var, values=[t(v) for v in THEME_NAMES.values()],
+                              state="readonly", width=8)
+        themes.pack(side="right", padx=(0, 8))
+        themes.bind("<<ComboboxSelected>>", lambda e: self.switch_theme(
+            next(k for k, v in THEME_NAMES.items() if t(v) == self.theme_var.get())))
         author = tk.Label(side, text=t("aplikacja: SQ6RT"), bg=HEAD_BG, fg=LINK, cursor="hand2",
                           font=_font(10, "underline"))
         author.pack(anchor="e", pady=(6, 0))
@@ -203,7 +240,7 @@ class App:
         row.pack(fill="x", pady=(8, 3))
         c = tk.Canvas(row, width=24, height=24, highlightthickness=0, bg=PAGE_BG)
         c.create_oval(1, 1, 23, 23, fill=ACCENT, outline="")
-        c.create_text(12, 12, text=str(number), fill="#0b1a2a", font=_font(11, "bold"))
+        c.create_text(12, 12, text=str(number), fill=BADGE_FG, font=_font(11, "bold"))
         c.pack(side="left", padx=(2, 8))
         ttk.Label(row, text=title, font=_font(13, "bold")).pack(side="left")
         card = ttk.Frame(top, style="Card.TFrame", padding=(10, 6))
@@ -414,8 +451,8 @@ class App:
         for k, line in enumerate(lines):
             heading = line and not line.startswith(" ") and k + 1 < len(lines) and lines[k + 1].startswith(" ")
             txt.insert("end", line + "\n", "h2" if heading else ())
-        txt.tag_configure("h1", font=_font(16, "bold"), foreground="#ff6b6b")
-        txt.tag_configure("h2", font=_font(12, "bold"), foreground=LINK, spacing1=8)
+        txt.tag_configure("h1", font=_font(16, "bold"), foreground=H1)
+        txt.tag_configure("h2", font=_font(12, "bold"), foreground=H2, spacing1=8)
         txt.configure(state="disabled")
         ttk.Button(win, text="OK", command=win.destroy, style="Accent.TButton", width=12).pack(side="bottom", pady=10)
         sb.pack(side="right", fill="y")
@@ -749,7 +786,7 @@ def _tree_bg():
             return tuple(int(c[i:i + 2], 16) for i in (1, 3, 5))
     except tk.TclError:
         pass
-    return (28, 28, 28)
+    return TREE_BG
 
 
 def _icon_image(root, size):
@@ -774,10 +811,12 @@ def _icon_image(root, size):
 
 
 def _theme(root):
-    """Sun Valley (sv-ttk, MIT), dark: a modern look on all three systems; plain ttk without it"""
+    """Sun Valley (sv-ttk, MIT), light or dark: a modern look on all three systems; plain ttk without it"""
+    name = _theme_name()
+    _apply_colours(name)
     try:
         import sv_ttk
-        sv_ttk.set_theme("dark", root)
+        sv_ttk.set_theme(name, root)
     except Exception:
         try:
             ttk.Style().theme_use("clam" if not devices.WIN else "vista")
