@@ -817,8 +817,21 @@ static const char bt_script[] =
 	"/usr/libexec/bluetooth/bluetoothd -n >/tmp/bluetoothd.log 2>&1 &\n"
 	"sleep 3\n"
 	"bluetoothctl power on\n"
-	"bluetoothctl devices Paired\n"
 	"ls /var/lib/bluetooth 2>&1\n"
+	/* A mouse or keyboard tries the radio as soon as it is switched on, before this is up, and
+	 * then waits: for about a minute the paired devices not connected are called here */
+	"paired() { { bluetoothctl devices Paired 2>/dev/null; bluetoothctl paired-devices 2>/dev/null; } |"
+	" awk '/^Device /{print $2}' | sort -u; }\n"
+	"paired\n"
+	"i=0\n"
+	"while [ $i -lt 14 ]; do\n"
+	"  for mac in $(paired); do\n"
+	"    bluetoothctl info $mac | grep -q 'Connected: yes' && continue\n"
+	"    bluetoothctl --timeout 6 connect $mac\n"
+	"  done\n"
+	"  sleep 4\n"
+	"  i=$((i+1))\n"
+	"done\n"
 	"wait\n";
 
 static void start_bluetooth(void)
