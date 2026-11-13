@@ -26,6 +26,8 @@ ALIGN = MIB // SECTOR
 # Front-panel keys in U-Boot: the X6100 key matrix from the device tree. As in j0ju's
 # x6100-fw-mangler multiboot (used on radios): the row is driven low, the column read (0 = pressed); F1..F5 from OpenX6X00's src/front_keys.c (BTN_TRIGGER_HAPPY13..15, 19, 20)
 COUNTDOWN = "Start F${bm_default} za ${bm_left} s"
+WAITING = "Wybierz system klawiszem F1-F{n}"
+MAX_SECS = 15
 
 KEYS = [("F1", "PE16", "PG6"), ("F2", "PE17", "PG6"), ("F3", "PE11", "PG6"),
         ("F4", "PE16", "PG8"), ("F5", "PE17", "PG8")]
@@ -108,12 +110,13 @@ def _shown(text):
     return 'setenv stdout serial,vidconsole; echo -n "%s"; setenv stdout serial' % text
 
 
-def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False, ansi=False):
+def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False, ansi=False, wait=False):
     """entries: [{"kind": "sd", "name", "dir", "part", "sys", "mbr": file or None} | {"kind": "xiegu", "name"}]
 
     gfx: MENU/MENU.BMP and MENU/SELn.BMP are on BOOT (menu_gfx). ansi: the U-Boot reads ANSI
-    colours (the bundled one). Numbers in U-Boot's setexpr/itest are hex: bm_secs (0..9) is the
-    same in both, the tick counter stays hex throughout.
+    colours (the bundled one). Numbers in U-Boot's setexpr/itest are hex: bm_secs (0..15, decimal in
+    bootmenu.env) goes through a table to hex, the seconds left through one back to decimal (any
+    U-Boot, no setexpr fmt). wait (bm_wait=1): no default, the menu waits for a key.
     """
     L = []
     a = L.append
@@ -121,10 +124,15 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
     a('echo "------------ X6100 multiboot menu ------------"')
     a("# Made by x6100-multiboot. Settings: bootmenu.env on this partition (edit on a PC).")
     a("setenv bm_default %d" % (default + 1))
-    a("setenv bm_secs %d" % max(0, min(9, int(timeout_s))))
+    a("setenv bm_secs %d" % _secs(timeout_s))
+    a("setenv bm_wait %d" % (1 if wait else 0))
+    for n in range(MAX_SECS + 1):           # decimal -> hex, hex -> decimal
+        a("setenv bm_hex_%d 'setenv bm_secs %x'" % (n, n))
+        a("setenv bm_dec_%x 'setenv bm_left %d'" % (n, n))
     for k, v in XIEGU_DEFAULTS.items():
         a('setenv %s "%s"' % (k, v))
     a("if fatload mmc 0:1 ${scriptaddr} bootmenu.env; then env import -t ${scriptaddr} ${filesize}; fi")
+    a("run bm_hex_${bm_secs}")
     a("setexpr bm_ticks ${bm_secs} * a")
     a("")
     a("# The menu: the picture when there is one, else text")
@@ -144,7 +152,7 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
     if ansi:
         text.append("%s[1;1H%s[30;46m  %s%s%s[0;37;40m" % (ESC, ESC, title, " " * (47 - len(title)), ESC))
         for i, e in enumerate(entries):
-            mark = ("  %s[36m<- %s" % (ESC, t("domyslny"))) if i == default else ""
+            mark = ("  %s[36m<- %s" % (ESC, t("domyslny"))) if i == default and not wait else ""
             text.append("%s[%d;3H%s[1;33m%s%s[0;37;40m   %s%s%s[0;37;40m" % (
                 ESC, i + 3, ESC, KEYS[i][0], ESC, _ascii(e["name"]), mark, ESC))
         for i, e in enumerate(entries):
@@ -167,8 +175,14 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
     a("    if itest ${bm_r} -eq 0; then")
     a("        setexpr bm_left ${bm_ticks} - ${i}")
     a("        setexpr bm_left ${bm_left} / a")
-    a("        " + _shown("%s[%s%s[0;37;40m%s   " % (e_, count_row, e_, t(COUNTDOWN)) if ansi
-                          else t(COUNTDOWN) + "\\n"))
+    a("        run bm_dec_${bm_left}")
+    waiting = t(WAITING).format(n=len(entries))
+    a("        if itest ${bm_wait} -eq 1; then")
+    a("            " + _shown("%s[%s%s[0;37;40m%s   " % (e_, count_row, e_, waiting) if ansi else waiting + "\\n"))
+    a("        else")
+    a("            " + _shown("%s[%s%s[0;37;40m%s   " % (e_, count_row, e_, t(COUNTDOWN)) if ansi
+                              else t(COUNTDOWN) + "\\n"))
+    a("        fi")
     a("    fi")
     rows = []
     for i in range(len(entries)):
@@ -182,7 +196,8 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
                 a("    if gpio input %s; then setenv bm_choice %d; fi" % (col, i + 1))
         a("    gpio input %s" % row)
     a('    if test -z "${bm_choice}"; then')
-    a("        if itest ${i} -ge ${bm_ticks}; then setenv bm_choice ${bm_default}; else sleep 0.1; setexpr i ${i} + 1; fi")
+    a("        if itest ${bm_wait} -eq 1; then sleep 0.1; setexpr i ${i} + 1; setexpr i ${i} % a")
+    a("        elif itest ${i} -ge ${bm_ticks}; then setenv bm_choice ${bm_default}; else sleep 0.1; setexpr i ${i} + 1; fi")
     a("    fi")
     a("done")
     a("")
@@ -239,16 +254,20 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
     return "\n".join(L) + "\n"
 
 
-def env_file(default, timeout_s, xiegu=None):
+def _secs(timeout_s):
+    return max(0, min(MAX_SECS, int(timeout_s)))
+
+
+def env_file(default, timeout_s, xiegu=None, wait=False):
     x = dict(XIEGU_DEFAULTS)
     x.update(xiegu or {})
-    lines = ["bm_default=%d" % (default + 1), "bm_secs=%d" % max(0, min(9, int(timeout_s)))]
+    lines = ["bm_default=%d" % (default + 1), "bm_secs=%d" % _secs(timeout_s), "bm_wait=%d" % (1 if wait else 0)]
     lines += ["%s=%s" % (k, v) for k, v in x.items()]
     return ("\n".join(lines) + "\n").encode()
 
 
 def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboot_from=None,
-            xiegu=None, boot_extra_mb=32, data_mode="shared", graphics=True):
+            xiegu=None, boot_extra_mb=32, data_mode="shared", graphics=True, wait=False):
     """A Plan for the card. entries as for menu_script, without "dir"/"part" (filled in here);
     an entry may name a "logo" picture for the graphic menu.
 
@@ -368,18 +387,18 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         plan.add(start * SECTOR, FileRange(s.raw, s.root_offset, s.root_size))
 
     # BOOT
-    script = menu_script(entries, default, timeout_s, gfx=gfx, ansi=screen)
+    script = menu_script(entries, default, timeout_s, gfx=gfx, ansi=screen, wait=wait)
     fat = Fat32Builder(boot_size, boot_lba, label="BOOT")
     if gfx:
         from . import menu_gfx
         tiles = [tile(e) for e in entries]
-        fat.add_file("MENU/MENU.BMP", menu_gfx.to_framebuffer_bmp(menu_gfx.render_menu(tiles, default)))
+        fat.add_file("MENU/MENU.BMP", menu_gfx.to_framebuffer_bmp(menu_gfx.render_menu(tiles, None if wait else default)))
         for i in range(len(entries)):
             fat.add_file("MENU/SEL%d.BMP" % (i + 1),
-                         menu_gfx.to_framebuffer_bmp(menu_gfx.render_menu(tiles, default, selected=i)))
+                         menu_gfx.to_framebuffer_bmp(menu_gfx.render_menu(tiles, None if wait else default, selected=i)))
     fat.add_file("boot.scr", make_script_image(script))
     fat.add_file("boot.cmd", script.encode())
-    fat.add_file("bootmenu.env", env_file(default, timeout_s, xiegu))
+    fat.add_file("bootmenu.env", env_file(default, timeout_s, xiegu, wait))
     readme = ["x6100-multiboot card", ""]
     for i, e in enumerate(entries):
         where = (f"{e['dir']}, root /dev/mmcblk0p{e['part']}" if e["kind"] == "sd" else "eMMC")
@@ -415,7 +434,7 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     plan.info = {
         "entries": [{"key": KEYS[i][0], "name": e["name"], "kind": e["kind"],
                      "partition": e.get("part")} for i, e in enumerate(entries)],
-        "default": default, "timeout": timeout_s, "uboot": ub.uboot_version,
+        "default": default, "timeout": timeout_s, "wait": wait, "uboot": ub.uboot_version,
         "boot_mb": boot_size // MIB, "data_mb": data_sectors * SECTOR // MIB, "size": size,
         "data_mode": data_mode, "data_partitions": n_data, "screen": screen, "graphics": gfx,
     }

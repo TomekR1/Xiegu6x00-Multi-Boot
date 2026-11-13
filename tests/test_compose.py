@@ -164,6 +164,20 @@ class ComposeTest(unittest.TestCase):
         script = plan.script
         self.assertIn("setenv bm_boot3 'mmc dev 0; mmc read 0x45000000 0 1; if fatload mmc 0:1 0x45100000 SYS1/MBR.BIN", script)
 
+    def test_long_timeout_and_wait(self):
+        a = os.path.join(self.tmp, "a.img")
+        fake_card(a)
+        sa = SourceSystem(a, a)
+        plan = compose([{"kind": "sd", "name": "A", "sys": sa}], timeout_s=12, data_mb=40)
+        self.assertIn("setenv bm_secs 12", plan.script)
+        self.assertIn("setenv bm_hex_12 'setenv bm_secs c'", plan.script)     # U-Boot counts in hex
+        self.assertIn("setenv bm_dec_c 'setenv bm_left 12'", plan.script)     # and shows decimal
+        self.assertIn("setenv bm_wait 0", plan.script)
+        plan = compose([{"kind": "sd", "name": "A", "sys": sa}], timeout_s=99, wait=True, data_mb=40)
+        self.assertIn("setenv bm_secs 15", plan.script)
+        self.assertIn("setenv bm_wait 1", plan.script)
+        self.assertTrue(plan.info["wait"])
+
 
 if __name__ == "__main__":
     unittest.main()

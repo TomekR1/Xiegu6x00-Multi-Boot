@@ -62,7 +62,8 @@ def cli(argv):
     b.add_argument("--doom", action="store_true", help="the Doom easter egg (with the first system's kernel)")
     b.add_argument("--doom-rootfs", help="its root filesystem (.ext4.xz; default: the one in the app)")
     b.add_argument("--default", type=int, default=1, help="default entry, 1 = F1")
-    b.add_argument("--timeout", type=int, default=5, help="seconds before the default starts (0-9)")
+    b.add_argument("--timeout", type=int, default=5, help="seconds before the default starts (0-15)")
+    b.add_argument("--wait", action="store_true", help="no default: the menu waits for a key")
     b.add_argument("--data", choices=["shared", "separate"], default="shared",
                    help="one DATA partition for all systems, or one per system")
     b.add_argument("--logo", action="append", default=[], metavar="N=FILE",
@@ -124,7 +125,7 @@ def cli(argv):
         from .compose import resolve_extras
         entries = resolve_extras(entries, a.doom_rootfs)
         plan = compose(entries, default=a.default - 1, timeout_s=a.timeout, data_mb=a.data_mb, uboot_from=ub,
-                       data_mode=a.data, graphics=not a.no_graphics)
+                       data_mode=a.data, graphics=not a.no_graphics, wait=a.wait)
         if a.script_only:
             print(plan.script)
             return 0

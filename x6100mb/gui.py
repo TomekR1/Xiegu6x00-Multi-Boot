@@ -11,7 +11,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import devices, i18n
-from .compose import DOOM_LOGO, DOOM_NAME, MAX_ENTRIES, XIEGU_DEFAULTS, compose, resolve_extras
+from .compose import DOOM_LOGO, DOOM_NAME, MAX_ENTRIES, MAX_SECS, XIEGU_DEFAULTS, compose, resolve_extras
 from .i18n import t
 from .image import SourceSystem, cache_dir, open_source
 from .writer import Progress, write_device, write_image_file
@@ -58,6 +58,7 @@ class App:
             for name, value in keep.items():
                 getattr(self, name).set(value)
             self._toggle_adv()
+            self.timeout_box.state(["disabled"] if self.wait.get() else ["!disabled"])
         self._redraw()
 
     def switch_lang(self, code):
@@ -66,7 +67,7 @@ class App:
             self.lang_var.set(i18n.LANGS[i18n.lang()])
             return
         i18n.set_lang(code)
-        keep = {n: getattr(self, n).get() for n in ("timeout", "data_mb", "data_mode", "show_adv", "status")}
+        keep = {n: getattr(self, n).get() for n in ("timeout", "data_mb", "data_mode", "show_adv", "wait", "status")}
         xiegu = {k: v.get() for k, v in self.xiegu_vars.items()}
         card = self.card_box.current()
         self.top.destroy()
@@ -141,7 +142,8 @@ class App:
         ttk.Label(opts, text=t("Czas na wybór (s):")).grid(row=0, column=0, sticky="w", **pad)
         self.timeout = tk.StringVar(value="5")
         self.timeout.trace_add("write", lambda *a: self._render() if hasattr(self, "screen") else None)
-        ttk.Spinbox(opts, from_=0, to=9, textvariable=self.timeout, width=6).grid(row=0, column=1, sticky="w")
+        self.timeout_box = ttk.Spinbox(opts, from_=0, to=MAX_SECS, textvariable=self.timeout, width=6)
+        self.timeout_box.grid(row=0, column=1, sticky="w")
         ttk.Label(opts, text=t("DATA w pliku .img (MB):")).grid(row=0, column=2, sticky="w", **pad)
         self.data_mb = tk.StringVar(value="1024")
         ttk.Spinbox(opts, from_=128, to=32768, increment=128, textvariable=self.data_mb, width=8).grid(
@@ -156,9 +158,13 @@ class App:
                         variable=self.data_mode).pack(side="left", padx=(0, 12))
         ttk.Radiobutton(dm, text=t("osobna dla każdego systemu (własne ustawienia i logi)"), value="separate",
                         variable=self.data_mode).pack(side="left")
+        self.wait = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opts, text=t("Bez automatycznego startu: system uruchamia się dopiero po wciśnięciu "
+                                     "klawisza F"), variable=self.wait, command=self._wait_changed).grid(
+            row=2, column=0, columnspan=5, sticky="w", **pad)
         self.show_adv = tk.BooleanVar(value=False)
         ttk.Checkbutton(opts, text=t("Zaawansowane: start systemu Xiegu z eMMC"), variable=self.show_adv,
-                        command=self._toggle_adv).grid(row=2, column=0, columnspan=5, sticky="w", **pad)
+                        command=self._toggle_adv).grid(row=3, column=0, columnspan=5, sticky="w", **pad)
         self.adv = ttk.Frame(opts)
         self.xiegu_vars = {}
         labels = {"xiegu_dev": "Urządzenie mmc", "xiegu_part": "Partycja", "xiegu_kernel": "Jądro",
@@ -204,9 +210,13 @@ class App:
         card.pack(fill="both" if expand else "x", expand=expand)
         return card
 
+    def _wait_changed(self):
+        self.timeout_box.state(["disabled"] if self.wait.get() else ["!disabled"])
+        self._render()
+
     def _toggle_adv(self):
         if self.show_adv.get():
-            self.adv.grid(row=3, column=0, columnspan=5, sticky="w", pady=(0, 6))
+            self.adv.grid(row=4, column=0, columnspan=5, sticky="w", pady=(0, 6))
         else:
             self.adv.grid_forget()
 
@@ -272,7 +282,7 @@ class App:
         if menu_gfx.HAVE_PIL:
             from PIL import Image
             img = menu_gfx.render_menu([self._tile(e) for e in self.entries],
-                                       min(self.default, max(len(self.entries) - 1, 0)))
+                                       None if self.wait.get() else min(self.default, max(len(self.entries) - 1, 0)))
             self._screen_img = self._photo(img.resize((SCREEN_W, SCREEN_H), Image.LANCZOS))
             c.create_image(0, 0, image=self._screen_img, anchor="nw")
         else:                               # no Pillow (running from source): names in boxes
@@ -283,11 +293,14 @@ class App:
                 c.create_text(cx, 435 * sy, text="F%d" % (i + 1), fill="#ffffff", font=_font(14, "bold"))
         if self.entries:                    # what U-Boot writes in the second row, in its 16x32 font
             try:
-                secs = max(0, min(9, int(float(self.timeout.get().replace(",", ".")))))
+                secs = max(0, min(MAX_SECS, int(float(self.timeout.get().replace(",", ".")))))
             except (ValueError, AttributeError):
                 secs = 5
-            from .compose import COUNTDOWN
-            text = t(COUNTDOWN).replace("${bm_default}", str(self.default + 1)).replace("${bm_left}", str(secs))
+            from .compose import COUNTDOWN, WAITING
+            if self.wait.get():
+                text = t(WAITING).format(n=len(self.entries))
+            else:
+                text = t(COUNTDOWN).replace("${bm_default}", str(self.default + 1)).replace("${bm_left}", str(secs))
             c.create_text(16 * sx, 48 * sy, text=text, anchor="w", fill="#d0d0d0", font=("Courier", 13, "bold"))
         if not self.entries:
             c.create_text(SCREEN_W // 2, SCREEN_H // 2, fill="#9aa3ad", width=SCREEN_W - 80, justify="center",
@@ -492,7 +505,7 @@ class App:
     # ---------------------------------------------------------------- building
     def _settings(self):
         try:
-            timeout = max(0, min(9, int(float(self.timeout.get().replace(",", ".")))))
+            timeout = max(0, min(MAX_SECS, int(float(self.timeout.get().replace(",", ".")))))
             data_mb = int(self.data_mb.get())
         except ValueError:
             raise ValueError(t("Czas i rozmiar DATA muszą być liczbami"))
@@ -503,7 +516,7 @@ class App:
         timeout, data_mb, xiegu = self._settings()
         ents = resolve_extras([dict(e) for e in self.entries])
         return compose(ents, default=self.default, timeout_s=timeout, data_mb=data_mb,
-                       card_bytes=card_bytes, xiegu=xiegu, data_mode=self.data_mode.get())
+                       card_bytes=card_bytes, xiegu=xiegu, data_mode=self.data_mode.get(), wait=self.wait.get())
 
     def save_image(self):
         if self.busy:

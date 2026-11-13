@@ -235,6 +235,9 @@ EN = {
     "ta wersja aplikacji nie ma w sobie Dooma": "this build of the app has no Doom in it",
     # the card
     "Start F${bm_default} za ${bm_left} s": "Start F${bm_default} in ${bm_left} s",
+    "Wybierz system klawiszem F1-F{n}": "Choose a system with F1-F{n}",
+    "Bez automatycznego startu: system uruchamia się dopiero po wciśnięciu klawisza F":
+        "No automatic start: a system starts only when its F key is pressed",
     "# Doom: glosnosc efektow i muzyki 0..200 (%)": "# Doom: effects and music volume 0..200 (%)",
     "# Glosnosc radia (AF) 0..55, ustawiana przy starcie Dooma; usun # zeby wlaczyc":
         "# The radio's (AF) volume 0..55, set when Doom starts; remove the # to use it",

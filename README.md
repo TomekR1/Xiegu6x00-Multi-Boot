@@ -30,7 +30,8 @@ w aplikacji, prosto z wydań ich autorów.
 3. Aplikacja od razu pokazuje menu dokładnie tak, jak wyświetli je radio. Kliknij kafelek, żeby go
    zaznaczyć: strzałkami **← →** zmienisz kolejność, **★ Domyślny** ustawia system startujący sam,
    dwuklik albo **Zmień nazwę** zmienia napis, a **Logo…** podmienia logo na własny obrazek PNG/JPG.
-4. Wybierz **czas na wybór** (0–9 s) i **partycję DATA** (patrz niżej).
+4. Wybierz **czas na wybór** (0–15 s) i **partycję DATA** (patrz niżej). Opcja **Bez automatycznego
+   startu** wyłącza odliczanie: radio czeka, aż wciśniesz klawisz F wybranego systemu.
 5. Włóż kartę SD do komputera, wybierz ją na liście i kliknij **Wgraj na kartę**.
    System poprosi o hasło administratora; po zapisie aplikacja sprawdza, czy wszystko się zgadza.
    Zamiast tego możesz kliknąć **Zapisz jako plik .img…** i wgrać plik balenaEtcherem.
@@ -111,10 +112,11 @@ Na partycji `BOOT` karty jest plik `bootmenu.env`. Można go zmienić na kompute
 ```
 bm_default=1
 bm_secs=5
+bm_wait=0
 ```
 
 `bm_default` to klawisz systemu domyślnego (1 = F1), `bm_secs` to czas na wybór w sekundach
-(0–9). Nie dopisuj komentarzy na końcu linii.
+(0–15), a `bm_wait=1` wyłącza automatyczny start (menu czeka na klawisz). Nie dopisuj komentarzy na końcu linii.
 
 ## Aktualizacje systemów
 
@@ -148,7 +150,8 @@ speaks English and Polish: pick the language at the top right of its window.
 2. **+ Xiegu from eMMC** adds the radio's own system.
 3. The app shows the menu just as the radio will: click a tile, then move it (**← →**), make it
    the default (★), rename it (double-click) or give it a logo of your own.
-4. Choose the time to choose and a **shared** or **per-system DATA** partition.
+4. Choose the time to choose (0–15 s) or **no automatic start** (the radio waits for an F key),
+   and a **shared** or **per-system DATA** partition.
 5. **Write to the card** (it asks for the administrator password, then checks what it wrote),
    or **Save as an .img file…** for balenaEtcher. Writing erases the whole card.
 
