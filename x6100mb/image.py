@@ -126,6 +126,17 @@ def make_script_image(text, name="X6100 boot menu"):
 # --------------------------------------------------------------------------------------------
 # A source image
 # --------------------------------------------------------------------------------------------
+_ZEROS = bytes(4 << 20)
+
+
+def _put(dst, d):
+    """d onto dst; an all-zero piece (most of a card image) only skipped over: much less to write"""
+    if d == _ZEROS[:len(d)]:
+        dst.seek(len(d), 1)
+    else:
+        dst.write(d)
+
+
 def _unxz(path, cache_dir, progress=None):
     import lzma
     os.makedirs(cache_dir, exist_ok=True)
@@ -141,9 +152,10 @@ def _unxz(path, cache_dir, progress=None):
             d = src.read(4 << 20)
             if not d:
                 break
-            dst.write(d)
+            _put(dst, d)
             if progress:
                 progress(raw.tell(), st.st_size)
+        dst.truncate()          # the end, if it was skipped zeros
     os.replace(tmp, out)
     return out
 
@@ -173,10 +185,11 @@ def open_source(path, cache_dir, progress=None):
                 d = src.read(4 << 20)
                 if not d:
                     break
-                dst.write(d)
+                _put(dst, d)
                 done += len(d)
                 if progress:
                     progress(done, info.file_size)
+            dst.truncate()
         os.replace(tmp, out)
         return out
 
