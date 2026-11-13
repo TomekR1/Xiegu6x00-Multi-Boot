@@ -366,6 +366,12 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         where = (f"{e['dir']}, root /dev/mmcblk0p{e['part']}" if e["kind"] == "sd" else "eMMC")
         readme.append(f"F{i + 1}  {e['name']}  ({where})")
     fat.add_file("menu.txt", ("\r\n".join(readme) + "\r\n").encode())
+    if any(getattr(e.get("sys"), "donor", None) is not None for e in sd):
+        # Doom's settings, read at its start (extras/doom/x6100_sound.c)
+        fat.add_file("doom.txt", (
+            "# Doom: glosnosc efektow 0..200 (%)\r\nvolume=100\r\n"
+            "# Glosnosc radia (AF) 0..55, ustawiana przy starcie Dooma; usun # zeby wlaczyc\r\n"
+            "# rxvol=20\r\n").encode())
     for e in sd:
         s = e["sys"]
         fat.add_file(e["dir"] + "/ZIMAGE", s.files["kernel"])

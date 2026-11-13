@@ -14,6 +14,7 @@
 #include "doomkeys.h"
 #include "m_argv.h"
 #include "doomgeneric.h"
+#include "d_event.h"
 
 /* Linux's input-event-codes.h and doomkeys.h share names: Doom's values are taken here, before
  * the Linux headers redefine them */
@@ -21,9 +22,10 @@ enum {
 	DK_ENTER = KEY_ENTER, DK_ESCAPE = KEY_ESCAPE, DK_TAB = KEY_TAB,
 	DK_UP = KEY_UPARROW, DK_DOWN = KEY_DOWNARROW, DK_LEFT = KEY_LEFTARROW, DK_RIGHT = KEY_RIGHTARROW,
 	DK_FIRE = KEY_FIRE, DK_USE = KEY_USE, DK_STRAFE_L = KEY_STRAFE_L, DK_STRAFE_R = KEY_STRAFE_R,
-	DK_RSHIFT = KEY_RSHIFT,
+	DK_RSHIFT = KEY_RSHIFT, DK_LALT = KEY_LALT,
 };
 #undef KEY_RSHIFT
+#undef KEY_LALT
 #undef KEY_TAB
 #undef KEY_ENTER
 #undef KEY_BACKSPACE
@@ -81,7 +83,11 @@ static struct fb_var_screeninfo vinfo;
 static uint16_t map_x[LAND_W], map_y[LAND_H];  /* landscape pixel -> Doom pixel (0xffff: border) */
 static int rotate = 3;                          /* 3: as fbcon=rotate:3; 1: the other way; 0: none */
 
-static int in_fd[MAX_DEVS], n_in;
+enum role { ROLE_RADIO, ROLE_MOUSE, ROLE_KEYBOARD };
+static int in_fd[MAX_DEVS], in_role[MAX_DEVS], n_in;
+static char in_dev[MAX_DEVS][24];
+static int mouse_dx, mouse_dy, mouse_buttons;
+static uint32_t last_scan;
 static struct pollfd pfd[MAX_DEVS];
 static unsigned short queue[QSIZE];
 static unsigned q_w, q_r;
@@ -280,38 +286,145 @@ static void knob(int axis, int value)
 		p->until = t + 400;
 }
 
+/* A USB keyboard: the usual Doom keys */
+static unsigned char kb_key(unsigned code)
+{
+	static const char row1[] = "1234567890-=", row2[] = "qwertyuiop[]", row3[] = "asdfghjkl;'`",
+	                  row4[] = "zxcvbnm,./";
+	switch (code) {
+	case KEY_UP: return DK_UP;
+	case KEY_DOWN: return DK_DOWN;
+	case KEY_LEFT: return DK_LEFT;
+	case KEY_RIGHT: return DK_RIGHT;
+	case KEY_LEFTCTRL: case KEY_RIGHTCTRL: return DK_FIRE;
+	case KEY_SPACE: return DK_USE;
+	case KEY_ENTER: case KEY_KPENTER: return DK_ENTER;
+	case KEY_ESC: return DK_ESCAPE;
+	case KEY_TAB: return DK_TAB;
+	case KEY_LEFTSHIFT: case KEY_RIGHTSHIFT: return DK_RSHIFT;
+	case KEY_LEFTALT: case KEY_RIGHTALT: return DK_LALT;
+	case KEY_BACKSPACE: return 0x7f;
+	case KEY_F11: case KEY_F12: return (unsigned char)(0x80 + code);
+	}
+	if (code >= KEY_F1 && code <= KEY_F10)
+		return (unsigned char)(0x80 + code);
+	if (code >= KEY_1 && code < KEY_1 + sizeof row1 - 1) return (unsigned char)row1[code - KEY_1];
+	if (code >= KEY_Q && code < KEY_Q + sizeof row2 - 1) return (unsigned char)row2[code - KEY_Q];
+	if (code >= KEY_A && code < KEY_A + sizeof row3 - 1) return (unsigned char)row3[code - KEY_A];
+	if (code >= KEY_Z && code < KEY_Z + sizeof row4 - 1) return (unsigned char)row4[code - KEY_Z];
+	return 0;
+}
+
+static void open_inputs(void);
+static void drop_input(int i);
+
+/* A USB mouse: left/right turns, forward/back walks, the left button fires, the wheel picks the
+ * weapon (Doom's own mouse handling: right button strafes, middle walks forward) */
+static void mouse_event(const struct input_event *ev)
+{
+	if (ev->type == EV_REL) {
+		if (ev->code == REL_X) mouse_dx += ev->value;
+		else if (ev->code == REL_Y) mouse_dy += ev->value;
+		else if (ev->code == REL_WHEEL && ev->value) knob(2, -ev->value);
+	} else if (ev->type == EV_KEY) {
+		int bit = ev->code == BTN_LEFT ? 1 : ev->code == BTN_RIGHT ? 2 : ev->code == BTN_MIDDLE ? 4 : 0;
+		if (bit)
+			mouse_buttons = ev->value ? (mouse_buttons | bit) : (mouse_buttons & ~bit);
+	} else if (ev->type == EV_SYN && ev->code == SYN_REPORT) {
+		event_t e = {.type = ev_mouse, .data1 = mouse_buttons, .data2 = mouse_dx * 3,
+		             .data3 = -mouse_dy * 3, .data4 = 0};
+		D_PostEvent(&e);
+		mouse_dx = mouse_dy = 0;
+	}
+}
+
+static void radio_event(const struct input_event *ev)
+{
+	if (ev->type == EV_KEY) {
+		if (ev->code == KEY_POWER && ev->value == 1)
+			leave(RB_POWER_OFF);
+		unsigned char k = key_for(ev->code);
+		if (k && (ev->value == 0 || ev->value == 1))
+			push(ev->value, k);
+	} else if (ev->type == EV_REL && ev->value) {
+		if (ev->code == REL_X) knob(0, ev->value);
+		else if (ev->code == REL_Y) knob(1, ev->value);
+		else if (ev->code == REL_Z) knob(2, ev->value);
+	}
+}
+
 static void poll_input(void)
 {
 	struct input_event ev;
-	while (poll(pfd, (nfds_t)n_in, 0) > 0) {
+	uint32_t t = now_ms();
+	if (t - last_scan > 1000) {               /* a mouse or keyboard plugged in meanwhile */
+		last_scan = t;
+		open_inputs();
+	}
+	while (n_in && poll(pfd, (nfds_t)n_in, 0) > 0) {
 		bool any = false;
 		for (int i = 0; i < n_in; i++) {
+			if (pfd[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+				drop_input(i--);              /* unplugged */
+				continue;
+			}
 			if (!(pfd[i].revents & POLLIN))
 				continue;
-			if (read(in_fd[i], &ev, sizeof ev) != (ssize_t)sizeof ev)
+			ssize_t r = read(in_fd[i], &ev, sizeof ev);
+			if (r < 0 && errno == ENODEV) {
+				drop_input(i--);
+				continue;
+			}
+			if (r != (ssize_t)sizeof ev)
 				continue;
 			any = true;
-			if (ev.type == EV_KEY) {
-				if (ev.code == KEY_POWER && ev.value == 1)
-					leave(RB_POWER_OFF);
-				unsigned char k = key_for(ev.code);
-				if (k && (ev.value == 0 || ev.value == 1))
-					push(ev.value, k);
-			} else if (ev.type == EV_REL && ev.value) {
-				if (ev.code == REL_X) knob(0, ev.value);
-				else if (ev.code == REL_Y) knob(1, ev.value);
-				else if (ev.code == REL_Z) knob(2, ev.value);
+			if (in_role[i] == ROLE_MOUSE) {
+				mouse_event(&ev);
+			} else if (in_role[i] == ROLE_KEYBOARD) {
+				if (ev.type == EV_KEY && (ev.value == 0 || ev.value == 1)) {
+					unsigned char k = kb_key(ev.code);
+					if (k)
+						push(ev.value, k);
+				}
+			} else {
+				radio_event(&ev);
 			}
 		}
 		if (!any)
 			break;
 	}
-	uint32_t t = now_ms();
+	t = now_ms();
 	for (int i = 0; i < 3; i++)
 		if (pulses[i].key && (int32_t)(t - pulses[i].until) >= 0) {
 			push(0, pulses[i].key);
 			pulses[i].key = 0;
 		}
+}
+
+#define TEST_BIT(bits, b) ((bits)[(b) / 8] & (1 << ((b) % 8)))
+
+static int classify(int fd)
+{
+	unsigned char keys[KEY_MAX / 8 + 1];
+	memset(keys, 0, sizeof keys);
+	ioctl(fd, EVIOCGBIT(EV_KEY, sizeof keys), keys);
+	if (TEST_BIT(keys, BTN_LEFT))
+		return ROLE_MOUSE;
+	if (TEST_BIT(keys, KEY_A) && TEST_BIT(keys, KEY_ENTER))
+		return ROLE_KEYBOARD;
+	return ROLE_RADIO;                        /* the key matrix, the knobs, the POWER key */
+}
+
+static void drop_input(int i)
+{
+	close(in_fd[i]);
+	for (int j = i; j < n_in - 1; j++) {
+		in_fd[j] = in_fd[j + 1];
+		in_role[j] = in_role[j + 1];
+		pfd[j] = pfd[j + 1];
+		memcpy(in_dev[j], in_dev[j + 1], sizeof in_dev[j]);
+	}
+	n_in--;
 }
 
 static void open_inputs(void)
@@ -322,13 +435,21 @@ static void open_inputs(void)
 		return;
 	while ((e = readdir(d)) && n_in < MAX_DEVS) {
 		char path[300];
+		bool known = false;
 		if (strncmp(e->d_name, "event", 5))
+			continue;
+		for (int i = 0; i < n_in; i++)
+			if (!strcmp(in_dev[i], e->d_name))
+				known = true;
+		if (known)
 			continue;
 		snprintf(path, sizeof path, "/dev/input/%s", e->d_name);
 		int fd = open(path, O_RDONLY | O_NONBLOCK);
 		if (fd < 0)
 			continue;
 		ioctl(fd, EVIOCGRAB, 1);
+		snprintf(in_dev[n_in], sizeof in_dev[n_in], "%s", e->d_name);
+		in_role[n_in] = classify(fd);
 		pfd[n_in].fd = fd;
 		pfd[n_in].events = POLLIN;
 		in_fd[n_in++] = fd;
@@ -439,6 +560,29 @@ void DG_SetWindowTitle(const char *title)
 }
 
 /* As init: the filesystems it needs, writable for the settings and saved games */
+extern int x6100_sound_volume;
+void x6100_set_rxvol(int vol);
+
+/* /boot/doom.txt on the card's BOOT partition: volume=0..200 (%), rxvol=0..55 (the radio's AF volume) */
+static void read_settings(void)
+{
+	mkdir("/boot", 0755);
+	if (mount("/dev/mmcblk0p1", "/boot", "vfat", MS_RDONLY, NULL) != 0)
+		return;
+	FILE *f = fopen("/boot/doom.txt", "r");
+	char line[128];
+	while (f && fgets(line, sizeof line, f)) {
+		int v;
+		if (sscanf(line, " volume = %d", &v) == 1 && v >= 0 && v <= 200)
+			x6100_sound_volume = v;
+		else if (sscanf(line, " rxvol = %d", &v) == 1)
+			x6100_set_rxvol(v);
+	}
+	if (f)
+		fclose(f);
+	umount("/boot");
+}
+
 static void as_init(void)
 {
 	mkdir("/proc", 0755);
@@ -452,6 +596,7 @@ static void as_init(void)
 	setenv("DOOMWADDIR", "/doom", 1);
 	if (chdir("/doom") != 0)
 		say("Doom: no /doom\n");
+	read_settings();
 }
 
 static const char *find_iwad(void)

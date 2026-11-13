@@ -59,7 +59,15 @@ karcie co najmniej jeden system z obrazu, bo Doom uruchamia się z jego jądrem)
 | AM | bieg |
 | POWER | wyłączenie radia |
 
-Wyjście z gry wraca do menu startowego. Gra jest bez dźwięku.
+Działa też **myszka USB** (ruch w bok obraca, do przodu/do tyłu idzie, lewy przycisk strzela,
+kółko zmienia broń) i **klawiatura USB** (strzałki, Ctrl strzela, spacja otwiera, Esc to menu),
+również podłączone w trakcie gry.
+
+Dźwięk: efekty z gry, bez muzyki. Na partycji `BOOT` karty jest plik `doom.txt`:
+`volume=` to głośność efektów (0–200 %), a `rxvol=` (po usunięciu `#`) ustawia przy starcie
+Dooma głośność radia (0–55), gdyby efektów nie było słychać.
+
+Wyjście z gry wraca do menu startowego.
 
 ## Systemy do pobrania w aplikacji
 
