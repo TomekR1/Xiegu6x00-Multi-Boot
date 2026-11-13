@@ -133,7 +133,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GIVEN: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag }}
           MSG: ${{ github.event.head_commit.message }}
-        run: python .github/publish.py out/* x6100mb/data/u-boot-x6100-menu.bin
+        # The U-Boot from the Linux job only: two jobs putting the same file up at once clash
+        run: python .github/publish.py out/* $([ "$RUNNER_OS" = Linux ] && echo x6100mb/data/u-boot-x6100-menu.bin)
 
   # The app fetches the newest systems itself and builds a card from them: a check only, nothing
   # of it is published (the release carries the app; users fetch the systems they want in it)

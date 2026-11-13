@@ -87,7 +87,15 @@ def main():
             if tag_commit(tag):
                 break
             time.sleep(5)
-    gh("release", "upload", tag, "-R", REPO, "--clobber", *MINE)
+    # Two apps finishing at once: a second try once the other's upload is over
+    for attempt in range(5):
+        r = gh("release", "upload", tag, "-R", REPO, "--clobber", *MINE, check=False)
+        if r.returncode == 0:
+            break
+        print("upload:", r.stderr.strip(), "- again")
+        time.sleep(10 * (attempt + 1))
+    else:
+        raise SystemExit("upload failed")
     gh("release", "edit", tag, "-R", REPO, "--latest")
     print(f"{tag}: {', '.join(os.path.basename(m) for m in MINE)} in")
 
