@@ -1,0 +1,4 @@
+Debian X6100  (\l)
+IP: \4   ssh radio@\4  albo  ssh radio@x6100-debian.local
+Login: radio, haslo: radio (przy pierwszym logowaniu ustawisz nowe)
+

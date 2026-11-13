@@ -1,0 +1,6 @@
+#!/bin/sh
+# Once: the root filesystem grown to its partition, ssh's host keys made for this card
+root=$(findmnt -n -o SOURCE /)
+case "$root" in /dev/root|"") root=$(tr ' ' '\n' < /proc/cmdline | sed -n 's/^root=//p' | head -n1) ;; esac
+[ -b "$root" ] && resize2fs "$root" || true
+ssh-keygen -A

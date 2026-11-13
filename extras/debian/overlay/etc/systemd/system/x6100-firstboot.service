@@ -1,0 +1,13 @@
+[Unit]
+Description=First start: grow the root filesystem, ssh host keys
+ConditionPathExists=!/var/lib/x6100/firstboot-done
+After=systemd-remount-fs.service
+Before=ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/x6100/firstboot
+ExecStartPost=/bin/sh -c 'mkdir -p /var/lib/x6100 && touch /var/lib/x6100/firstboot-done'
+
+[Install]
+WantedBy=multi-user.target

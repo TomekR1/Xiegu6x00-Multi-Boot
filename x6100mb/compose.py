@@ -60,17 +60,38 @@ DOOM_NAME = "DOOM"
 DOOM_LOGO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "doom.png")
 
 
+DEBIAN_NAME = "Debian"
+# Debian's open use logo (LGPL-3+ / CC-BY-SA 3.0, (c) Software in the Public Interest)
+DEBIAN_LOGO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "debian.png")
+# The extras: a root filesystem each, started with the first image-based system's kernel
+EXTRAS = {
+    "doom": {"name": DOOM_NAME, "file": "doom-x6100-rootfs.ext4.xz", "logo": DOOM_LOGO,
+             "grow_mb": 0, "arg": "doom_modules"},
+    "debian": {"name": DEBIAN_NAME, "file": "debian-x6100-rootfs.ext4.xz", "logo": DEBIAN_LOGO,
+               "grow_mb": 2048, "arg": "x6100_donor"},
+}
+
+
 def resolve_extras(entries, rootfs_xz=None):
-    """The app's extras (Doom) as systems of their own: their root filesystem, booted with the
-    kernel and device tree of the first system from an image on the list"""
-    if not any(e["kind"] == "doom" for e in entries):
+    """The app's extras (Doom, Debian) as systems of their own: their root filesystem, booted with
+    the kernel and device tree of the first system from an image on the list. rootfs_xz: a path
+    for Doom's, or {kind: path}."""
+    if not any(e["kind"] in EXTRAS for e in entries):
         return entries
     from .image import ExtraSystem, cache_dir, extra_rootfs
+    paths = rootfs_xz if isinstance(rootfs_xz, dict) else {"doom": rootfs_xz}
     donor = next((e["sys"] for e in entries if e["kind"] == "sd"), None)
     out = []
     for e in entries:
-        if e["kind"] == "doom":
-            e = dict(e, kind="sd", sys=ExtraSystem(e["name"], extra_rootfs(cache_dir(), rootfs_xz), donor))
+        x = EXTRAS.get(e["kind"])
+        if x:
+            if donor is None:
+                from .image import ImageError
+                raise ImageError(t("{name} potrzebuje na karcie także systemu z obrazu (np. OpenX6X00): "
+                                   "uruchamia się z jego jądrem", name=x["name"]))
+            fs = extra_rootfs(cache_dir(), paths.get(e["kind"]), file=x["file"], name=x["name"])
+            e = dict(e, kind="sd", sys=ExtraSystem(e["name"], fs, donor, kind=e["kind"],
+                                                  grow_bytes=x["grow_mb"] << 20, donor_arg=x["arg"]))
         out.append(e)
     return out
 
@@ -79,8 +100,9 @@ def tile(entry):
     """What the graphic menu shows for an entry: its name, a logo of one's own, else the project's"""
     if entry.get("logo"):
         return {"name": entry["name"], "logo": entry["logo"]}
-    if entry["kind"] == "doom" or getattr(entry.get("sys"), "donor", None) is not None:
-        return {"name": entry["name"], "logo": DOOM_LOGO}
+    kind = entry["kind"] if entry["kind"] in EXTRAS else getattr(entry.get("sys"), "kind", None)
+    if kind in EXTRAS:
+        return {"name": entry["name"], "logo": EXTRAS[kind]["logo"]}
     logo = project_logo(entry)
     crop = None
     if logo:
@@ -88,6 +110,11 @@ def tile(entry):
         src = catalog.source_for(entry["name"]) or {}
         crop = src.get("crop") if logo and src.get("logo") else None
     return {"name": entry["name"], "logo": logo, "crop": crop}
+
+
+def _part_bytes(s):
+    """A root partition's size: its filesystem, and the room an extra grows into"""
+    return max(s.root_size, getattr(s, "part_size", 0))
 
 
 def _ascii(s, n=28):
@@ -318,7 +345,7 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     lba += boot_size // SECTOR
     layout = []                                       # (entry, ebr_lba or None, lba, sectors)
     first = sd[0]
-    s0 = first["sys"].root_size // SECTOR
+    s0 = _part_bytes(first["sys"]) // SECTOR
     layout.append((first, None, lba, s0))
     lba = _up(lba + s0)
     ext_start = None
@@ -327,7 +354,7 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         for e in sd[1:]:
             ebr = lba
             start = ebr + ALIGN
-            n = e["sys"].root_size // SECTOR
+            n = _part_bytes(e["sys"]) // SECTOR
             layout.append((e, ebr, start, n))
             lba = _up(start + n)
         ext_end = lba
@@ -404,7 +431,7 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         where = (f"{e['dir']}, root /dev/mmcblk0p{e['part']}" if e["kind"] == "sd" else "eMMC")
         readme.append(f"F{i + 1}  {e['name']}  ({where})")
     fat.add_file("menu.txt", ("\r\n".join(readme) + "\r\n").encode())
-    if any(getattr(e.get("sys"), "donor", None) is not None for e in sd):
+    if any(getattr(e.get("sys"), "kind", None) == "doom" for e in sd):
         # Doom's settings, read at its start (extras/doom/x6100_sound.c)
         fat.add_file("doom.txt", (
             t("# Doom: glosnosc efektow i muzyki 0..200 (%)") + "\r\nvolume=100\r\nmusic=100\r\n" +

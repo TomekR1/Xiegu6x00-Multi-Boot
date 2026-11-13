@@ -1,0 +1,2 @@
+# The radio's POWER key (and every keyboard's) switches the radio off through logind
+SUBSYSTEM=="input", KERNEL=="event*", TAG+="power-switch"

@@ -4,7 +4,7 @@ name: Build
 on:
   push:
     tags: ["v*"]
-    branches: [main]
+    branches: [main, debian-x6100]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -60,8 +60,24 @@ jobs:
           name: doom-x6100-rootfs
           path: extras/doom/out/doom-x6100-rootfs.ext4.xz
 
+  debian:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools (mmdebstrap, qemu for armhf)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q mmdebstrap qemu-user-static binfmt-support debian-archive-keyring e2fsprogs xz-utils
+      - name: Debian for the X6100 (Extras)
+        run: sudo ./extras/debian/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debian-x6100-rootfs
+          path: extras/debian/out/debian-x6100-rootfs.ext4.xz
+
   apps:
-    needs: [test, uboot, doom]
+    needs: [test, uboot, doom, debian]
     strategy:
       fail-fast: false
       matrix:
@@ -87,6 +103,8 @@ jobs:
         with: {name: u-boot-x6100-menu, path: x6100mb/data}
       - uses: actions/download-artifact@v4
         with: {name: doom-x6100-rootfs, path: x6100mb/data}
+      - uses: actions/download-artifact@v4
+        with: {name: debian-x6100-rootfs, path: x6100mb/data}
       - run: pip install pyinstaller==6.11.1 pillow==11.0.0 certifi sv-ttk==2.6.0
       - name: Build
         shell: bash

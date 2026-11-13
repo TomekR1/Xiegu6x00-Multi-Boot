@@ -164,6 +164,30 @@ class ComposeTest(unittest.TestCase):
         script = plan.script
         self.assertIn("setenv bm_boot3 'mmc dev 0; mmc read 0x45000000 0 1; if fatload mmc 0:1 0x45100000 SYS1/MBR.BIN", script)
 
+    def test_debian_extra(self):
+        import lzma
+        from x6100mb.compose import resolve_extras
+        a = os.path.join(self.tmp, "a.img")
+        fake_card(a, kernel=b"K" * 4000)
+        rootfs = os.path.join(self.tmp, "debian.ext4.xz")
+        with lzma.open(rootfs, "wb") as f:
+            f.write(b"E" * (3 << 20))
+        sa = SourceSystem(a, a)
+        ents = resolve_extras([{"kind": "sd", "name": "A", "sys": sa}, {"kind": "debian", "name": "Debian"}],
+                              {"debian": rootfs})
+        plan = compose(ents, data_mb=40)
+        out = os.path.join(self.tmp, "deb.img")
+        write_image_file(plan, out)
+        with open(out, "rb") as f:
+            parts = {p[0]: p for p in read_mbr(f)}
+            self.assertGreaterEqual(parts[5][3] * SECTOR, (3 << 20) + (2048 << 20))  # room to grow
+            boot = FatReader(f, parts[1][2] * SECTOR)
+            script = parse_script_image(boot.read_file("boot.scr"))
+            self.assertIn("x6100_donor=/dev/mmcblk0p2", script)
+            self.assertNotIn("doom.txt", boot.listdir())
+            f.seek(parts[5][2] * SECTOR)
+            self.assertEqual(f.read(4), b"EEEE")
+
     def test_long_timeout_and_wait(self):
         a = os.path.join(self.tmp, "a.img")
         fake_card(a)

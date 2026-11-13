@@ -61,6 +61,8 @@ def cli(argv):
     b.add_argument("--xiegu", action="store_true", help="an entry for Xiegu's system on the eMMC (last)")
     b.add_argument("--doom", action="store_true", help="the Doom easter egg (with the first system's kernel)")
     b.add_argument("--doom-rootfs", help="its root filesystem (.ext4.xz; default: the one in the app)")
+    b.add_argument("--debian", action="store_true", help="Debian for the X6100 (with the first system's kernel)")
+    b.add_argument("--debian-rootfs", help="its root filesystem (.ext4.xz; default: the app's or the cache's)")
     b.add_argument("--default", type=int, default=1, help="default entry, 1 = F1")
     b.add_argument("--timeout", type=int, default=5, help="seconds before the default starts (0-15)")
     b.add_argument("--wait", action="store_true", help="no default: the menu waits for a key")
@@ -109,6 +111,9 @@ def cli(argv):
         if a.doom:
             from .compose import DOOM_NAME
             entries.append({"kind": "doom", "name": DOOM_NAME})
+        if a.debian:
+            from .compose import DEBIAN_NAME
+            entries.append({"kind": "debian", "name": DEBIAN_NAME})
         if a.xiegu:
             entries.append({"kind": "xiegu", "name": "Xiegu (eMMC)"})
         for spec in a.logo:
@@ -123,7 +128,7 @@ def cli(argv):
             from .image import UBoot
             ub = UBoot(a.uboot)
         from .compose import resolve_extras
-        entries = resolve_extras(entries, a.doom_rootfs)
+        entries = resolve_extras(entries, {"doom": a.doom_rootfs, "debian": a.debian_rootfs})
         plan = compose(entries, default=a.default - 1, timeout_s=a.timeout, data_mb=a.data_mb, uboot_from=ub,
                        data_mode=a.data, graphics=not a.no_graphics, wait=a.wait)
         if a.script_only:

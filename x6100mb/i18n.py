@@ -233,6 +233,13 @@ EN = {
         "Doom needs a system from an image on the card too (e.g. OpenX6X00): it starts with its kernel",
     "rootfs {mb} MB, jądro z: {name}": "rootfs {mb} MB, kernel from: {name}",
     "ta wersja aplikacji nie ma w sobie Dooma": "this build of the app has no Doom in it",
+    "ta wersja aplikacji nie ma w sobie: {name}": "this build of the app does not carry: {name}",
+    "{name} potrzebuje na karcie także systemu z obrazu (np. OpenX6X00): uruchamia się z jego jądrem":
+        "{name} needs a system from an image on the card too (e.g. OpenX6X00): it starts with its kernel",
+    "{name} uruchamia się z jądrem systemu z obrazu (np. OpenX6X00). Dodaj najpierw taki system.":
+        "{name} starts with the kernel of a system from an image (e.g. OpenX6X00). Add such a system first.",
+    "Debian 13 dla X6100: WiFi, SSH, rigctld; login radio / radio. Jądro z: {name}":
+        "Debian 13 for the X6100: WiFi, SSH, rigctld; login radio / radio. Kernel from: {name}",
     # the card
     "Start F${bm_default} za ${bm_left} s": "Start F${bm_default} in ${bm_left} s",
     "Wybierz system klawiszem F1-F{n}": "Choose a system with F1-F{n}",

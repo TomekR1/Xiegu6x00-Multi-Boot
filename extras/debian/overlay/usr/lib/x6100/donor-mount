@@ -1,0 +1,10 @@
+#!/bin/sh
+# The kernel is the multiboot card's first system's (x6100_donor=/dev/mmcblk0pN on its command
+# line): its modules are on that system's root filesystem, mounted read-only and nothing changed.
+dev=$(tr ' ' '\n' < /proc/cmdline | sed -n 's/^\(x6100_donor\|doom_modules\)=//p' | head -n1)
+[ -n "$dev" ] || exit 0
+mkdir -p /run/x6100/donor
+mount -o ro "$dev" /run/x6100/donor || exit 0
+if [ -d "/run/x6100/donor/lib/modules/$(uname -r)" ]; then
+    mount --bind /run/x6100/donor/lib/modules /usr/lib/modules
+fi

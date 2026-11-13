@@ -11,7 +11,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import devices, i18n
-from .compose import DOOM_LOGO, DOOM_NAME, MAX_ENTRIES, MAX_SECS, XIEGU_DEFAULTS, compose, resolve_extras
+from .compose import DEBIAN_LOGO, DEBIAN_NAME, DOOM_LOGO, DOOM_NAME, EXTRAS, MAX_ENTRIES, MAX_SECS, XIEGU_DEFAULTS, compose, resolve_extras
 from .i18n import t
 from .image import SourceSystem, cache_dir, open_source
 from .writer import Progress, write_device, write_image_file
@@ -238,6 +238,10 @@ class App:
             donor = next((x for x in self.entries if x["kind"] == "sd"), None)
             return (t("klasyczny Doom (Freedoom); jądro i parowania Bluetooth z: {name}", name=donor["name"])
                     if donor else t("klasyczny Doom (Freedoom), z jądrem pierwszego systemu z obrazu na liście"))
+        if e["kind"] == "debian":
+            donor = next((x for x in self.entries if x["kind"] == "sd"), None)
+            return t("Debian 13 dla X6100: WiFi, SSH, rigctld; login radio / radio. Jądro z: {name}",
+                     name=donor["name"] if donor else "?")
         info = e["sys"].summary()
         if e["sys"].warnings:
             info += "  ⚠ " + "; ".join(e["sys"].warnings)
@@ -265,7 +269,7 @@ class App:
         if key not in self._tile_jobs:
             self._tile_jobs.add(key)
             threading.Thread(target=self._tile_job, args=(dict(e), key), daemon=True).start()
-        return {"name": e["name"], "logo": e.get("logo") or (DOOM_LOGO if e["kind"] == "doom" else None)}
+        return {"name": e["name"], "logo": e.get("logo") or EXTRAS.get(e["kind"], {}).get("logo")}
 
     def _tile_job(self, e, key):
         from .compose import tile
@@ -378,12 +382,34 @@ class App:
         except Exception:
             self._doom_img = None
         ttk.Button(col, text="  + Doom", image=self._doom_img, compound="left", command=self.add_doom).pack(fill="x")
+        self._debian_img = None
+        try:
+            from . import menu_gfx
+            if menu_gfx.HAVE_PIL:
+                self._debian_img = self._photo(menu_gfx.load_logo(DEBIAN_LOGO, size=44, bg=(255, 255, 255)))
+        except Exception:
+            self._debian_img = None
+        ttk.Button(col, text="  + Debian", image=self._debian_img, compound="left",
+                   command=lambda: self.add_extra("debian", DEBIAN_NAME)).pack(fill="x", pady=(6, 0))
         read = tk.Label(col, text="⚠  " + t("Przeczytaj najpierw"), bg=RED, fg="#ffffff", cursor="hand2",
                         font=_font(12, "bold"), padx=10, pady=9)
         read.pack(fill="x", pady=(6, 0))
         read.bind("<Button-1>", lambda e: self.doom_readme())
         read.bind("<Enter>", lambda e: read.configure(bg=RED_HOVER))
         read.bind("<Leave>", lambda e: read.configure(bg=RED))
+
+    def add_extra(self, kind, name):
+        if any(e["kind"] == kind for e in self.entries):
+            return
+        if len(self.entries) >= MAX_ENTRIES:
+            messagebox.showwarning(APP, t("Menu ma najwyżej {n} pozycji (F1–F{n}).", n=MAX_ENTRIES))
+            return
+        if not any(e["kind"] == "sd" for e in self.entries):
+            messagebox.showinfo(APP, t("{name} uruchamia się z jądrem systemu z obrazu (np. OpenX6X00). "
+                                       "Dodaj najpierw taki system.", name=name))
+            return
+        self.entries.append({"kind": kind, "name": name})
+        self._redraw(len(self.entries) - 1)
 
     def add_doom(self):
         if any(e["kind"] == "doom" for e in self.entries):
