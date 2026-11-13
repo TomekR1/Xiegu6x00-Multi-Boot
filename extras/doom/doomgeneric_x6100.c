@@ -214,6 +214,7 @@ static void close_log(void)
 	if (log_fp) {
 		log_file("Bluetooth script", "/bt/tmp/doom-bt.log", 8000);
 		log_file("bluetoothd", "/bt/tmp/bluetoothd.log", 8000);
+		log_usb_devices();
 		log_dmesg();
 		logmsg("end");
 		fclose(log_fp);
@@ -398,8 +399,19 @@ static void knob(int axis, int value)
 }
 
 /* A USB keyboard: the usual Doom keys */
+extern boolean menuactive;
+
 static unsigned char kb_key(unsigned code)
 {
+	/* WASD walks in the game (W/S forward and back, A/D sideways); in the menus they are letters */
+	if (!menuactive) {
+		switch (code) {
+		case KEY_W: return DK_UP;
+		case KEY_S: return DK_DOWN;
+		case KEY_A: return DK_STRAFE_L;
+		case KEY_D: return DK_STRAFE_R;
+		}
+	}
 	static const char row1[] = "1234567890-=", row2[] = "qwertyuiop[]", row3[] = "asdfghjkl;'`",
 	                  row4[] = "zxcvbnm,./";
 	switch (code) {
@@ -442,7 +454,7 @@ static void mouse_event(const struct input_event *ev)
 		else if (ev->code == BTN_RIGHT && (ev->value == 0 || ev->value == 1))
 			push(ev->value, DK_USE);
 	} else if (ev->type == EV_SYN && ev->code == SYN_REPORT) {
-		event_t e = {.type = ev_mouse, .data1 = mouse_buttons, .data2 = mouse_dx * 3,
+		event_t e = {.type = ev_mouse, .data1 = mouse_buttons, .data2 = mouse_dx * 6,
 		             .data3 = 0, .data4 = 0};
 		D_PostEvent(&e);
 		mouse_dx = 0;
@@ -686,7 +698,7 @@ void DG_SetWindowTitle(const char *title)
 /* As init: the filesystems it needs, writable for the settings and saved games */
 extern int x6100_sound_volume, x6100_music_volume;
 static int bluetooth_on = 1;   /* bluetooth=0 in doom.txt: no Bluetooth */
-void x6100_set_rxvol(int vol);
+void x6100_radio_audio(int vol);
 
 /* /boot/doom.txt on the card's BOOT partition: volume=0..200 (%), rxvol=0..55 (the radio's AF volume) */
 static void read_settings(void)
@@ -699,7 +711,7 @@ static void read_settings(void)
 		if (log_fp)
 			dup2(fileno(log_fp), 2);              /* what the sound and the modules say, too */
 	} else if (mount("/dev/mmcblk0p1", "/boot", "vfat", MS_RDONLY, NULL) != 0) {
-		x6100_set_rxvol(rxvol);
+		x6100_radio_audio(rxvol);
 		return;
 	}
 	struct utsname u;
@@ -723,7 +735,7 @@ static void read_settings(void)
 		fclose(f);
 	logmsg("settings: volume=%d music=%d bluetooth=%d rxvol=%d", x6100_sound_volume, x6100_music_volume,
 	       bluetooth_on, rxvol);
-	x6100_set_rxvol(rxvol);
+	x6100_radio_audio(rxvol);
 	if (!boot_rw)
 		umount("/boot");
 }
@@ -809,7 +821,21 @@ static const char bt_script[] =
 	"set -x\n"
 	"export PATH=/usr/sbin:/usr/bin:/sbin:/bin\n"
 	"mkdir -p /run/dbus /var/lock/subsys /tmp/dbus /var/run\n"
+	/* the lending system's udev, as it starts: every driver its devices need (the WiFi/BT chip's) */
+	"if [ -x /sbin/udevd ]; then\n"
+	"  mkdir -p /run/udev\n"
+	"  /sbin/udevd -d\n"
+	"  udevadm trigger --type=subsystems --action=add\n"
+	"  udevadm trigger --type=devices --action=add\n"
+	"  udevadm settle --timeout=30\n"
+	"fi\n"
 	"modprobe btusb 2>/dev/null; modprobe hidp 2>/dev/null; modprobe uhid 2>/dev/null\n"
+	"for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do\n"
+	"  [ -d /sys/class/bluetooth/hci0 ] && break\n"
+	"  sleep 1\n"
+	"done\n"
+	"ls /sys/class/bluetooth\n"
+	"lsmod 2>/dev/null | head -40\n"
 	"[ -x /etc/init.d/S39btpairings ] && /etc/init.d/S39btpairings start >/dev/null 2>&1\n"
 	"dbus-uuidgen --ensure 2>/dev/null\n"
 	"dbus-daemon --system\n"

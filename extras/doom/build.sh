@@ -17,6 +17,11 @@ rm -rf "$W" && mkdir -p "$W" "$OUT"
 
 git clone -q https://github.com/ozkl/doomgeneric "$W/doomgeneric"
 git -C "$W/doomgeneric" checkout -q $DG_COMMIT
+# The mouse's motion summed until the next tic (Doom keeps only the last event's: a USB mouse
+# sends many small ones a tic, and turning was too slow to notice)
+sed -i 's/\tmousex = ev->data2\*/\tmousex += ev->data2*/; s/\tmousey = ev->data3\*/\tmousey += ev->data3*/' \
+    "$W/doomgeneric/doomgeneric/g_game.c"
+grep -q 'mousex += ev->data2' "$W/doomgeneric/doomgeneric/g_game.c"
 git clone -q https://github.com/tinyalsa/tinyalsa "$W/tinyalsa"
 git -C "$W/tinyalsa" checkout -q $TA_COMMIT
 TA=$W/tinyalsa

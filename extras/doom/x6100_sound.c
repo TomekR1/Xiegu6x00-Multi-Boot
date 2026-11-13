@@ -116,24 +116,41 @@ static void set_mixer(void)
 	mixer_close(m);
 }
 
-/* The radio board's AF volume (what the VOL knob sets in the radio's software) */
-void x6100_set_rxvol(int vol)
+/* The radio's base board, over I2C as its own software does it (bus 0, address 0x72, 32-bit
+ * registers, X6100Control's numbering): a register's address big-endian, its value little-endian */
+static bool base_write(int fd, unsigned reg, uint32_t val)
+{
+	uint16_t addr = (uint16_t)(reg * 4);
+	uint8_t buf[6] = {(uint8_t)(addr >> 8), (uint8_t)addr, (uint8_t)val, (uint8_t)(val >> 8),
+	                  (uint8_t)(val >> 16), (uint8_t)(val >> 24)};
+	struct i2c_msg msg = {.addr = 0x72, .flags = 0, .len = sizeof buf, .buf = buf};
+	struct i2c_rdwr_ioctl_data d = {.msgs = &msg, .nmsgs = 1};
+	if (ioctl(fd, I2C_RDWR, &d) < 0) {
+		fprintf(stderr, "sound: base board register %u: %s\n", reg, strerror(errno));
+		return false;
+	}
+	return true;
+}
+
+/* The radio's speaker playing the SoC's sound, as OpenX6X00 sets it to play audio (its
+ * AUDIO_PLAY_ON): the record bit (voice_rec, 0x8) of register 12 on, so the codec's output goes
+ * to the speaker; both microphones' gain 0 in register 20 (line in/out at its default 10), so no
+ * microphone is heard; the AF volume, register 14, at vol (0..55). Without the radio's own
+ * software none of it is set, and the codec's sound only went towards the transmitter. */
+void x6100_radio_audio(int vol)
 {
 	if (vol < 0 || vol > 55)
-		return;
+		vol = 20;
 	int fd = open("/dev/i2c-0", O_RDWR);
 	if (fd < 0) {
 		fprintf(stderr, "sound: /dev/i2c-0: %s\n", strerror(errno));
 		return;
 	}
-	uint16_t addr = 14 * 4;                   /* x6100_rxvol, 32-bit registers */
-	uint8_t buf[6] = {(uint8_t)(addr >> 8), (uint8_t)addr, (uint8_t)vol, 0, 0, 0};
-	struct i2c_msg msg = {.addr = 0x72, .flags = 0, .len = sizeof buf, .buf = buf};
-	struct i2c_rdwr_ioctl_data d = {.msgs = &msg, .nmsgs = 1};
-	if (ioctl(fd, I2C_RDWR, &d) < 0)
-		fprintf(stderr, "sound: rxvol: %s\n", strerror(errno));
-	else
-		fprintf(stderr, "sound: radio AF volume (rxvol) set to %d\n", vol);
+	bool ok = base_write(fd, 20, 10u | (10u << 8)) &&     /* line in 10, line out 10, mics 0 */
+	          base_write(fd, 12, 0x8) &&                    /* record: the codec to the speaker */
+	          base_write(fd, 14, (uint32_t)vol);            /* AF volume */
+	fprintf(stderr, "sound: radio speaker %s (record on, mics off, AF volume %d)\n",
+	        ok ? "set" : "NOT set", vol);
 	close(fd);
 }
 
