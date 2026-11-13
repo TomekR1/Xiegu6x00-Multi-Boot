@@ -1,6 +1,7 @@
 # Aplikacje na Windows, macOS i Linux oraz testowy obraz karty, wystawiane w Releases.
-# Każdy push na main robi od razu publiczne wydanie z kolejnym numerem (v0.2.7 -> v0.2.8);
-# do tego tag v* albo ręcznie: Actions > Build > Run workflow (z numerem wersji).
+# Każdy system ma swój numer wersji w x6100mb/assets/versions.json (Windows, macOS, Linux osobno).
+# Push na main, w którym któryś numer wzrósł, robi od razu publiczne wydanie (Latest);
+# bez zmiany numerów tylko budowanie i testy.
 name: Build
 on:
   push:
@@ -160,47 +161,54 @@ jobs:
     if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || inputs.release_tag != '') && needs.uboot.result == 'success' && needs.live-check.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Version number
+      - uses: actions/checkout@v4
+        with: {sparse-checkout: x6100mb/assets/versions.json, sparse-checkout-cone-mode: false}
+      - name: Version numbers
+        id: ver
         env:
           GH_TOKEN: ${{ github.token }}
           GIVEN: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag }}
         run: |
-          tag="$GIVEN"
-          if [ -z "$tag" ]; then
-            last=$(gh api "repos/${{ github.repository }}/tags?per_page=100" --paginate --jq '.[].name' |
-                   grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
-            last=${last:-v0.0.0}
-            IFS=. read -r a b c <<< "${last#v}"
-            tag="v$a.$b.$((c + 1))"
+          eval "$(python3 -c "import json;v=json.load(open('x6100mb/assets/versions.json'));print('W=%s M=%s L=%s' % (v['windows'], v['macos'], v['linux']))")"
+          tag="${GIVEN:-win$W-mac$M-linux$L}"
+          if gh api "repos/${{ github.repository }}/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "$tag is out already: no version number went up, nothing to release"
+            echo "skip=1" >> "$GITHUB_OUTPUT"
           fi
-          echo "REL_TAG=$tag" >> "$GITHUB_ENV"
+          { echo "REL_TAG=$tag"; echo "VW=$W"; echo "VM=$M"; echo "VL=$L"; } >> "$GITHUB_ENV"
           echo "release: $tag"
       - uses: actions/download-artifact@v4
+        if: steps.ver.outputs.skip != '1'
         with: {path: art, pattern: "Xiegu-Multi-Patcher-*", merge-multiple: true}
       - name: At least one app
+        if: steps.ver.outputs.skip != '1'
         run: ls art/Xiegu-Multi-Patcher* >/dev/null
       - uses: actions/download-artifact@v4
+        if: steps.ver.outputs.skip != '1'
         with: {name: u-boot-x6100-menu, path: art}
       - run: ls -la art
+        if: steps.ver.outputs.skip != '1'
       - name: The interim test build goes
+        if: steps.ver.outputs.skip != '1'
         env: {GH_TOKEN: "${{ github.token }}"}
         run: gh release delete test-build --cleanup-tag --yes -R "${{ github.repository }}" || true
       - name: Release
+        if: steps.ver.outputs.skip != '1'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.REL_TAG }}
           target_commitish: ${{ github.sha }}
-          name: Xiegu Multi Patcher ${{ env.REL_TAG }}
-          prerelease: ${{ contains(env.REL_TAG, '-') }}
+          name: "Xiegu Multi Patcher · Windows ${{ env.VW }} · macOS ${{ env.VM }} · Linux ${{ env.VL }}"
+          prerelease: false
           make_latest: true
           files: art/*
           body: |
             Kilka systemów na jednej karcie SD dla Xiegu X6100, z menu na ekranie radia (F1–F5).
 
             **Pobierz aplikację dla swojego komputera:**
-            - Windows: `Xiegu-Multi-Patcher.exe`
-            - macOS: `Xiegu-Multi-Patcher-macOS.zip` (rozpakuj; za pierwszym razem: Ustawienia systemowe → Prywatność i ochrona → Otwórz mimo to)
-            - Linux: `Xiegu-Multi-Patcher-Linux` (`chmod +x`; do zapisu karty potrzebny pkexec)
+            - Windows: `Xiegu-Multi-Patcher.exe` (wersja ${{ env.VW }})
+            - macOS: `Xiegu-Multi-Patcher-macOS.zip` (wersja ${{ env.VM }}) (rozpakuj; za pierwszym razem: Ustawienia systemowe → Prywatność i ochrona → Otwórz mimo to)
+            - Linux: `Xiegu-Multi-Patcher-Linux` (wersja ${{ env.VL }}; `chmod +x`; do zapisu karty potrzebny pkexec)
 
             Systemy radia (OpenX6X00, OpenX6100, CX8ANM, 1KO125, IU1WXY, R1CBU) pobierasz w aplikacji
             przyciskiem **+ Z internetu…**, prosto z wydań ich autorów. Instrukcja: README w repozytorium.

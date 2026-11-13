@@ -18,6 +18,8 @@ Najnowsza wersja jest w zakładce **[Releases](../../releases/latest)**:
 | `Xiegu-Multi-Patcher-macOS.zip` | macOS: rozpakuj, przenieś do Programów; za pierwszym razem macOS ją zablokuje: **Ustawienia systemowe → Prywatność i ochrona → Otwórz mimo to** (albo w Terminalu `xattr -dr com.apple.quarantine "/Applications/Xiegu Multi Patcher.app"`) |
 | `Xiegu-Multi-Patcher-Linux` | Linux x86-64: `chmod +x Xiegu-Multi-Patcher-Linux`; do zapisu karty potrzebny `pkexec` |
 
+Każda wersja aplikacji ma swój numer (Windows, macOS i Linux osobno, w tytule okna aplikacji i w nazwie wydania): poprawka tylko pod Windows podnosi tylko numer Windows.
+
 Nic nie trzeba instalować. Aplikacja jest po polsku i po angielsku (wybór języka w prawym górnym
 rogu okna). Systemów radia nie ma w wydaniu: wybierasz je i pobierasz
 w aplikacji, prosto z wydań ich autorów.

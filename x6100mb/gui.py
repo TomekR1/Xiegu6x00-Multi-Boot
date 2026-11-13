@@ -17,6 +17,17 @@ from .image import SourceSystem, cache_dir, open_source
 from .writer import Progress, write_device, write_image_file
 
 APP = "Xiegu Multi Patcher"
+
+
+def app_version():
+    """This computer's app version, from assets/versions.json (each system numbered on its own)"""
+    import sys
+    key = "windows" if sys.platform.startswith("win") else "macos" if sys.platform == "darwin" else "linux"
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "versions.json")) as f:
+            return json.load(f).get(key, "")
+    except (OSError, ValueError):
+        return ""
 AUTHOR_URL = "https://www.qrz.com/db/SQ6RT"
 HEAD_BG, HEAD_FG, HEAD_SUB, LINK = "#0f2742", "#ffffff", "#a9bcd3", "#8fc3ff"
 # Colours of the light and the dark theme; _apply_colours() sets the module's names from one
@@ -247,7 +258,7 @@ class ProgressWindow:
 class App:
     def __init__(self, root):
         self.root = root
-        root.title(APP)
+        root.title(APP + (" " + app_version() if app_version() else ""))
         root.minsize(940, 760)
         self.entries = []                 # {"kind", "name", "sys"?}
         self.default = 0
@@ -315,7 +326,7 @@ class App:
             tk.Label(inner, image=icon, bg=HEAD_BG).pack(side="left", padx=(0, 12))
         titles = tk.Frame(inner, bg=HEAD_BG)
         titles.pack(side="left", fill="x", expand=True)
-        tk.Label(titles, text=APP, bg=HEAD_BG, fg=HEAD_FG, font=_font(18, "bold")).pack(anchor="w")
+        tk.Label(titles, text=APP + (" " + app_version() if app_version() else ""), bg=HEAD_BG, fg=HEAD_FG, font=_font(18, "bold")).pack(anchor="w")
         tk.Label(titles, text=t("Kilka systemów na jednej karcie SD dla Xiegu X6100: przy włączaniu radia menu na "
                                 "ekranie, wybór klawiszem F1–F5."), bg=HEAD_BG, fg=HEAD_SUB,
                  font=_font(10), wraplength=560, justify="left").pack(anchor="w")
