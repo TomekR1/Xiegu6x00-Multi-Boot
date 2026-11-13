@@ -272,7 +272,7 @@ def env_file(default, timeout_s, xiegu=None, wait=False):
 
 
 def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboot_from=None,
-            xiegu=None, boot_extra_mb=32, data_mode="shared", graphics=True, wait=False):
+            xiegu=None, boot_extra_mb=32, data_mode="shared", graphics=True, wait=False, data_files=None):
     """A Plan for the card. entries as for menu_script, without "dir"/"part" (filled in here);
     an entry may name a "logo" picture for the graphic menu.
 
@@ -433,9 +433,13 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     for off, piece in fat.extents():
         plan.add(boot_lba * SECTOR + off, piece)
 
-    # DATA: empty FAT32s labelled DATA (OpenX6X00 looks for the label)
+    # DATA: FAT32s labelled DATA (OpenX6X00 looks for the label); the settings kept from the old card
+    # (data_files: [(relative path, file, size)]) on the one the card starts with
     for at in data_areas:
         data = Fat32Builder(data_sectors * SECTOR, at, label="DATA")
+        if data_files and at == active:
+            for rel, path, size in data_files:
+                data.add_file(rel, src=(path, 0, size))
         for off, piece in data.extents():
             plan.add(at * SECTOR + off, piece)
 
@@ -446,6 +450,7 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         "default": default, "timeout": timeout_s, "wait": wait, "uboot": ub.uboot_version,
         "boot_mb": boot_size // MIB, "data_mb": data_sectors * SECTOR // MIB, "size": size,
         "data_mode": data_mode, "data_partitions": n_data, "screen": screen, "graphics": gfx,
+        "data_files": len(data_files or ()),
     }
     plan.script = script
     return plan

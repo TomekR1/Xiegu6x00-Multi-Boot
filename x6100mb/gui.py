@@ -294,6 +294,13 @@ class App:
         self.btn_img = ColorButton(b, t("Zapisz jako plik .img…"), "slate", self.save_image, font=_font(12, "bold"),
                                    padx=18, pady=12)
         self.btn_img.pack(side="right")
+        # The settings of the card in the reader (its DATA partition) onto the new one
+        keep = ttk.Frame(out)
+        keep.grid(row=1, column=0, columnspan=4, sticky="we", padx=8, pady=(2, 6))
+        self.keep_data = tk.BooleanVar(value=True)
+        self.keep_box = ttk.Checkbutton(keep, variable=self.keep_data, text="")
+        self.keep_box.pack(side="left")
+        ttk.Button(keep, text=t("Kopia DATA na komputer…"), command=self.backup_data).pack(side="right")
 
         self.status = tk.StringVar(value=t("Dodaj obraz karty systemu (.img, .img.zip lub .img.xz), np. OpenX6X00."))
         foot = ttk.Frame(top, style="Card.TFrame", padding=(12, 8))
@@ -617,6 +624,7 @@ class App:
         except Exception as e:
             self.cards = []
             self.status.set(t("Nie udało się odczytać listy kart: {e}", e=e))
+        self._find_data()
         vals = [f"{c['name']}  —  {_gb(c['size'])}  ({c['path']})" for c in self.cards]
         self.card_box["values"] = vals
         if vals:
@@ -624,6 +632,45 @@ class App:
         else:
             self.card.set("")
             self.card_box.set(t("brak karty SD — włóż kartę i kliknij Odśwież"))
+
+    def _find_data(self):
+        """The DATA partition of a card in the reader, mounted by the computer"""
+        from . import backup
+        try:
+            vols = backup.find_data_volumes()
+        except Exception:
+            vols = []
+        self.data_vol = vols[0]["path"] if vols else None
+        if self.data_vol:
+            self.keep_box.configure(text=t("Przenieś ustawienia ze starej karty (DATA: {p})", p=self.data_vol),
+                                    state="normal")
+        else:
+            self.keep_box.configure(text=t("Przenieś ustawienia: włóż starą kartę i kliknij Odśwież"),
+                                    state="disabled")
+
+    def backup_data(self):
+        from . import backup
+        self._find_data()
+        if not self.data_vol:
+            messagebox.showinfo(APP, t("Nie widać partycji DATA. Włóż kartę z radia do czytnika, poczekaj, aż "
+                                       "komputer ją pokaże, i kliknij Odśwież."))
+            return
+        try:
+            path = backup.save_zip(self.data_vol)
+        except Exception as e:
+            messagebox.showerror(APP, str(e))
+            return
+        messagebox.showinfo(APP, t("Kopia ustawień zapisana:\n{path}", path=path))
+
+    def _take_data(self, tmp):
+        """Before the card is erased: its DATA copied aside and kept as a .zip; the files for the new card"""
+        from . import backup
+        if not (self.keep_data.get() and self.data_vol and os.path.isdir(self.data_vol)):
+            return None, None
+        src = self.data_vol
+        files = backup.snapshot(src, os.path.join(tmp, "DATA"))
+        zip_path = backup.save_zip(os.path.join(tmp, "DATA"))
+        return files, zip_path
 
     # ---------------------------------------------------------------- building
     def _settings(self):
@@ -635,11 +682,15 @@ class App:
         xiegu = {k: v.get().strip() for k, v in self.xiegu_vars.items()}
         return timeout, data_mb, xiegu
 
-    def _plan(self, card_bytes=None):
-        timeout, data_mb, xiegu = self._settings()
+    def _plan(self, card_bytes=None, data_files=None, settings=None):
+        """The card; settings (taken on Tk's thread) let a job build it in its own thread"""
+        timeout, data_mb, xiegu, data_mode, wait = settings or self._all_settings()
         ents = resolve_extras([dict(e) for e in self.entries])
-        return compose(ents, default=self.default, timeout_s=timeout, data_mb=data_mb,
-                       card_bytes=card_bytes, xiegu=xiegu, data_mode=self.data_mode.get(), wait=self.wait.get())
+        return compose(ents, default=self.default, timeout_s=timeout, data_mb=data_mb, card_bytes=card_bytes,
+                       xiegu=xiegu, data_mode=data_mode, wait=wait, data_files=data_files)
+
+    def _all_settings(self):
+        return self._settings() + (self.data_mode.get(), self.wait.get())
 
     def save_image(self):
         if self.busy:
@@ -654,11 +705,21 @@ class App:
                                             **({} if devices.MAC else {"filetypes": [(t("Obraz karty"), "*.img")]}))
         if not path:
             return
-        self._job(t("Zapis obrazu…"), self._save_job, plan, path)
+        self._job(t("Zapis obrazu…"), self._save_job, plan, path, self._all_settings())
 
-    def _save_job(self, plan, path):
-        write_image_file(plan, path, Progress(self._progress_cb))
-        return ("msg", t("Zapisano {path} ({mb} MB). Można go wgrać balenaEtcherem.", path=path, mb=plan.size // 2**20))
+    def _save_job(self, plan, path, settings):
+        tmp = tempfile.mkdtemp(prefix="x6100mb-data-")
+        try:
+            files, zip_path = self._take_data(tmp)
+            if files is not None:
+                plan = self._plan(data_files=files, settings=settings)
+            write_image_file(plan, path, Progress(self._progress_cb))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        msg = t("Zapisano {path} ({mb} MB). Można go wgrać balenaEtcherem.", path=path, mb=plan.size // 2**20)
+        if files is not None:
+            msg += "\n\n" + t("Ustawienia ze starej karty: {n} plików przeniesionych; kopia: {zip}", n=len(files), zip=zip_path)
+        return ("msg", msg)
 
     def write_card(self):
         if self.busy:
@@ -677,13 +738,29 @@ class App:
         text = t("Karta: {card}\n\nWSZYSTKO na tej karcie zostanie usunięte.\n\nMenu:\n{lines}\n\nDATA: {mb} MB\n\nWgrać?",
                  card=f"{card['name']} {_gb(card['size'])} ({card['path']})", lines="\n".join(lines),
                  mb=plan.info["data_mb"])
+        if self.keep_data.get() and self.data_vol:
+            text += "\n\n" + t("Ustawienia z {p} zostaną przeniesione na nową kartę (i zapisane na komputerze).",
+                                p=self.data_vol)
         if not messagebox.askyesno(APP, text, icon="warning"):
             return
-        if devices.is_admin() or devices.MAC:
-            # macOS: the app writes itself, through authopen (it asks for the password)
-            self._job(t("Zapis na kartę…"), self._card_job_inproc, plan, card["path"])
-        else:
-            self._job(t("Zapis na kartę (uprawnienia administratora)…"), self._card_job_elevated, plan, card["path"])
+        inproc = devices.is_admin() or devices.MAC   # macOS: the app writes itself, through authopen
+        self._job(t("Zapis na kartę…") if inproc else t("Zapis na kartę (uprawnienia administratora)…"),
+                  self._card_job, plan, card, inproc, self._all_settings())
+
+    def _card_job(self, plan, card, inproc, settings):
+        tmp = tempfile.mkdtemp(prefix="x6100mb-data-")
+        os.chmod(tmp, 0o755)
+        try:
+            files, zip_path = self._take_data(tmp)
+            if files is not None:
+                plan = self._plan(card_bytes=card["size"], data_files=files, settings=settings)
+            result = (self._card_job_inproc if inproc else self._card_job_elevated)(plan, card["path"])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        if files is not None:
+            result = (result[0], result[1] + "\n\n" + t("Ustawienia ze starej karty: {n} plików przeniesionych; "
+                                                         "kopia: {zip}", n=len(files), zip=zip_path))
+        return result
 
     def _card_job_inproc(self, plan, dev):
         write_device(plan, dev, Progress(self._progress_cb))

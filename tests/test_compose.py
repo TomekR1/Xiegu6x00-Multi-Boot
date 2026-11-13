@@ -164,6 +164,30 @@ class ComposeTest(unittest.TestCase):
         script = plan.script
         self.assertIn("setenv bm_boot3 'mmc dev 0; mmc read 0x45000000 0 1; if fatload mmc 0:1 0x45100000 SYS1/MBR.BIN", script)
 
+    def test_data_files_carried_over(self):
+        a = os.path.join(self.tmp, "a.img")
+        fake_card(a)
+        sa = SourceSystem(a, a)
+        src = os.path.join(self.tmp, "old")
+        os.makedirs(os.path.join(src, "app_logs"))
+        with open(os.path.join(src, "params.db"), "wb") as f:
+            f.write(b"P" * 5000)
+        with open(os.path.join(src, "app_logs", "x6100_log_2026-11-13_10-00.txt"), "wb") as f:
+            f.write(b"log")
+        from x6100mb import backup
+        files = backup.snapshot(src, os.path.join(self.tmp, "copy"))
+        plan = compose([{"kind": "sd", "name": "A", "sys": sa}], data_mb=64, data_files=files)
+        out = os.path.join(self.tmp, "keep.img")
+        write_image_file(plan, out)
+        with open(out, "rb") as f:
+            parts = {p[0]: p for p in read_mbr(f)}
+            data = FatReader(f, parts[3][2] * SECTOR)
+            self.assertEqual(data.read_file("params.db"), b"P" * 5000)
+            self.assertEqual(data.read_file("app_logs/x6100_log_2026-11-13_10-00.txt"), b"log")
+        z = backup.save_zip(src, os.path.join(self.tmp, "b.zip"))
+        import zipfile
+        self.assertEqual(sorted(zipfile.ZipFile(z).namelist()), ["app_logs/x6100_log_2026-11-13_10-00.txt", "params.db"])
+
     def test_long_timeout_and_wait(self):
         a = os.path.join(self.tmp, "a.img")
         fake_card(a)

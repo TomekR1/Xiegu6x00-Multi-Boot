@@ -112,6 +112,17 @@ EN = {
         "Several systems on one SD card for the Xiegu X6100: a menu on the radio's screen at power-on, "
         "choose with the F1–F5 keys.",
     "Język:": "Language:",
+    "Kopia DATA na komputer…": "Back DATA up to the computer…",
+    "Przenieś ustawienia ze starej karty (DATA: {p})": "Carry the old card's settings over (DATA: {p})",
+    "Przenieś ustawienia: włóż starą kartę i kliknij Odśwież": "Carry settings over: put the old card in, click Refresh",
+    "Nie widać partycji DATA. Włóż kartę z radia do czytnika, poczekaj, aż komputer ją pokaże, i kliknij Odśwież.":
+        "No DATA partition is seen. Put the radio's card in the reader, wait until the computer shows it, and "
+        "click Refresh.",
+    "Kopia ustawień zapisana:\n{path}": "The settings backed up:\n{path}",
+    "Ustawienia ze starej karty: {n} plików przeniesionych; kopia: {zip}":
+        "Settings from the old card: {n} files carried over; a copy: {zip}",
+    "Ustawienia z {p} zostaną przeniesione na nową kartę (i zapisane na komputerze).":
+        "The settings on {p} will be carried onto the new card (and saved on the computer).",
     "Jasny": "Light",
     "Ciemny": "Dark",
     "1. Systemy w menu": "1. Systems in the menu",

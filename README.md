@@ -37,6 +37,13 @@ w aplikacji, prosto z wydań ich autorów.
    System poprosi o hasło administratora; po zapisie aplikacja sprawdza, czy wszystko się zgadza.
    Zamiast tego możesz kliknąć **Zapisz jako plik .img…** i wgrać plik balenaEtcherem.
 
+**Ustawienia ze starej karty:** jeśli w czytniku jest karta, z której radio już korzystało, komputer
+pokazuje jej partycję **DATA** (ustawienia, log QSO, logi, a w OpenX6X00 także sieci WiFi, klucze SSH
+i parowania Bluetooth). Aplikacja to widzi: zaznaczone **Przenieś ustawienia ze starej karty** kopiuje
+DATA przed skasowaniem karty, kładzie na nową kartę i zostawia kopię `.zip` w folderze
+`Dokumenty/Xiegu Multi Patcher/DATA`. Sama kopia, bez wgrywania: **Kopia DATA na komputer…**. Przy
+osobnych partycjach DATA ustawienia trafiają do DATA systemu domyślnego.
+
 Zapis kasuje całą zawartość wybranej karty. Aplikacja pokazuje tylko karty wymienne
 i nigdy dysku systemowego, ale sprawdź nazwę i rozmiar karty przed potwierdzeniem.
 

@@ -167,6 +167,57 @@ def _short_name(name):
     return base.ljust(8).encode() + ext.ljust(3).encode()
 
 
+_OK83 = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-~!#$%&'(){}^@`")
+
+
+def _is_83(name):
+    """A name FAT keeps as it is in its short entry (upper case 8.3)"""
+    if name in (".", ".."):
+        return True
+    base, _, ext = name.rpartition(".") if "." in name else (name, "", "")
+    return (bool(base) and len(base) <= 8 and len(ext) <= 3 and name.count(".") <= 1 and
+            all(c in _OK83 for c in base + ext))
+
+
+def _alias(name, taken):
+    """A short name for a long one, as Windows makes them (NAME~1.EXT), not yet in this folder"""
+    up = name.upper()
+    base, _, ext = up.rpartition(".") if "." in up.lstrip(".") else (up, "", "")
+    clean = lambda t: "".join(c if c in _OK83 else "_" for c in t.replace(" ", "").replace(".", ""))
+    base, ext = clean(base) or "_", clean(ext)[:3]
+    for n in range(1, 1000000):
+        tail = "~%d" % n
+        cand = base[:8 - len(tail)] + tail
+        key = cand.ljust(8).encode() + ext.ljust(3).encode()
+        if key not in taken:
+            taken.add(key)
+            return key
+    raise FatError(f"{name}: no short name left")
+
+
+def _lfn_entries(name, short11):
+    """The long name entries before a short one, last part first, with the short name's checksum"""
+    chk = 0
+    for b in short11:
+        chk = (((chk & 1) << 7) + (chk >> 1) + b) & 0xFF
+    units = name.encode("utf-16-le")
+    units = [units[i:i + 2] for i in range(0, len(units), 2)] + [b"\x00\x00"]
+    while len(units) % 13:
+        units.append(b"\xff\xff")
+    parts = [units[i:i + 13] for i in range(0, len(units), 13)]
+    out = bytearray()
+    for seq in range(len(parts), 0, -1):
+        u = parts[seq - 1]
+        e = bytearray(32)
+        e[0] = seq | (0x40 if seq == len(parts) else 0)
+        e[1:11] = b"".join(u[0:5])
+        e[11], e[12], e[13] = 0x0F, 0, chk
+        e[14:26] = b"".join(u[5:11])
+        e[28:32] = b"".join(u[11:13])
+        out += e
+    return bytes(out)
+
+
 def _dos_time(t):
     lt = time.localtime(t)
     d = ((max(lt.tm_year, 1980) - 1980) << 9) | (lt.tm_mon << 5) | lt.tm_mday
@@ -240,7 +291,6 @@ class Fat32Builder:
         d = self._dir(parts[:-1])
         size = len(data) if data is not None else src[2]
         f = {"name": parts[-1], "data": data, "src": src, "size": size}
-        _short_name(parts[-1])
         d["entries"].append(("file", parts[-1], f))
         self.files.append(f)
 
@@ -264,8 +314,24 @@ class Fat32Builder:
                 fat[first + i] = first + i + 1 if i < n - 1 else 0x0FFFFFFF
 
         # Clusters: directories first (each sized for its entries), then files
+        def names(d):
+            """Each entry's short name and the long name entries before it, unique in its folder"""
+            taken, d["names"] = set(), []
+            for kind, name, obj in d["entries"]:
+                if _is_83(name):
+                    short = _short_name(name)
+                    taken.add(short)
+                    d["names"].append((short, b""))
+                else:
+                    d["names"].append(None)
+            for k, (kind, name, obj) in enumerate(d["entries"]):
+                if d["names"][k] is None:
+                    short = _alias(name, taken)
+                    d["names"][k] = (short, _lfn_entries(name, short))
+
         def size_dirs(d, is_root):
-            n = len(d["entries"]) + (1 if is_root else 2)
+            names(d)
+            n = sum(1 + len(lfn) // 32 for _s, lfn in d["names"]) + (1 if is_root else 2)
             d["nclus"] = self._clusters_for(n * 32)
             d["cluster"] = alloc(d["nclus"])
             chain(d["cluster"], d["nclus"])
@@ -291,11 +357,12 @@ class Fat32Builder:
             else:
                 buf += _dirent(b".          ", 0x10, d["cluster"], 0, self.now)
                 buf += _dirent(b"..         ", 0x10, 0 if parent_cluster == 2 else parent_cluster, 0, self.now)
-            for kind, name, obj in d["entries"]:
+            for (kind, name, obj), (short, lfn) in zip(d["entries"], d["names"]):
+                buf += lfn
                 if kind == "dir":
-                    buf += _dirent(_short_name(name), 0x10, obj["cluster"], 0, self.now)
+                    buf += _dirent(short, 0x10, obj["cluster"], 0, self.now)
                 else:
-                    buf += _dirent(_short_name(name), 0x20, obj["cluster"], obj["size"], self.now)
+                    buf += _dirent(short, 0x20, obj["cluster"], obj["size"], self.now)
             buf += b"\x00" * (d["nclus"] * self.csize - len(buf))
             out.append((self._coff(d["cluster"]), Data(buf)))
             for kind, _name, obj in d["entries"]:
