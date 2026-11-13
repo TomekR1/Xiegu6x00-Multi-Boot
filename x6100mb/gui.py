@@ -21,6 +21,8 @@ AUTHOR_URL = "https://www.qrz.com/db/SQ6RT"
 HEAD_BG, HEAD_FG, HEAD_SUB, LINK = "#0f2742", "#ffffff", "#a9bcd3", "#8fc3ff"
 HINT = "#9aa3ad"
 RED, RED_HOVER = "#d32f2f", "#ef4444"
+ACCENT = "#57c8ff"
+STRIPE = "#232323"
 PAGE_BG, TEXT_FG = "#1c1c1c", "#e6e6e6"
 PHASES = {"download": "Pobieranie", "prepare": "Przygotowanie karty", "write": "Zapis",
           "sync": "Opróżnianie bufora karty",
@@ -50,7 +52,7 @@ class App:
     # ---------------------------------------------------------------- layout
     def _build_all(self, keep=None):
         self.top = ttk.Frame(self.root)
-        self.top.pack(fill="both", expand=True, padx=10, pady=10)
+        self.top.pack(fill="both", expand=True, padx=10, pady=(0, 8))
         self._build(self.top)
         if keep:
             for name, value in keep.items():
@@ -83,7 +85,7 @@ class App:
         head.pack(fill="x", before=top)
         self._head = head
         inner = tk.Frame(head, bg=HEAD_BG)
-        inner.pack(fill="x", padx=16, pady=12)
+        inner.pack(fill="x", padx=16, pady=9)
         icon = _icon_image(self.root, 48)
         if icon is not None:
             tk.Label(inner, image=icon, bg=HEAD_BG).pack(side="left", padx=(0, 12))
@@ -105,37 +107,44 @@ class App:
                           font=_font(10, "underline"))
         author.pack(anchor="e", pady=(6, 0))
         author.bind("<Button-1>", lambda e: webbrowser.open(AUTHOR_URL))
+        tk.Frame(head, bg=ACCENT, height=3).pack(fill="x", side="bottom")
 
-        box = ttk.LabelFrame(top, text=t("1. Systemy w menu"))
-        box.pack(fill="both", expand=True)
+        box = self._section(top, 1, t("Systemy w menu"), expand=True)
         cols = ("key", "name", "info")
-        self.tree = ttk.Treeview(box, columns=cols, show="tree headings", height=5, selectmode="browse",
+        self.tree = ttk.Treeview(box, columns=cols, show="tree headings", height=4, selectmode="browse",
                                  style="Systems.Treeview")
         self.tree.column("#0", width=64, stretch=False, anchor="center")
+        self.tree.tag_configure("odd", background=STRIPE)
         for c, h, w in (("key", "Klawisz", 70), ("name", "Nazwa w menu", 170), ("info", "Zawartość", 330)):
             self.tree.heading(c, text=t(h))
-            self.tree.column(c, width=w, stretch=(c == "info"))
-        self.tree.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=8)
-        self.tree.bind("<Double-1>", lambda e: self.rename())
+            self.tree.column(c, width=w, stretch=(c == "info"), anchor="center" if c == "key" else "w")
         btns = ttk.Frame(box)
-        btns.pack(side="right", fill="y", padx=8, pady=8)
-        for item in (("+ Z internetu…", self.add_online), ("+ Obraz karty…", self.add_image),
-                          ("+ Xiegu z eMMC", self.add_xiegu), None,
-                          ("Zmień nazwę", self.rename), ("W górę", lambda: self.move(-1)),
-                          ("W dół", lambda: self.move(1)), ("Domyślny", self.set_default),
-                          ("Logo…", self.choose_logo), ("Usuń", self.remove), None,
-                          ("Podgląd menu", self.preview)):
-            if item is None:
-                ttk.Separator(btns).pack(fill="x", pady=5)
-                continue
-            text, cmd = item
+        btns.pack(side="right", fill="y", padx=(10, 4), pady=4)
+        for text, cmd, accent in (("+ Z internetu…", self.add_online, True), ("+ Obraz karty…", self.add_image, False),
+                                  ("+ Xiegu z eMMC", self.add_xiegu, False)):
             ttk.Button(btns, text=t(text), command=cmd, width=18,
-                       style="Accent.TButton" if cmd == self.add_online else "TButton").pack(fill="x", pady=2)
+                       style="Accent.TButton" if accent else "TButton").pack(fill="x", pady=2)
+        ttk.Separator(btns).pack(fill="x", pady=6)
+        ttk.Button(btns, text="▶  " + t("Podgląd menu"), command=self.preview, width=18).pack(fill="x", pady=2)
+        left = ttk.Frame(box)
+        left.pack(side="left", fill="both", expand=True)
+        tools = ttk.Frame(left)
+        tools.pack(side="bottom", fill="x", padx=4, pady=(6, 2))
+        for text, cmd in (("↑", lambda: self.move(-1)), ("↓", lambda: self.move(1)),
+                          ("★  " + t("Domyślny"), self.set_default), ("✎  " + t("Zmień nazwę"), self.rename),
+                          ("▣  " + t("Logo…"), self.choose_logo)):
+            ttk.Button(tools, text=text, command=cmd, width=3 if len(text) == 1 else 0).pack(side="left", padx=(0, 6))
+        ttk.Button(tools, text="✕  " + t("Usuń"), command=self.remove).pack(side="right")
+        self.tree.pack(in_=left, side="top", fill="both", expand=True, padx=(4, 0), pady=(4, 0))
+        self.tree.lift(left)
+        self.empty = ttk.Label(self.tree, text=t("Lista jest pusta. Zacznij od „+ Z internetu…”: wybierz system, "
+                                                 "a aplikacja sama go pobierze."), foreground=HINT,
+                               wraplength=380, justify="center", font=_font(11))
+        self.tree.bind("<Double-1>", lambda e: self.rename())
 
         self._build_extras(top)
 
-        opts = ttk.LabelFrame(top, text=t("2. Ustawienia menu"))
-        opts.pack(fill="x", pady=(8, 0))
+        opts = self._section(top, 2, t("Ustawienia menu"))
         ttk.Label(opts, text=t("Czas na wybór (s):")).grid(row=0, column=0, sticky="w", **pad)
         self.timeout = tk.StringVar(value="5")
         ttk.Spinbox(opts, from_=0, to=9, textvariable=self.timeout, width=6).grid(row=0, column=1, sticky="w")
@@ -144,7 +153,7 @@ class App:
         ttk.Spinbox(opts, from_=128, to=32768, increment=128, textvariable=self.data_mb, width=8).grid(
             row=0, column=3, sticky="w")
         ttk.Label(opts, text=t("(na karcie DATA zajmuje całe wolne miejsce)"), foreground=HINT,
-                  wraplength=230).grid(row=0, column=4, sticky="w", **pad)
+                  wraplength=190).grid(row=0, column=4, sticky="w", **pad)
         ttk.Label(opts, text=t("Partycja DATA:")).grid(row=1, column=0, sticky="w", **pad)
         self.data_mode = tk.StringVar(value="shared")
         dm = ttk.Frame(opts)
@@ -167,25 +176,39 @@ class App:
                 row=i, column=1, sticky="w", pady=1)
             self.xiegu_vars[k] = var
 
-        out = ttk.LabelFrame(top, text=t("3. Zapis"))
-        out.pack(fill="x", pady=(8, 0))
+        out = self._section(top, 3, t("Zapis karty"))
         ttk.Label(out, text=t("Karta SD:")).grid(row=0, column=0, sticky="w", **pad)
         self.card = tk.StringVar()
-        self.card_box = ttk.Combobox(out, textvariable=self.card, state="readonly", width=60)
+        self.card_box = ttk.Combobox(out, textvariable=self.card, state="readonly", width=34)
         self.card_box.grid(row=0, column=1, sticky="we", **pad)
         ttk.Button(out, text=t("Odśwież"), command=self.refresh_cards).grid(row=0, column=2, **pad)
         out.columnconfigure(1, weight=1)
         b = ttk.Frame(out)
-        b.grid(row=1, column=0, columnspan=3, sticky="we", padx=8, pady=(4, 8))
-        self.btn_card = ttk.Button(b, text=t("Wgraj na kartę"), command=self.write_card, style="Accent.TButton")
+        b.grid(row=0, column=3, sticky="e", padx=(8, 4))
+        self.btn_card = ttk.Button(b, text="⬇  " + t("Wgraj na kartę"), command=self.write_card, style="Big.Accent.TButton")
         self.btn_card.pack(side="right", padx=(8, 0))
-        self.btn_img = ttk.Button(b, text=t("Zapisz jako plik .img…"), command=self.save_image)
+        self.btn_img = ttk.Button(b, text=t("Zapisz jako plik .img…"), command=self.save_image, style="Big.TButton")
         self.btn_img.pack(side="right")
 
         self.status = tk.StringVar(value=t("Dodaj obraz karty systemu (.img, .img.zip lub .img.xz), np. OpenX6X00."))
-        self.bar = ttk.Progressbar(top, mode="determinate", maximum=1000)
-        self.bar.pack(fill="x", pady=(10, 2))
-        ttk.Label(top, textvariable=self.status, wraplength=820, foreground=HINT).pack(anchor="w")
+        foot = ttk.Frame(top, style="Card.TFrame", padding=(12, 8))
+        foot.pack(fill="x", pady=(8, 0))
+        self.bar = ttk.Progressbar(foot, mode="determinate", maximum=1000)
+        self.bar.pack(fill="x")
+        ttk.Label(foot, textvariable=self.status, wraplength=820, foreground=HINT).pack(anchor="w", pady=(6, 0))
+
+    def _section(self, top, number, title, expand=False):
+        """A titled card: a round number badge, the title, the card the section's widgets go in"""
+        row = ttk.Frame(top)
+        row.pack(fill="x", pady=(8, 3))
+        c = tk.Canvas(row, width=24, height=24, highlightthickness=0, bg=PAGE_BG)
+        c.create_oval(1, 1, 23, 23, fill=ACCENT, outline="")
+        c.create_text(12, 12, text=str(number), fill="#0b1a2a", font=_font(11, "bold"))
+        c.pack(side="left", padx=(2, 8))
+        ttk.Label(row, text=title, font=_font(13, "bold")).pack(side="left")
+        card = ttk.Frame(top, style="Card.TFrame", padding=(10, 6))
+        card.pack(fill="both" if expand else "x", expand=expand)
+        return card
 
     def _toggle_adv(self):
         if self.show_adv.get():
@@ -210,7 +233,12 @@ class App:
                     info += "  ⚠ " + "; ".join(e["sys"].warnings)
             if e.get("logo"):
                 info = "[logo: %s]  %s" % (os.path.basename(e["logo"]), info)
-            self.tree.insert("", "end", iid=str(i), image=self._thumb(e), values=(key, e["name"], info))
+            self.tree.insert("", "end", iid=str(i), image=self._thumb(e), values=(key, e["name"], info),
+                             tags=("odd",) if i % 2 else ())
+        if self.entries:
+            self.empty.place_forget()
+        else:
+            self.empty.place(relx=0.5, rely=0.55, anchor="center")
         if select is not None and 0 <= select < len(self.entries):
             self.tree.selection_set(str(select))
 
@@ -298,8 +326,7 @@ class App:
 
     def _build_extras(self, top):
         """Extras: Doom, the easter egg (a tile of its own, not among the systems to fetch)"""
-        box = ttk.LabelFrame(top, text="Extras")
-        box.pack(fill="x", pady=(8, 0))
+        box = self._section(top, "★", "Extras")
         self._doom_img = None
         try:
             from . import menu_gfx
@@ -743,7 +770,9 @@ def _theme(root):
         except tk.TclError:
             pass
     st = ttk.Style()
-    st.configure("Systems.Treeview", rowheight=48)
+    st.configure("Systems.Treeview", rowheight=50)
+    st.configure("Big.Accent.TButton", font=_font(12, "bold"), padding=(22, 8))
+    st.configure("Big.TButton", padding=(16, 8))
     st.configure("TLabelframe.Label", font=_font(11, "bold"))
     root.configure(bg=PAGE_BG)
 

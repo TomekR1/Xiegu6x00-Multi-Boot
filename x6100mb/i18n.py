@@ -89,6 +89,11 @@ EN = {
         "choose with the F1–F5 keys.",
     "Język:": "Language:",
     "1. Systemy w menu": "1. Systems in the menu",
+    "Systemy w menu": "Systems in the menu",
+    "Ustawienia menu": "Menu settings",
+    "Zapis karty": "Writing the card",
+    "Lista jest pusta. Zacznij od „+ Z internetu…”: wybierz system, a aplikacja sama go pobierze.":
+        "The list is empty. Start with “+ From the internet…”: pick a system and the app fetches it.",
     "Klawisz": "Key",
     "Nazwa w menu": "Name in the menu",
     "Zawartość": "Contents",
