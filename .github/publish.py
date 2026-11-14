@@ -93,7 +93,8 @@ def merge_duplicates(tag):
 
 
 def prune_tests(keep):
-    """One test version at a time: every other pre-release (earlier tests, betas) and its tag go,
+    """Every pre-release but `keep` (earlier tests, betas) and its tag go: one test version at a time,
+    and none once a final release is out;
     by id, so that two releases on one tag cannot trip it up"""
     r = gh("api", "repos/%s/releases?per_page=100" % REPO, check=False)
     tags = set()
@@ -142,8 +143,8 @@ def main():
             gh("release", "create", tag, "-R", REPO, "--verify-tag", "--title", title, "--notes-file", nf,
                *(["--prerelease", "--latest=false"] if TEST else ["--latest"]), *carried, *MINE)
             print(f"{tag}: released{'' if TEST else ', Latest'} ({', '.join(sorted(names))}; carried over: {len(carried)})")
-            if TEST:
-                prune_tests(tag)
+            # a test version replaces the earlier tests; a final release clears every test away
+            prune_tests(tag)
             gh("release", "delete", "test-build", "--cleanup-tag", "--yes", "-R", REPO, check=False)
             merge_duplicates(tag)
             return
