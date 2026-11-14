@@ -169,8 +169,9 @@ S = 2
 BG_TOP, BG_BOTTOM = (8, 10, 34), (0, 0, 8)
 WIN = ((62, 92, 222), (10, 16, 86))            # a window, top to bottom
 WIN_LIT = ((96, 138, 255), (20, 38, 150))      # the default system's
-WIN_GO = ((70, 150, 235), (12, 40, 120))       # the chosen one's
-FRAME, FRAME_DIM, FRAME_GO = (238, 241, 250), (150, 160, 200), (255, 214, 90)
+WIN_GO = ((40, 150, 96), (8, 60, 40))          # the chosen one's: green
+KEY_GO = ((72, 214, 110), (22, 140, 60))
+FRAME, FRAME_DIM, FRAME_GO = (238, 241, 250), (150, 160, 200), (110, 235, 140)
 GLOW, GOLD = (110, 170, 255), (255, 214, 90)
 RAIL_Y = (376, 400)          # landscape rows of the rail; the animation's strip is exactly these
 FRAMES = 16
@@ -306,42 +307,62 @@ def render_menu(entries, default, selected=None, title="X6100 MULTIBOOT"):
         lit = is_sel or is_def
         fill = WIN_GO if is_sel else (WIN_LIT if is_def else WIN)
         frame = FRAME_GO if is_sel else (FRAME if is_def else FRAME_DIM)
-        box = ((cx - 72) * S, 74 * S, (cx + 72) * S, 368 * S)
-        _soft(img, box, 24 * S, (0, 0, 0), 6 * S, 150, dy=4 * S)
-        if lit:
-            _soft(img, box, 24 * S, GOLD if is_sel else GLOW, 7 * S, 150)
-        _window(img, box, 24 * S, fill, frame, alpha=175 if lit else 135)
+        glow = GO if is_sel else GLOW
         logo = None
         if e.get("logo"):
             try:
-                logo = load_logo(e["logo"], size=112 * S, bg=fill[0], width=112 * S, crop=e.get("crop"))
+                logo = load_logo(e["logo"], size=124 * S, bg=fill[0], width=124 * S, crop=e.get("crop"))
             except Exception:
                 logo = None
         if logo is None:
-            logo = default_logo(e["name"], size=112 * S, bg=fill[0])
-        lx, ly = cx * S - logo.width // 2, 92 * S
-        _soft(img, (lx, ly, lx + logo.width, ly + logo.height), 28 * S, (0, 0, 20), 4 * S, 140, dy=3 * S)
-        img.paste(logo, (lx, ly), _round_mask(logo.width, logo.height, 28 * S))
+            logo = default_logo(e["name"], size=124 * S, bg=fill[0])
+        # the system's own colour (its logo's) lights its tile from inside, under the logo
+        own = logo.resize((1, 1), Image.BOX).getpixel((0, 0))
+        own = tuple(min(255, int(c * 1.25) + 20) for c in own)
+        box = ((cx - 73) * S, 72 * S, (cx + 73) * S, 368 * S)
+        _soft(img, box, 26 * S, (0, 0, 0), 6 * S, 150, dy=4 * S)
+        if lit:
+            _soft(img, box, 26 * S, glow, 7 * S, 160)
+        _window(img, box, 26 * S, fill, frame, alpha=175 if lit else 135, frame_w=3 if lit else 2)
+        lx, ly = cx * S - logo.width // 2, 84 * S
+        _soft(img, (lx, ly + 20 * S, lx + logo.width, ly + logo.height + 6 * S), 30 * S, own, 9 * S, 150)
+        _soft(img, (lx, ly, lx + logo.width, ly + logo.height), 30 * S, (0, 0, 20), 3 * S, 120, dy=3 * S)
+        img.paste(logo, (lx, ly), _round_mask(logo.width, logo.height, 30 * S))
+        # a light rim round the logo: a button of its own on the glass
+        d = ImageDraw.Draw(img)
+        d.rounded_rectangle([lx, ly, lx + logo.width - 1, ly + logo.height - 1], radius=30 * S,
+                            outline=tuple(min(255, c + 60) for c in own), width=S)
+        # the name on a darker plate across the tile's lower part
+        plate = ((cx - 64) * S, 226 * S, (cx + 64) * S, (300 if lit else 304) * S)
+        _window(img, plate, 16 * S, ((8, 12, 48), (4, 6, 30)), tuple(c // 2 + 40 for c in own), alpha=150, frame_w=1)
         d = ImageDraw.Draw(img)
         f = _font(19 * S)
-        for k, line in enumerate(_wrap(d, e["name"], f, 128 * S)):
-            lf = _fit_text(d, line, 128 * S, 19 * S)
-            d.text((cx * S + S, (240 + 26 * k) * S + S), line, font=lf, fill=(6, 8, 44), anchor="mm")
-            d.text((cx * S, (240 + 26 * k) * S), line, font=lf, fill=WHITE, anchor="mm")
-        if lit:                       # what the countdown will start, or what was chosen
+        lines = _wrap(d, e["name"], f, 118 * S)
+        mid = (plate[1] + plate[3]) // 2
+        for k, line in enumerate(lines):
+            lf = _fit_text(d, line, 118 * S, 19 * S)
+            y = mid + int((k - (len(lines) - 1) / 2) * 25 * S)
+            d.text((cx * S + S, y + S), line, font=lf, fill=(0, 0, 20), anchor="mm")
+            d.text((cx * S, y), line, font=lf, fill=WHITE, anchor="mm")
+        if lit:                       # what the countdown will start, or what was chosen: a badge
             label = "START" if is_sel else t("domyslny")
-            tone = GOLD if is_sel else (190, 220, 255)
-            d.text((cx * S + S, 338 * S + S), label, font=_font(16 * S), fill=(6, 8, 44), anchor="mm")
-            d.text((cx * S, 338 * S), label, font=_font(16 * S), fill=tone, anchor="mm")
-        # the key, right above the radio's button: a small window of its own
+            lf = _font(16 * S)
+            lw = int(d.textlength(label, font=lf)) + 26 * S
+            pill = (cx * S - lw // 2, 318 * S, cx * S + lw // 2, 352 * S)
+            tone = GO if is_sel else (150, 200, 255)
+            _window(img, pill, 17 * S, (tuple(c // 3 for c in tone), tuple(c // 5 for c in tone)), tone, alpha=220, frame_w=1)
+            d = ImageDraw.Draw(img)
+            d.text((cx * S, 335 * S), label, font=lf, fill=tone if not is_sel else (210, 255, 220), anchor="mm")
+        # the key, right above the radio's button: a pill of glass, green when it is the one chosen
         kbox = ((cx - 54) * S, 406 * S, (cx + 54) * S, 468 * S)
         _soft(img, kbox, 30 * S, (0, 0, 0), 4 * S, 170, dy=3 * S)
         if lit:
-            _soft(img, kbox, 30 * S, GOLD if is_sel else GLOW, 5 * S, 140)
-        _window(img, kbox, 30 * S, fill, frame, alpha=215 if lit else 175)
+            _soft(img, kbox, 30 * S, glow, 5 * S, 150)
+        kfill = KEY_GO if is_sel else fill
+        _window(img, kbox, 30 * S, kfill, frame, alpha=225 if lit else 175)
         d = ImageDraw.Draw(img)
-        d.text((cx * S + 2 * S, 436 * S + 2 * S), "F%d" % (i + 1), font=_font(30 * S), fill=(6, 8, 44), anchor="mm")
-        d.text((cx * S, 436 * S), "F%d" % (i + 1), font=_font(30 * S), fill=GOLD if is_sel else WHITE, anchor="mm")
+        d.text((cx * S + 2 * S, 436 * S + 2 * S), "F%d" % (i + 1), font=_font(30 * S), fill=(4, 8, 30), anchor="mm")
+        d.text((cx * S, 436 * S), "F%d" % (i + 1), font=_font(30 * S), fill=WHITE, anchor="mm")
     img = img.resize((W, H), Image.LANCZOS)
     # row 1 (32..63) is the countdown's: exactly black, U-Boot writes there over the picture
     ImageDraw.Draw(img).rectangle([0, TEXT_ROW_Y[0], W, TEXT_ROW_Y[1] - 1], fill=(0, 0, 0))
