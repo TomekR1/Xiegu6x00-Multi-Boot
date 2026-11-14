@@ -37,14 +37,29 @@ w aplikacji, prosto z wydań ich autorów.
    startu** wyłącza odliczanie: radio czeka, aż wciśniesz klawisz F wybranego systemu.
 5. Włóż kartę SD do komputera, wybierz ją na liście i kliknij **Wgraj na kartę**.
    System poprosi o hasło administratora; po zapisie aplikacja sprawdza, czy wszystko się zgadza.
+   Sprawdzanie można wyłączyć (**Sprawdź kartę po zapisie**) albo przerwać w trakcie przyciskiem
+   **Pomiń sprawdzanie karty**; wtedy uszkodzona karta nie zostanie wykryta.
    Zamiast tego możesz kliknąć **Zapisz jako plik .img…** i wgrać plik balenaEtcherem.
 
-**Ustawienia ze starej karty:** jeśli w czytniku jest karta, z której radio już korzystało, komputer
-pokazuje jej partycję **DATA** (ustawienia, log QSO, logi, a w OpenX6X00 także sieci WiFi, klucze SSH
-i parowania Bluetooth). Aplikacja to widzi: zaznaczone **Przenieś ustawienia ze starej karty** kopiuje
-DATA przed skasowaniem karty, kładzie na nową kartę i zostawia kopię `.zip` w folderze
-`Dokumenty/Xiegu Multi Patcher/DATA`. Sama kopia, bez wgrywania: **Kopia DATA na komputer…**. Przy
-osobnych partycjach DATA ustawienia trafiają do DATA systemu domyślnego.
+Co aplikacja robi i ile jeszcze potrwa, widać cały czas na dole okna: nazwa operacji, etap
+(„Etap 2 z 4”), pasek, procenty, prędkość i pozostały czas.
+
+**Ustawienia ze starej karty.** Ustawienia radia (baza ustawień, log QSO, logi, a w OpenX6X00 także
+sieci WiFi, klucze SSH i parowania Bluetooth) są na partycji **DATA**. Zaznaczone **Przenieś ustawienia
+ze starej karty** robi przed skasowaniem karty kopię DATA każdego systemu (pliki `.zip` w folderze
+`Dokumenty/Xiegu Multi Patcher/DATA`) i wgrywa ją na nowej karcie do tego samego systemu, bez względu na
+jego miejsce w menu i numer wersji. Po zapisie aplikacja wypisuje, co trafiło gdzie.
+
+**Kopie ustawień (DATA)**, na dole okna:
+
+- **Kopie DATA karty w czytniku…**: lista systemów na karcie, przy każdym **Kopia na komputer…**
+  i **Przywróć z kopii…**, do tego **Kopia wszystkich systemów na komputer**. Kopia pamięta, z którego
+  systemu pochodzi; przy przywracaniu do innego aplikacja ostrzega. Przywracanie zastępuje zawartość DATA.
+- **Własna kopia DATA dla nowej karty…**: wskazana kopia trafi na nowo zapisywaną kartę.
+
+Kopią może być plik `.zip` albo folder z plikami luzem. Aplikacja pokazuje nazwę, położenie i zawartość
+wybranej kopii, sprawdza, czy wygląda na DATA z radia, i wgrywa ją dopiero po zatwierdzeniu. Kopię
+spakowaną razem z folderem („folder w folderze”) rozpoznaje i wgrywa samą zawartość.
 
 Zapis kasuje całą zawartość wybranej karty. Aplikacja pokazuje tylko karty wymienne
 i nigdy dysku systemowego, ale sprawdź nazwę i rozmiar karty przed potwierdzeniem.
@@ -109,13 +124,15 @@ Wyjście z gry wraca do menu startowego.
 Logo w menu każdy system dostaje ze swojego repozytorium. Systemy bez logo do pobrania
 (i IU1WXY, którego grafiki aplikacja nie używa) mają kafelek z nazwą.
 
-## Partycja DATA: wspólna albo osobna
+## Partycja DATA: osobna albo wspólna
 
 DATA to partycja z ustawieniami i logami systemów.
 
+- **Osobna (domyślnie):** każdy system ma własne ustawienia i logi. Komputer pokazuje jako dysk tylko
+  DATA systemu uruchomionego ostatnio; do pozostałych sięga aplikacja (**Kopie DATA karty w czytniku…**).
 - **Wspólna:** jedna DATA dla wszystkich systemów.
-- **Osobna:** każdy system ma własne ustawienia i logi. Na komputerze widać DATA systemu,
-  który był uruchomiony ostatnio.
+
+Doom i Xiegu z pamięci radia nie mają własnej DATA.
 
 ## Zmiany bez ponownego wgrywania karty
 
@@ -135,6 +152,26 @@ bm_wait=0
 Systemy aktualizowane z poziomu radia (np. OpenX6X00: Settings → Info → Update) zmieniają
 tylko swoje pliki, więc menu zostaje. Nową wersję, która wymaga nowego obrazu karty,
 dodajesz w aplikacji i wgrywasz kartę od nowa.
+
+## Wersja testowa: co sprawdzić
+
+Wersje testowe wychodzą jako **Pre-release** (nie zastępują najnowszego wydania). Lista do przejścia,
+najlepiej na Windows, macOS i Linuksie:
+
+1. Okno mieści się na ekranie; na szerokim ekranie widać wszystko naraz, na wąskim da się przewinąć.
+2. **+ Z internetu…** pobiera system; na dole okna widać etap, pasek i pozostały czas.
+3. Karta jest na liście **Karta SD** po włożeniu i **Odśwież** (także we wbudowanym czytniku Maca).
+4. **Wgraj na kartę** z kilkoma systemami i DATA osobną dla każdego; radio startuje z menu.
+5. Menu na radiu: szklane kafelki, ruchomy pasek, odliczanie, klawisze F i POWER.
+   (Ruch wyłącza `bm_anim=0` w `bootmenu.env` na partycji BOOT.)
+6. Po kilku uruchomieniach każdego systemu: **Kopie DATA karty w czytniku…** pokazuje osobny wiersz
+   dla każdego systemu; kopia i przywracanie działają dla każdego z osobna.
+7. Zapis nowej karty z innym układem systemów: ustawienia trafiają do tych samych systemów.
+8. Kopia z pliku `.zip` i z folderu; kopia w „folderze w folderze”; folder bez plików DATA (ostrzeżenie).
+9. **Pomiń sprawdzanie karty** w trakcie sprawdzania.
+10. Każde okno otwiera się tylko raz.
+
+Błędy: plik `Dokumenty/Xiegu Multi Patcher/log.txt` i zrzut okna.
 
 ## Problemy i uwagi
 

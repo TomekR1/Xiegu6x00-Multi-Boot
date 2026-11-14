@@ -39,9 +39,7 @@ def notes(v):
         return ("**Wersja testowa (pre-release): do sprawdzenia przed wydaniem, nie do zwykłego użytku.**\n\n"
                 "**A test version (pre-release): for checking before the release, not for everyday use.**\n\n"
                 f"Windows {v['windows']} · macOS {v['macos']} · Linux {v['linux']}\n\n"
-                "Do sprawdzenia: nowe menu na ekranie radia (szklane okna, ruchomy pasek; wyłączenie ruchu: "
-                "`bm_anim=0` w `bootmenu.env`) oraz sekcja 4 „Kopie ustawień (DATA)”: kopia DATA, przywracanie, "
-                "DATA każdego systemu, własna kopia DATA dla nowej karty.\n")
+                "Do sprawdzenia: lista w README na gałęzi `test-data`, rozdział „Wersja testowa: co sprawdzić”.\n")
     return f"""Kilka systemów na jednej karcie SD dla Xiegu X6100, z menu na ekranie radia (F1–F5).
 
 **Pobierz aplikację dla swojego komputera** (każda ma swój numer wersji):
@@ -90,8 +88,16 @@ def main():
             f.write(notes(v))
         r = gh("release", "create", tag, "-R", REPO, "--target", SHA, "--title", title, "--notes-file", nf,
                *(["--prerelease", "--latest=false"] if TEST else ["--latest"]), *carried, *MINE, check=False)
+        if r.returncode == 0 and TEST:
+            # One test version at a time: the earlier ones (and their tags) go, so that testers take
+            # this one and nothing stale
+            old = gh("release", "list", "-R", REPO, "--limit", "100", "--json", "tagName,isPrerelease", check=False)
+            for rel in json.loads(old.stdout or "[]") if old.returncode == 0 else []:
+                if rel["isPrerelease"] and "-test" in rel["tagName"] and rel["tagName"] != tag:
+                    gh("release", "delete", rel["tagName"], "--cleanup-tag", "--yes", "-R", REPO, check=False)
+                    print("removed the earlier test version", rel["tagName"])
         if r.returncode == 0:
-            print(f"{tag}: released, Latest ({', '.join(sorted(names))}; carried over: {len(carried)})")
+            print(f"{tag}: released{'' if TEST else ', Latest'} ({', '.join(sorted(names))}; carried over: {len(carried)})")
             gh("release", "delete", "test-build", "--cleanup-tag", "--yes", "-R", REPO, check=False)
             return
         print("create:", r.stderr.strip(), "- another app made it first; uploading into it")

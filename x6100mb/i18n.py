@@ -177,7 +177,7 @@ EN = {
     "Menu ma najwyżej {n} pozycji (F1–F{n}).": "The menu has at most {n} entries (F1–F{n}).",
     "Obraz karty systemu (.img, .img.zip, .img.xz)": "A system's card image (.img, .img.zip, .img.xz)",
     "Obrazy kart": "Card images",
-    "Analiza obrazu…": "Looking at the image…",
+    "Analiza obrazu": "Looking at the image",
     "Klasyczny Doom na radiu (Freedoom). Gałka VFO obraca, F1 lub PTT strzela, F2 otwiera drzwi, GEN to menu gry.":
         "Classic Doom on the radio (Freedoom). The VFO knob turns, F1 or PTT fires, F2 opens doors, "
         "GEN is the game's menu.",
@@ -189,6 +189,20 @@ EN = {
     "Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.":
         "Bluetooth in Doom does not work with {name}'s kernel (USB does). Move e.g. OpenX6X00 above it.",
     "Szczegóły: {p}": "Details: {p}",
+    "Kopia zostanie wgrana na kartę w czytniku: {vol}. Obecna zawartość tej DATA zostanie zastąpiona.":
+        "The copy will be put on the card in the reader: {vol}. What is in this DATA now will be replaced.",
+    "osobna dla każdego systemu (zalecane)": "one per system (recommended)",
+    "Bez automatycznego startu (czekaj na klawisz F)": "No automatic start (wait for an F key)",
+    "Sprawdź kartę po zapisie (zalecane)": "Check the card after writing (recommended)",
+    "Przenieś ustawienia ze starej karty (każdego systemu osobno)": "Carry the settings over from the old card (each system's own)",
+    "Gotowa do pracy": "Ready",
+    "Pracuję…": "Working…",
+    "Etap {k} z {n}: {name}": "Stage {k} of {n}: {name}",
+    "Nie udało się": "It did not work",
+    "Dodano {name}": "{name} added",
+    "Dodaj kolejny system albo przejdź do „Zapis karty”.": "Add another system or go on to Writing the card.",
+    "Gotowe": "Done",
+    "Zacznij od „+ Z internetu…”: wybierz system, a aplikacja sama go pobierze.": "Start with + From the internet…: choose a system and the app fetches it.",
     "osobna dla każdego systemu (własne ustawienia i logi; zalecane)": "one per system (own settings and logs; recommended)",
     "Przenieś ustawienia ze starej karty na nową (każdego systemu osobno; kopie zostają na komputerze)":
         "Carry the settings over from the old card to the new one (each system's own; copies stay on the computer)",
@@ -322,14 +336,14 @@ EN = {
     "Czas i rozmiar DATA muszą być liczbami": "The time and the DATA size must be numbers",
     "Zapisz obraz karty": "Save the card image",
     "Obraz karty": "Card image",
-    "Zapis obrazu…": "Writing the image…",
+    "Zapis obrazu": "Writing the image",
     "Zapisano {path} ({mb} MB). Można go wgrać balenaEtcherem.":
         "Saved {path} ({mb} MB). It can be written with balenaEtcher.",
     "Nie wybrano karty SD.": "No SD card chosen.",
     "Karta: {card}\n\nWSZYSTKO na tej karcie zostanie usunięte.\n\nMenu:\n{lines}\n\nDATA: {mb} MB\n\nWgrać?":
         "Card: {card}\n\nEVERYTHING on this card will be erased.\n\nMenu:\n{lines}\n\nDATA: {mb} MB\n\nWrite it?",
-    "Zapis na kartę…": "Writing the card…",
-    "Zapis na kartę (uprawnienia administratora)…": "Writing the card (administrator rights)…",
+    "Zapis na kartę": "Writing the card",
+    "Zapis na kartę (uprawnienia administratora)": "Writing the card (administrator rights)",
     "Karta gotowa i sprawdzona. Wyjmij ją i włóż do radia.":
         "The card is ready and checked. Take it out and put it in the radio.",
     "Zapis przerwany (odmowa uprawnień administratora?)": "Writing stopped (administrator rights refused?)",
@@ -354,7 +368,7 @@ EN = {
         "The images come from the projects' releases on GitHub and stay in the app's cache.",
     "brak obrazów X6100 w wydaniach": "no X6100 images in the releases",
     "błąd: ": "error: ",
-    "Pobieranie {name} {tag}…": "Downloading {name} {tag}…",
+    "Pobieranie {name} {tag}": "Downloading {name} {tag}",
     # the catalog
     "Guru-RF: nowe GUI, aktualizacje przez sieć, Wavelog, FT8/JS8":
         "Guru-RF: a new GUI, updates over the network, Wavelog, FT8/JS8",

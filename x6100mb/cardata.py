@@ -56,7 +56,8 @@ def match(areas, names):
                 hit = name in a["names"] if exact else system_id(name) in a.get("ids", [system_id(n) for n in a["names"]])
                 if hit:
                     out[i] = a
-                    free.remove(a)
+                    if len(a.get("ids", [])) < 2:      # a DATA shared by several systems serves each of them
+                        free.remove(a)
                     break
     return out
 

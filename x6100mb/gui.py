@@ -42,6 +42,7 @@ HINT = "#5b6573"
 BADGE_FG, H1, H2, TREE_BG = "#ffffff", "#c62828", "#0f2742", (255, 255, 255)
 SCREEN_W, SCREEN_H = 640, 384          # the radio's 800x480 to start with; it grows with the window
 RED, RED_HOVER = "#d32f2f", "#ef4444"
+GREEN = "#1e8e3e"
 ACCENT = "#0067c0"
 PAGE_BG, TEXT_FG, WARN = "#fafafa", "#1c1c1c", "#b45309"
 
@@ -132,7 +133,14 @@ class BigBar(tk.Canvas):
     def __init__(self, parent, width=520, height=24):
         super().__init__(parent, width=width, height=height, highlightthickness=0, bd=0, bg=PAGE_BG)
         self.w, self.h, self.frac, self.run, self.pos = width, height, 0.0, False, 0.0
+        self.colour = "#2e9d4f"
+        self.bind("<Configure>", self._resized)
         self._draw()
+
+    def _resized(self, ev):
+        if ev.width > 10 and ev.width != self.w:
+            self.w = ev.width
+            self._draw()
 
     def _round(self, x0, x1, fill):
         h, r = self.h, self.h // 2
@@ -149,7 +157,7 @@ class BigBar(tk.Canvas):
             x0 = (self.w + 160) * self.pos - 160
             self._round(max(0, x0), min(self.w, x0 + 160), ACCENT)
         elif self.frac > 0:
-            self._round(0, max(self.h, int(self.w * self.frac)), "#2e9d4f")
+            self._round(0, max(self.h, int(self.w * self.frac)), self.colour)
 
     def set(self, frac):
         self.run, self.frac = False, max(0.0, min(1.0, frac))
@@ -161,6 +169,10 @@ class BigBar(tk.Canvas):
         self.run = True
         self._tick()
 
+    def idle(self):
+        self.run, self.frac = False, 0.0
+        self._draw()
+
     def _tick(self):
         if not self.run or not self.winfo_exists():
             return
@@ -169,61 +181,53 @@ class BigBar(tk.Canvas):
         self.after(20, self._tick)
 
 
-class ProgressWindow:
-    """A clear window while the app works (fetching a system, unpacking, writing the card): a big bar,
-    the per cent, how much and how fast, and how long still; moving by itself while there is no
-    count yet (connecting to GitHub, looking at an image), so it never looks frozen"""
+class ProgressPanel(ttk.Frame):
+    """What the app is doing, at the bottom of its window (always in sight, nothing pops up): the
+    job and its stage ("stage 2 of 4"), a big bar, the per cent, how much, how fast and how long
+    still; the bar moves by itself while there is no count yet, so it never looks frozen. At rest:
+    the last result or a hint what to do next."""
 
-    def __init__(self, root, text):
-        self.win = tk.Toplevel(root)
-        self.win.title(APP)
-        self.win.transient(root)
-        self.win.resizable(False, False)
-        self.win.protocol("WM_DELETE_WINDOW", lambda: None)
-        self.win.configure(bg=PAGE_BG)
-        f = ttk.Frame(self.win, padding=(28, 22))
-        f.pack(fill="both", expand=True)
-        self.title = ttk.Label(f, text=text, font=_font(15, "bold"))
-        self.title.pack(anchor="w")
-        self.bar = BigBar(f)
-        self.bar.pack(fill="x", pady=(16, 10))
-        row = ttk.Frame(f)
-        row.pack(fill="x")
-        self.pct = ttk.Label(row, text="", font=_font(22, "bold"), foreground=ACCENT)
-        self.pct.pack(side="left")
-        self.detail = ttk.Label(row, text=t("Łączenie…"), font=_font(11), foreground=HINT, justify="right")
-        self.detail.pack(side="right")
-        self.msg = ttk.Label(f, text="", font=_font(10), foreground=HINT, wraplength=520)
-        self.msg.pack(anchor="w", pady=(8, 0))
+    def __init__(self, parent, status):
+        super().__init__(parent, style="Card.TFrame", padding=(16, 8))
+        self.status = status                       # the app's status line (a StringVar), shown at rest
+        top = ttk.Frame(self, style="Card.TFrame")
+        top.pack(fill="x")
+        self.title = ttk.Label(top, text="", font=_font(13, "bold"))
+        self.title.pack(side="left")
+        self.pct = ttk.Label(top, text="", font=_font(16, "bold"), foreground=ACCENT)
+        self.pct.pack(side="right")
+        self.bar = BigBar(self, width=600, height=18)          # shown while a job runs
+        low = self.low = ttk.Frame(self, style="Card.TFrame")
+        low.pack(fill="x", pady=(2, 0))
+        self.skip = ttk.Button(low, text=t("Pomiń sprawdzanie karty"), command=self._skip)
+        self.detail = ttk.Label(low, textvariable=status, foreground=HINT, wraplength=900, justify="left")
+        self.detail.pack(side="left", fill="x", expand=True, anchor="w")
+        self.bind("<Configure>", lambda e: self.detail.configure(wraplength=max(300, e.width - 260)))
         self.on_skip = None           # set by a card write: the read-back may be skipped
-        self.skip = ttk.Button(f, text=t("Pomiń sprawdzanie karty"), command=self._skip)
-        self.bar.moving()
-        self.moving, self.phase, self.t0, self.d0 = True, None, time.time(), 0
-        self.win.update_idletasks()
-        x = root.winfo_rootx() + (root.winfo_width() - self.win.winfo_reqwidth()) // 2
-        y = root.winfo_rooty() + (root.winfo_height() - self.win.winfo_reqheight()) // 3
-        self.win.geometry("+%d+%d" % (max(x, 0), max(y, 0)))
-        try:
-            self.win.grab_set()
-        except tk.TclError:
-            pass
-        # On top of the main window, also when it was opened from a dialog that just closed
-        # (on Windows it otherwise ended up behind the main window, out of sight)
-        self.win.deiconify()
-        self.win.lift()
-        try:
-            self.win.attributes("-topmost", True)
-            self.win.after(1500, self._not_topmost)
-        except tk.TclError:
-            pass
-        self.win.focus_force()
+        self.steps, self.job = [], ""
+        self.moving, self.phase, self.t0, self.d0 = False, None, time.time(), 0
+        self.rest(t("Gotowa do pracy"))
 
-    def _not_topmost(self):
-        try:
-            self.win.attributes("-topmost", False)
-            self.win.lift()
-        except tk.TclError:
-            pass
+    def rest(self, title, colour=None):
+        """Nothing running: a title (ready, done, an error) over the status line"""
+        self.bar.idle()
+        self.bar.pack_forget()
+        self.moving, self.phase, self.on_skip = False, None, None
+        self.title.configure(text=title, foreground=colour or TEXT_FG)
+        self.pct.configure(text="")
+        self.skip.pack_forget()
+
+    def start(self, text, steps=None):
+        self.job, self.steps = text, list(steps or [])
+        self.phase, self.t0, self.d0, self.on_skip = None, time.time(), 0, None
+        self.title.configure(text=text, foreground=TEXT_FG)
+        self.pct.configure(text="")
+        self.status.set(t("Łączenie…") if "download" in self.steps else t("Pracuję…"))
+        self.bar.colour = "#2e9d4f"
+        self.bar.pack(fill="x", pady=(6, 4), before=self.low)
+        self.bar.moving()
+        self.moving = True
+        self.skip.pack_forget()
 
     def _skip(self):
         if self.on_skip:
@@ -231,11 +235,15 @@ class ProgressWindow:
         self.skip.state(["disabled"])
 
     def update(self, phase, done, total, msg=""):
-        if phase != self.phase:                       # a new step: its own speed and time
+        if phase != self.phase:                       # a new stage: its own speed and time
             self.phase, self.t0, self.d0 = phase, time.time(), done
-            self.title.configure(text=t(PHASES.get(phase, phase)) + "…")
+            name = t(PHASES.get(phase, phase))
+            if phase in self.steps and len(self.steps) > 1:
+                name = t("Etap {k} z {n}: {name}", k=self.steps.index(phase) + 1, n=len(self.steps), name=name)
+            self.title.configure(text="%s  ·  %s" % (self.job, name))
             if phase == "verify" and self.on_skip:
-                self.skip.pack(anchor="e", pady=(10, 0))
+                self.skip.state(["!disabled"])
+                self.skip.pack(side="right", padx=(10, 0))
             else:
                 self.skip.pack_forget()
         if total <= 0:
@@ -243,7 +251,7 @@ class ProgressWindow:
                 self.bar.moving()
                 self.moving = True
             self.pct.configure(text="")
-            self.detail.configure(text="%d MB" % (done >> 20))
+            txt = "%d MB" % (done >> 20) if done else t("Pracuję…")
         else:
             self.moving = False
             self.bar.set(done / total)
@@ -251,20 +259,12 @@ class ProgressWindow:
             dt = time.time() - self.t0
             speed = (done - self.d0) / dt if dt > 0.5 else 0
             left = (total - done) / speed if speed > 0 else None
-            txt = "%d / %d MB" % (done >> 20, total >> 20)
-            if speed:
-                txt += "   %.1f MB/s" % (speed / 1e6)
-            if left is not None:
-                txt += "   " + t("zostało {t}", t="%d:%02d" % (left // 60, left % 60))
-            self.detail.configure(text=txt)
-        self.msg.configure(text=msg or "")
-
-    def close(self):
-        try:
-            self.win.grab_release()
-            self.win.destroy()
-        except tk.TclError:
-            pass
+            txt = "%d / %d MB" % (done >> 20, total >> 20) if total >= 4 << 20 else "%d / %d" % (done, total)
+            if speed and total >= 4 << 20:
+                txt += "   ·   %.1f MB/s" % (speed / 1e6)
+            if left is not None and done < total:
+                txt += "   ·   " + t("zostało {t}", t="%d:%02d" % (left // 60, left % 60))
+        self.status.set(txt + ("   ·   " + msg if msg and msg != "unchecked" else ""))
 
 
 class App:
@@ -289,6 +289,10 @@ class App:
     def _build_all(self, keep=None):
         # Everything under the header scrolls when the window is lower than its contents (a small
         # or scaled laptop screen): a canvas holding the body, a scrollbar shown only when needed
+        # What the app is doing: docked at the bottom of the window, outside what scrolls
+        self.status = tk.StringVar(value=t("Zacznij od „+ Z internetu…”: wybierz system, a aplikacja sama go pobierze."))
+        self.panel = ProgressPanel(self.root, self.status)
+        self.panel.pack(side="bottom", fill="x", padx=10, pady=(0, 10))
         self.top = ttk.Frame(self.root)
         self.top.pack(fill="both", expand=True, padx=10, pady=(0, 8))
         self._scroll = tk.Canvas(self.top, highlightthickness=0, bg=PAGE_BG, width=900, height=400)
@@ -298,6 +302,7 @@ class App:
         self.body = ttk.Frame(self._scroll)
         self._body_id = self._scroll.create_window(0, 0, window=self.body, anchor="nw")
         self._build(self.body)
+        self._columns(False)
         self._scroll.bind("<Configure>", lambda e: self._fit_body())
         self.body.bind("<Configure>", lambda e: self._fit_body())
         self.root.bind_all("<MouseWheel>", self._wheel)
@@ -310,13 +315,41 @@ class App:
             self.timeout_box.state(["disabled"] if self.wait.get() else ["!disabled"])
         self._redraw()
 
+    def _columns(self, wide):
+        if wide == self._wide:
+            return
+        self._wide = wide
+        b = self.body
+        for c in (self.colA, self.colB):
+            c.grid_forget()
+        for i in range(2):
+            b.columnconfigure(i, weight=0, minsize=0)
+            b.rowconfigure(i, weight=0)
+        if wide:
+            self.colA.grid(row=0, column=0, sticky="nsew")
+            self.colB.grid(row=0, column=1, sticky="new", padx=(12, 0))
+            b.columnconfigure(0, weight=1)
+            b.rowconfigure(0, weight=1)
+        else:
+            self.colA.grid(row=0, column=0, sticky="nsew")
+            self.colB.grid(row=1, column=0, sticky="new")
+            b.columnconfigure(0, weight=1)
+            b.rowconfigure(0, weight=1)
+
+    def _wide_width(self):
+        """The window's inner width from which both columns fit side by side"""
+        return self.colA.winfo_reqwidth() + self.colB.winfo_reqwidth() + 12
+
     def _fit_body(self):
-        """The body as wide as the window and at least as high; lower than its contents: scrolling"""
+        """The body as wide as the window and at least as high; lower than its contents: scrolling.
+        Wide enough for both columns: side by side."""
         c = self._scroll
         w, h = c.winfo_width(), c.winfo_height()
-        need = self.body.winfo_reqheight()
         if w < 2 or h < 2:
             return
+        self._columns(w >= self._wide_width())
+        self.body.update_idletasks()
+        need = self.body.winfo_reqheight()
         size = (w, max(h, need))
         if size != getattr(self, "_body_size", None):
             self._body_size = size
@@ -365,6 +398,7 @@ class App:
         xiegu = {k: v.get() for k, v in self.xiegu_vars.items()}
         card = self.card_box.current()
         self.top.destroy()
+        self.panel.destroy()
         self._head.destroy()
         self._build_all(keep)
         for k, v in xiegu.items():
@@ -381,7 +415,7 @@ class App:
         head.pack(fill="x", before=self.top)
         self._head = head
         inner = tk.Frame(head, bg=HEAD_BG)
-        inner.pack(fill="x", padx=16, pady=9)
+        inner.pack(fill="x", padx=16, pady=6)
         icon = _icon_image(self.root, 48)
         if icon is not None:
             tk.Label(inner, image=icon, bg=HEAD_BG).pack(side="left", padx=(0, 12))
@@ -413,7 +447,11 @@ class App:
         author.bind("<Button-1>", lambda e: webbrowser.open(AUTHOR_URL))
         tk.Frame(head, bg=ACCENT, height=3).pack(fill="x", side="bottom")
 
-        box = self._section(top, 1, t("Menu na ekranie radia"), expand=True)
+        # Two columns side by side on a wide window (the menu left, the settings and the writing right:
+        # everything in sight), one under the other on a narrow one; _fit_body chooses
+        self.colA, self.colB = ttk.Frame(top), ttk.Frame(top)
+        self._wide = None
+        box = self._section(self.colA, 1, t("Menu na ekranie radia"), expand=True)
         btns = ttk.Frame(box)
         btns.pack(side="right", fill="y", padx=(12, 2), pady=2)
         for text, cmd, colour in (("+ Z internetu…", self.add_online, "blue"), ("+ Obraz karty…", self.add_image, "teal"),
@@ -423,27 +461,32 @@ class App:
         left = ttk.Frame(box)
         left.pack(side="left", fill="both", expand=True)
         self.sw, self.sh, self.sox, self.soy = SCREEN_W, SCREEN_H, 0, 0
-        self.screen = tk.Canvas(left, width=SCREEN_W * 2 // 3, height=SCREEN_H * 2 // 3, bg=PAGE_BG, highlightthickness=0,
+        self.screen = tk.Canvas(left, width=SCREEN_W * 5 // 8, height=SCREEN_H * 5 // 8, bg=PAGE_BG, highlightthickness=0,
                                 cursor="hand2")
         self.screen.pack(side="top", fill="both", expand=True)
         self.screen.bind("<Configure>", self._screen_resized)
         self.screen.bind("<Button-1>", self._screen_click)
         self.screen.bind("<Double-1>", lambda e: (self._screen_click(e), self.rename()))
-        self.info = ttk.Label(left, text="", foreground=HINT, wraplength=SCREEN_W, justify="left")
+        self.info = ttk.Label(left, text="", foreground=HINT, wraplength=SCREEN_W * 5 // 8, justify="left")
         tools = ttk.Frame(left)
         tools.pack(side="bottom", fill="x", pady=(6, 0))
         self.info.pack(side="bottom", anchor="w", pady=(6, 0))
         self.screen.pack_forget()
         self.screen.pack(side="top", fill="both", expand=True)
+        self.tile_tools = []
         for text, cmd in (("←", lambda: self.move(-1)), ("→", lambda: self.move(1)),
                           ("★  " + t("Domyślny"), self.set_default), ("✎  " + t("Zmień nazwę"), self.rename),
                           ("▣  " + t("Logo…"), self.choose_logo)):
-            ttk.Button(tools, text=text, command=cmd, width=3 if len(text) == 1 else 0).pack(side="left", padx=(0, 6))
-        ttk.Button(tools, text="✕  " + t("Usuń"), command=self.remove).pack(side="left", padx=(12, 0))
+            b_ = ttk.Button(tools, text=text, command=cmd, width=3 if len(text) == 1 else 0)
+            b_.pack(side="left", padx=(0, 6))
+            self.tile_tools.append(b_)
+        b_ = ttk.Button(tools, text="✕  " + t("Usuń"), command=self.remove)
+        b_.pack(side="left", padx=(12, 0))
+        self.tile_tools.append(b_)
         self.selected = None
 
 
-        opts = self._section(top, 2, t("Ustawienia menu"))
+        opts = self._section(self.colB, 2, t("Ustawienia menu"))
         ttk.Label(opts, text=t("Czas na wybór (s):")).grid(row=0, column=0, sticky="w", **pad)
         self.timeout = tk.StringVar(value="5")
         self.timeout.trace_add("write", lambda *a: self._render() if hasattr(self, "screen") else None)
@@ -453,23 +496,22 @@ class App:
         self.data_mb = tk.StringVar(value="1024")
         ttk.Spinbox(opts, from_=128, to=32768, increment=128, textvariable=self.data_mb, width=8).grid(
             row=0, column=3, sticky="w")
-        ttk.Label(opts, text=t("(na karcie DATA zajmuje całe wolne miejsce)"), foreground=HINT,
-                  wraplength=300).grid(row=0, column=4, sticky="w", **pad)
-        ttk.Label(opts, text=t("Partycja DATA:")).grid(row=1, column=0, sticky="w", **pad)
+        ttk.Label(opts, text=t("(na karcie DATA zajmuje całe wolne miejsce)"), foreground=HINT).grid(
+            row=1, column=2, columnspan=2, sticky="w", padx=8)
+        ttk.Label(opts, text=t("Partycja DATA:")).grid(row=2, column=0, sticky="nw", **pad)
         self.data_mode = tk.StringVar(value="separate")      # each system its own settings
         dm = ttk.Frame(opts)
-        dm.grid(row=1, column=1, columnspan=4, sticky="w")
-        ttk.Radiobutton(dm, text=t("osobna dla każdego systemu (własne ustawienia i logi; zalecane)"), value="separate",
-                        variable=self.data_mode).pack(side="left", padx=(0, 12))
+        dm.grid(row=2, column=1, columnspan=3, sticky="w", pady=(2, 0))
+        ttk.Radiobutton(dm, text=t("osobna dla każdego systemu (zalecane)"), value="separate",
+                        variable=self.data_mode).pack(anchor="w")
         ttk.Radiobutton(dm, text=t("wspólna dla wszystkich systemów"), value="shared",
-                        variable=self.data_mode).pack(side="left")
+                        variable=self.data_mode).pack(anchor="w")
         self.wait = tk.BooleanVar(value=False)
-        ttk.Checkbutton(opts, text=t("Bez automatycznego startu: system uruchamia się dopiero po wciśnięciu "
-                                     "klawisza F"), variable=self.wait, command=self._wait_changed).grid(
-            row=2, column=0, columnspan=5, sticky="w", **pad)
+        ttk.Checkbutton(opts, text=t("Bez automatycznego startu (czekaj na klawisz F)"), variable=self.wait,
+                        command=self._wait_changed).grid(row=3, column=0, columnspan=4, sticky="w", **pad)
         self.show_adv = tk.BooleanVar(value=False)
         ttk.Checkbutton(opts, text=t("Zaawansowane: start systemu Xiegu z eMMC"), variable=self.show_adv,
-                        command=self._toggle_adv).grid(row=3, column=0, columnspan=5, sticky="w", **pad)
+                        command=self._toggle_adv).grid(row=4, column=0, columnspan=4, sticky="w", **pad)
         self.adv = ttk.Frame(opts)
         self.xiegu_vars = {}
         labels = {"xiegu_dev": "Urządzenie mmc", "xiegu_part": "Partycja", "xiegu_kernel": "Jądro",
@@ -477,67 +519,53 @@ class App:
         for i, (k, v) in enumerate(XIEGU_DEFAULTS.items()):
             ttk.Label(self.adv, text=(t(labels[k]) if k != "xiegu_args" else labels[k]) + ":").grid(row=i, column=0, sticky="w", padx=8, pady=1)
             var = tk.StringVar(value=v)
-            ttk.Entry(self.adv, textvariable=var, width=90 if k == "xiegu_args" else 24).grid(
+            ttk.Entry(self.adv, textvariable=var, width=52 if k == "xiegu_args" else 24).grid(
                 row=i, column=1, sticky="w", pady=1)
             self.xiegu_vars[k] = var
 
-        out = self._section(top, 3, t("Zapis karty"))
+        out = self._section(self.colB, 3, t("Zapis karty"))
         ttk.Label(out, text=t("Karta SD:")).grid(row=0, column=0, sticky="w", **pad)
         self.card = tk.StringVar()
-        self.card_box = ttk.Combobox(out, textvariable=self.card, state="readonly", width=34)
+        self.card_box = ttk.Combobox(out, textvariable=self.card, state="readonly", width=30)
         self.card_box.grid(row=0, column=1, sticky="we", **pad)
         ttk.Button(out, text=t("Odśwież"), command=self.refresh_cards).grid(row=0, column=2, **pad)
         out.columnconfigure(1, weight=1)
+        # The settings of the card in the reader (its DATA partition) onto the new one
+        self.keep_data = tk.BooleanVar(value=True)
+        self.keep_box = ttk.Checkbutton(out, variable=self.keep_data, text="")
+        self.keep_box.grid(row=1, column=0, columnspan=3, sticky="w", padx=8, pady=(4, 0))
+        self.check_card = tk.BooleanVar(value=getattr(self, "_check_card", True))
+        ttk.Checkbutton(out, variable=self.check_card, text=t("Sprawdź kartę po zapisie (zalecane)"),
+                        command=lambda: setattr(self, "_check_card", self.check_card.get())).grid(
+            row=2, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 2))
         b = ttk.Frame(out)
-        b.grid(row=0, column=3, sticky="e", padx=(8, 4))
+        b.grid(row=3, column=0, columnspan=3, sticky="we", padx=8, pady=(6, 8))
         self.btn_card = ColorButton(b, "⬇  " + t("Wgraj na kartę"), "green", self.write_card, font=_font(14, "bold"),
                                     padx=26, pady=12)
-        self.btn_card.pack(side="right", padx=(8, 0))
+        self.btn_card.pack(side="right", fill="x", expand=True, padx=(8, 0))
         self.btn_img = ColorButton(b, t("Zapisz jako plik .img…"), "slate", self.save_image, font=_font(12, "bold"),
                                    padx=18, pady=12)
         self.btn_img.pack(side="right")
-        # The settings of the card in the reader (its DATA partition) onto the new one
-        keep = ttk.Frame(out)
-        keep.grid(row=1, column=0, columnspan=4, sticky="we", padx=8, pady=(2, 6))
-        self.keep_data = tk.BooleanVar(value=True)
-        self.keep_box = ttk.Checkbutton(keep, variable=self.keep_data, text="")
-        self.keep_box.pack(side="left")
-        self.check_card = tk.BooleanVar(value=getattr(self, "_check_card", True))
-        ttk.Checkbutton(out, variable=self.check_card,
-                        text=t("Sprawdź kartę po zapisie (zalecane; bez tego zapis trwa krócej, ale błędna karta "
-                               "nie zostanie wykryta)"),
-                        command=lambda: setattr(self, "_check_card", self.check_card.get())).grid(
-            row=2, column=0, columnspan=4, sticky="w", padx=8, pady=(0, 6))
         # The settings' copies (DATA), at the very bottom: of the card in the reader, of each system
         # on it, and an own copy for the new card
-        cop = self._section(top, 4, t("Kopie ustawień (DATA)"))
-        ttk.Label(cop, text=t("Ustawienia radia są na partycji DATA karty. Tu zrobisz ich kopię na komputerze, "
-                              "przywrócisz je na kartę w czytniku albo wskażesz własną kopię dla nowej karty."),
-                  foreground=HINT, wraplength=1000, justify="left").grid(row=0, column=0, columnspan=2, sticky="w",
-                                                                         padx=8, pady=(4, 6))
+        cop = self._section(self.colB, 4, t("Kopie ustawień (DATA)"))
         buttons = ((t("Kopie DATA karty w czytniku…"), "teal", self.card_data,
                     t("zrób kopię ustawień na komputerze albo przywróć je na kartę; osobno dla każdego systemu")),
                    (t("Własna kopia DATA dla nowej karty…"), "blue", self.choose_copy,
                     t("wskaż kopię (plik .zip albo folder), która trafi na nowo zapisywaną kartę")))
         for k, (text, colour, cmd, hint) in enumerate(buttons):
-            btn = ColorButton(cop, text, colour, cmd, font=_font(12, "bold"), padx=10, pady=12)
-            btn.grid(row=1, column=k, sticky="we", padx=(8 if k == 0 else 4, 8 if k == 1 else 4), pady=(0, 2))
-            ttk.Label(cop, text=hint, foreground=HINT, wraplength=470, justify="left").grid(
+            btn = ColorButton(cop, text, colour, cmd, font=_font(11, "bold"), padx=10, pady=11)
+            btn.grid(row=1, column=k, sticky="we", padx=(8 if k == 0 else 4, 8 if k == 1 else 4), pady=(6, 2))
+            ttk.Label(cop, text=hint, foreground=HINT, wraplength=300, justify="left").grid(
                 row=2, column=k, sticky="nw", padx=(10 if k == 0 else 6, 8), pady=(0, 8))
             cop.columnconfigure(k, weight=1, uniform="copies")
         self.own_btn = btn
         own = ttk.Frame(cop)
         own.grid(row=3, column=0, columnspan=2, sticky="we", padx=8, pady=(0, 8))
-        self.own_info = ttk.Label(own, text="", wraplength=880, justify="left")
+        self.own_info = ttk.Label(own, text="", wraplength=520, justify="left")
         self.own_info.pack(side="left")
         self.own_clear = ttk.Button(own, text=t("Usuń wybór"), command=lambda: self._use_copy(None))
 
-        self.status = tk.StringVar(value=t("Dodaj obraz karty systemu (.img, .img.zip lub .img.xz), np. OpenX6X00."))
-        foot = ttk.Frame(top, style="Card.TFrame", padding=(12, 8))
-        foot.pack(fill="x", pady=(8, 0))
-        self.bar = ttk.Progressbar(foot, mode="determinate", maximum=1000)
-        self.bar.pack(fill="x")
-        ttk.Label(foot, textvariable=self.status, wraplength=820, foreground=HINT).pack(anchor="w", pady=(6, 0))
 
     def _section(self, top, number, title, expand=False):
         """A titled card: a round number badge, the title, the card the section's widgets go in"""
@@ -558,7 +586,7 @@ class App:
 
     def _toggle_adv(self):
         if self.show_adv.get():
-            self.adv.grid(row=4, column=0, columnspan=5, sticky="w", pady=(0, 6))
+            self.adv.grid(row=5, column=0, columnspan=4, sticky="w", pady=(0, 6))
         else:
             self.adv.grid_forget()
 
@@ -572,6 +600,8 @@ class App:
             self.selected = 0
         self._render()
         self._show_info()
+        if hasattr(self, "btn_card"):
+            self._actions()
 
     def _entry_info(self, e):
         if e["kind"] == "xiegu":
@@ -700,7 +730,7 @@ class App:
                                           **_filetypes([(t("Obrazy kart"), "*.img *.zip *.xz")]))
         if not path:
             return
-        self._job(t("Analiza obrazu…"), self._analyse, path)
+        self._job(t("Analiza obrazu"), self._analyse, path, steps=["unzip"])
 
     def _analyse(self, path, name=None):
         def unzip(done, total):
@@ -885,8 +915,8 @@ class App:
             self.keep_box.configure(text=t("Wgraj ustawienia z własnej kopii: {p}", p=os.path.basename(
                 self.data_src.rstrip("/\\")) or self.data_src), state="normal")
         else:
-            self.keep_box.configure(text=t("Przenieś ustawienia ze starej karty na nową (każdego systemu osobno; kopie "
-                                           "zostają na komputerze)"), state="normal")
+            self.keep_box.configure(text=t("Przenieś ustawienia ze starej karty (każdego systemu osobno)"),
+                                    state="normal")
         if hasattr(self, "own_info"):
             self._show_own()
 
@@ -1030,7 +1060,7 @@ class App:
                 return (data or None), text
         if not (self.data_vol and os.path.isdir(self.data_vol)):
             return None, None
-        files = backup.snapshot(self.data_vol, os.path.join(tmp, "DATA"))
+        files = backup.snapshot(self.data_vol, os.path.join(tmp, "DATA"), self._progress_cb)
         zip_path = backup.save_zip(os.path.join(tmp, "DATA"))
         return files, t("Ustawienia: {n} plików wgranych na kartę; kopia: {zip}", n=len(files), zip=zip_path)
 
@@ -1067,7 +1097,8 @@ class App:
                                             **({} if devices.MAC else {"filetypes": [(t("Obraz karty"), "*.img")]}))
         if not path:
             return
-        self._job(t("Zapis obrazu…"), self._save_job, plan, path, self._all_settings(), self._card_in_reader())
+        self._job(t("Zapis obrazu"), self._save_job, plan, path, self._all_settings(), self._card_in_reader(),
+                  steps=(["backup"] if self.keep_data.get() else []) + ["write", "verify"])
 
     def _save_job(self, plan, path, settings, card=None):
         tmp = tempfile.mkdtemp(prefix="x6100mb-data-")
@@ -1110,9 +1141,11 @@ class App:
         inproc = devices.is_admin() or devices.MAC   # macOS: the app writes itself, through authopen
         self._skip.clear()
         self._skip_file = None
-        self._job(t("Zapis na kartę…") if inproc else t("Zapis na kartę (uprawnienia administratora)…"),
-                  self._card_job, plan, card, inproc, self._all_settings(), self.check_card.get())
-        self.progress_win.on_skip = self._skip_check
+        self._job(t("Zapis na kartę") if inproc else t("Zapis na kartę (uprawnienia administratora)"),
+                  self._card_job, plan, card, inproc, self._all_settings(), self.check_card.get(),
+                  steps=(["backup"] if self.keep_data.get() else []) + ["prepare", "write", "sync"] +
+                  (["verify"] if self.check_card.get() else []))
+        self.panel.on_skip = self._skip_check
 
     def _skip_check(self):
         """The read-back of the card left off where it is (the button in the progress window)"""
@@ -1197,13 +1230,12 @@ class App:
     def _progress_cb(self, phase, done, total, msg=""):
         self.q.put(("progress", phase, done, total, msg))
 
-    def _job(self, text, fn, *args):
+    def _job(self, text, fn, *args, steps=None):
+        """fn(*args) in a thread, its progress in the panel at the bottom; steps: the stages it goes
+        through (their names in PHASES), for the "stage 2 of 4" line"""
         self.busy = True
-        self.btn_card.state(["disabled"])
-        self.btn_img.state(["disabled"])
-        self.status.set(text)
-        self.bar["value"] = 0
-        self.progress_win = ProgressWindow(self.root, text)
+        self._actions()
+        self.panel.start(text, steps)
 
         def run():
             try:
@@ -1213,6 +1245,15 @@ class App:
                 self.q.put(("error", str(e) + ("\n\n" + t("Szczegóły: {p}", p=log) if log else "")))
 
         threading.Thread(target=run, daemon=True).start()
+
+    def _actions(self):
+        """The buttons that need something to work on, on or off: writing needs a system in the menu
+        and no job running; the tools under the screen need a tile"""
+        ready = bool(self.entries) and not self.busy
+        for b in (self.btn_card, self.btn_img):
+            b.state(["!disabled"] if ready else ["disabled"])
+        for b in getattr(self, "tile_tools", []):
+            b.state(["!disabled"] if self.entries else ["disabled"])
 
     def _poll(self):
         """What the jobs' threads sent; whatever goes wrong with one message, the next poll still comes
@@ -1236,31 +1277,24 @@ class App:
                 self._render()
             elif m[0] == "progress":
                 _, phase, done, total, msg = m
-                self.bar["value"] = 1000 * done // max(total, 1)
-                self.status.set(f"{t(PHASES.get(phase, phase))}: {done * 100 // max(total, 1)}%  "
-                                f"({done // 2**20} / {total // 2**20} MB)  {msg}")
-                if getattr(self, "progress_win", None):
-                    self.progress_win.update(phase, done, total, msg)
+                if self.busy:
+                    self.panel.update(phase, done, total, msg)
             elif m[0] in ("result", "error"):
-                if getattr(self, "progress_win", None):
-                    self.progress_win.close()
-                    self.progress_win = None
                 self.busy = False
-                self.btn_card.state(["!disabled"])
-                self.btn_img.state(["!disabled"])
+                self._actions()
                 if m[0] == "error":
-                    self.bar["value"] = 0
-                    self.status.set(t("Błąd: ") + m[1])
+                    self.panel.rest("✕  " + t("Nie udało się"), RED)
+                    self.status.set(m[1].split("\n")[0])
                     messagebox.showerror(APP, m[1])
                 elif m[1][0] == "added":
-                    s = m[1][1]
-                    self.entries.append({"kind": "sd", "name": s.name[:28], "sys": s})
+                    sy = m[1][1]
+                    self.entries.append({"kind": "sd", "name": sy.name[:28], "sys": sy})
                     self._redraw(len(self.entries) - 1)
-                    self.bar["value"] = 0
-                    self.status.set(t("Dodano {name}: {summary}", name=s.name, summary=s.summary()))
+                    self.panel.rest("✓  " + t("Dodano {name}", name=sy.name), GREEN)
+                    self.status.set(sy.summary() + "   ·   " + t("Dodaj kolejny system albo przejdź do „Zapis karty”."))
                 else:
-                    self.bar["value"] = 1000
-                    self.status.set(m[1][1])
+                    self.panel.rest("✓  " + t("Gotowe"), GREEN)
+                    self.status.set(m[1][1].split("\n")[0])
                     messagebox.showinfo(APP, m[1][1])
 
 
@@ -1330,8 +1364,8 @@ class OnlineDialog:
         box, _ = self.boxes[src["id"]]
         rel = self.rels[src["id"]][box.current()]
         self.win.destroy()          # first: the progress window then comes up over the main window
-        app, text = self.app, t("Pobieranie {name} {tag}…", name=src["name"], tag=rel["tag"])
-        app.root.after(50, lambda: app._job(text, app._fetch_and_add, src, rel))
+        app, text = self.app, t("Pobieranie {name} {tag}", name=src["name"], tag=rel["tag"])
+        app.root.after(50, lambda: app._job(text, app._fetch_and_add, src, rel, steps=["download", "unzip"]))
 
 
 class CardDataDialog:
@@ -1424,7 +1458,7 @@ class CardDataDialog:
             return
 
         def job():
-            backup.save_zip(v["path"], path)
+            backup.save_zip(v["path"], path, self.app._progress_cb)
             return ("msg", t("Kopia ustawień zapisana:\n{path}", path=path))
         self.app._job(t("Kopia DATA na komputer"), job)
 
@@ -1435,14 +1469,15 @@ class CardDataDialog:
 
         def go(path):
             def job():
-                n = backup.restore_copy(path, v["path"])
+                backup.clear_volume(v["path"])
+                n = backup.restore_copy(path, v["path"], app._progress_cb)
                 return ("msg", t("Przywrócono {n} plików na {vol}. Wysuń kartę bezpiecznie i włóż ją do radia.",
                                  n=n, vol=v["path"]))
             app._job(t("Przywróć DATA na kartę"), job)
         app._single("picker", lambda: CopyPicker(
             app, t("Przywróć DATA na kartę"),
-            t("Kopia zostanie wgrana na kartę w czytniku: {vol}. Pliki o tych samych nazwach zostaną "
-              "zastąpione.", vol=v["path"]), t("Wgraj tę kopię na kartę"), go, parent=self.win))
+            t("Kopia zostanie wgrana na kartę w czytniku: {vol}. Obecna zawartość tej DATA zostanie zastąpiona.",
+              vol=v["path"]), t("Wgraj tę kopię na kartę"), go, parent=self.win))
 
     def _label(self, a):
         return " + ".join(a["names"])
@@ -1486,7 +1521,8 @@ class CardDataDialog:
                 # Windows keeps the DATA it shows as a drive to itself: that one through the drive
                 vols = backup.find_data_volumes() if devices.WIN and a["active"] else []
                 if vols:
-                    n = backup.restore_copy(path, vols[0]["path"])
+                    backup.clear_volume(vols[0]["path"])       # replaced, as when the card is written directly
+                    n = backup.restore_copy(path, vols[0]["path"], app._progress_cb)
                 else:
                     n = app._card_request({"op": "restore", "dev": dev, "area": a, "zip": path}, app._progress_cb)["files"]
                 return ("msg", t("DATA systemu {name}: przywrócono {n} plików. Wysuń kartę bezpiecznie i włóż ją do radia.",
@@ -1713,12 +1749,24 @@ def _set_icon(root):
         pass
 
 
-def _fit_screen(root):
-    """The window as large as its contents like, but never larger than the screen (then it scrolls)"""
+def _fit_screen(root, app=None):
+    """The window as large as its contents ask, at whatever size the system draws them (125 %,
+    200 %...), but never larger than the screen (then it scrolls): both columns side by side when the
+    screen is wide enough, else one under the other"""
     root.update_idletasks()
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-    w = min(max(root.winfo_reqwidth(), 1120), sw - 40)
-    h = min(1040, sh - 110)                 # room for the title bar and the taskbar
+    if app is None:
+        w, h = min(max(root.winfo_reqwidth(), 1120), sw - 40), min(1040, sh - 110)
+    else:
+        pad = 44                                   # the margins and the scrollbar
+        wide, narrow = app._wide_width() + pad, max(app.colA.winfo_reqwidth(), app.colB.winfo_reqwidth()) + pad
+        is_wide = wide <= sw - 60
+        w = min(wide if is_wide else narrow, sw - 40)
+        root.geometry("%dx%d" % (w, min(700, sh - 110)))        # the width first: it decides the columns
+        root.update()
+        need = app._head.winfo_reqheight() + app.panel.winfo_reqheight() + app.body.winfo_reqheight() + 40
+        h = min(need, sh - 110)                    # room for the title bar and the taskbar
+        root.minsize(min(narrow, sw - 40), min(420, sh - 110))
     root.geometry("%dx%d+%d+%d" % (w, h, max((sw - w) // 2, 0), max((sh - 80 - h) // 2, 0)))
 
 
@@ -1727,7 +1775,7 @@ def main():
     _set_icon(root)
     _theme(root)
     app = App(root)
-    _fit_screen(root)
+    _fit_screen(root, app)
 
     def close():
         # What was fetched and unpacked goes with the window: the next start takes the systems fresh

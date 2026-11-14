@@ -108,22 +108,33 @@ def log_error(where):
         return None
 
 
-def save_zip(src, zip_path=None):
+def _told(progress, phase, items):
+    """items as they come, progress(phase, bytes done, bytes in all, name) told after each"""
+    total = sum(it[2] for it in items) or 1
+    done = 0
+    for it in items:
+        yield it
+        done += it[2]
+        if progress:
+            progress(phase, done, total, it[0])
+
+
+def save_zip(src, zip_path=None, progress=None):
     """The volume's files as a .zip on the computer; its path"""
     if zip_path is None:
         os.makedirs(backups_dir(), exist_ok=True)
         zip_path = os.path.join(backups_dir(), time.strftime("DATA-%Y-%m-%d_%H-%M-%S.zip"))
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
-        for rel, path, _size in files_in(src):
+        for rel, path, _size in _told(progress, "backup", files_in(src)):
             z.write(path, rel)
     return zip_path
 
 
-def snapshot(src, dest):
+def snapshot(src, dest, progress=None):
     """The volume's files copied into dest (the card is erased next); [(relative, path, size)].
     Readable by everyone: on Linux and Windows the card is written by a helper with other rights."""
     copied = []
-    for rel, path, size in files_in(src):
+    for rel, path, size in _told(progress, "backup", files_in(src)):
         target = os.path.join(dest, *rel.split("/"))
         os.makedirs(os.path.dirname(target), exist_ok=True)
         shutil.copyfile(path, target)
@@ -179,14 +190,18 @@ def _dir_root(src):
     return os.path.join(src, *inner.strip("/").split("/")) if inner else src
 
 
-def restore_zip(zip_path, dest):
+def restore_zip(zip_path, dest, progress=None):
     """A backup .zip unpacked onto the DATA partition dest (files of the same name replaced); how many.
     Only plain relative paths: nothing outside dest."""
     n = 0
     root = os.path.realpath(dest)
     with zipfile.ZipFile(zip_path) as z:
         inner = data_root(_zip_names(z))          # a copy zipped as a folder: from inside that folder
+        total, done = sum(i.file_size for i in z.infolist()) or 1, 0
         for info in z.infolist():
+            done += info.file_size
+            if progress and not info.is_dir():
+                progress("restore", done, total, info.filename)
             if info.is_dir():
                 continue
             rel = info.filename.replace("\\", "/")
@@ -224,13 +239,30 @@ def from_copy(src, dest):
     return files_in(dest)
 
 
-def restore_copy(src, dest):
+def clear_volume(dest):
+    """What the radio keeps on the DATA partition dest removed (what the computer itself leaves
+    there stays): before a copy is put back in its place, so that restoring replaces, the same on
+    every system, whichever way the card is reached"""
+    for name in os.listdir(dest):
+        if _skip(name):
+            continue
+        p = os.path.join(dest, name)
+        try:
+            if os.path.isdir(p) and not os.path.islink(p):
+                shutil.rmtree(p)
+            else:
+                os.remove(p)
+        except OSError:
+            pass
+
+
+def restore_copy(src, dest, progress=None):
     """A copy of DATA (a backup .zip, or a folder holding the files loose) onto the DATA partition
     dest; files of the same name are replaced; how many"""
     if not os.path.isdir(src):
-        return restore_zip(src, dest)
+        return restore_zip(src, dest, progress)
     n = 0
-    for rel, path, _size in files_in(_dir_root(src)):
+    for rel, path, _size in _told(progress, "restore", files_in(_dir_root(src))):
         target = os.path.join(dest, *rel.split("/"))
         os.makedirs(os.path.dirname(target), exist_ok=True)
         shutil.copyfile(path, target)
