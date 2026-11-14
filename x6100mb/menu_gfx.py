@@ -159,15 +159,21 @@ def _wrap(draw, text, font, max_w):
 
 
 # ------------------------------------------------------------------------------------------
-# The screen: drawn at twice the size and scaled down (smooth corners and letters), on a dark
-# blue background; tiles and keys with a soft shade, light from above, a glow round the chosen one
+# The screen, in the manner of the classic console role-playing games' menus: blue windows
+# shaded top to bottom inside a light frame, on a near-black background; a pointer over the
+# default system's key. Drawn at twice the size and scaled down (smooth corners and letters).
+# Between the tiles and the keys runs a rail: the only part that moves on the radio (a light
+# travelling along it, the pointer bobbing), as small pictures U-Boot draws over the rail.
 # ------------------------------------------------------------------------------------------
 S = 2
-BG_TOP, BG_BOTTOM = (16, 28, 56), (4, 7, 16)
-TILE_TOP, TILE_BOTTOM = (40, 49, 72), (20, 25, 39)
-KEY_GREY = ((84, 94, 120), (46, 53, 72))
-KEY_BLUE = ((96, 190, 255), (30, 126, 214))
-KEY_GREEN = ((92, 222, 124), (30, 158, 66))
+BG_TOP, BG_BOTTOM = (8, 10, 34), (0, 0, 8)
+WIN = ((62, 92, 222), (10, 16, 86))            # a window, top to bottom
+WIN_LIT = ((96, 138, 255), (20, 38, 150))      # the default system's
+WIN_GO = ((70, 150, 235), (12, 40, 120))       # the chosen one's
+FRAME, FRAME_DIM, FRAME_GO = (238, 241, 250), (150, 160, 200), (255, 214, 90)
+GLOW, GOLD = (110, 170, 255), (255, 214, 90)
+RAIL_Y = (376, 400)          # landscape rows of the rail; the animation's strip is exactly these
+FRAMES = 16
 _cache = {}
 
 
@@ -198,19 +204,52 @@ def _soft(img, box, r, colour, blur, strength, dy=0):
     img.paste(Image.new("RGB", (w, h), colour), (x0 - pad, y0 - pad + dy), m)
 
 
-def _panel(img, box, r, top, bottom, edge=None, edge_w=0, shine=True):
-    """A rounded panel filled top to bottom, a lighter line along its upper edge, an outline"""
+def _window(img, box, r, fill, frame, frame_w=3):
+    """A window: a dark line, the light frame, inside it the blue shaded top to bottom"""
     x0, y0, x1, y1 = box
-    w, h = x1 - x0, y1 - y0
-    img.paste(_vgrad(w, h, top, bottom), (x0, y0), _round_mask(w, h, r))
     d = ImageDraw.Draw(img)
-    if shine:
-        light = tuple(min(255, c + 38) for c in top)
-        d.arc([x0, y0, x0 + 2 * r, y0 + 2 * r], 180, 270, fill=light, width=S)
-        d.arc([x1 - 2 * r - 1, y0, x1 - 1, y0 + 2 * r], 270, 360, fill=light, width=S)
-        d.line([(x0 + r, y0 + S // 2), (x1 - r, y0 + S // 2)], fill=light, width=S)
-    if edge:
-        d.rounded_rectangle([x0, y0, x1 - 1, y1 - 1], radius=r, outline=edge, width=edge_w)
+    d.rounded_rectangle([x0 - S, y0 - S, x1 + S - 1, y1 + S - 1], radius=r + S, fill=(6, 8, 26))
+    d.rounded_rectangle([x0, y0, x1 - 1, y1 - 1], radius=r, fill=frame)
+    k = frame_w * S
+    w, h = x1 - x0 - 2 * k, y1 - y0 - 2 * k
+    img.paste(_vgrad(w, h, fill[0], fill[1]), (x0 + k, y0 + k), _round_mask(w, h, max(r - k, 2)))
+
+
+def _pointer(size, colour=(255, 255, 255)):
+    """The pointer: a triangle pointing down, dark edged (RGBA, size wide)"""
+    k = 4
+    im = Image.new("RGBA", (size * k, size * k), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    w = size * k
+    d.polygon([(w * 0.08, w * 0.12), (w * 0.92, w * 0.12), (w * 0.5, w * 0.95)], fill=(10, 14, 50, 255))
+    d.polygon([(w * 0.22, w * 0.2), (w * 0.78, w * 0.2), (w * 0.5, w * 0.78)], fill=colour + (255,))
+    return im.resize((size, size), Image.LANCZOS)
+
+
+def _rail(img, default_cx, frame=None):
+    """The rail between tiles and keys drawn into img (landscape, full size): a dark band with a
+    line through it; frame None: at rest; else the light at its place and the pointer's bob"""
+    import math
+    y0, y1 = RAIL_Y
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, y0, W, y1 - 1], fill=(2, 3, 16))
+    mid = (y0 + y1) // 2
+    d.line([(0, mid), (W, mid)], fill=(40, 52, 120), width=1)
+    px = img.load()
+    if frame is not None:                     # the light: bright in the middle, fading both ways
+        cx = int((frame + 0.5) * W / FRAMES)
+        for dx in range(-90, 91):
+            x = (cx + dx) % W
+            k = (1 - abs(dx) / 90) ** 2
+            for dy, weight in ((-1, 0.35), (0, 1.0), (1, 0.35)):
+                r, g, b = px[x, mid + dy]
+                kk = k * weight
+                px[x, mid + dy] = (int(r + (150 - r) * kk), int(g + (200 - g) * kk), int(b + (255 - b) * kk))
+    if default_cx is not None:
+        bob = 0 if frame is None else int(round(2 + 2 * math.sin(2 * math.pi * frame / FRAMES)))
+        size = y1 - y0 - 6
+        p = _pointer(size)
+        img.paste(p, (default_cx - size // 2, y0 + 1 + bob), p)
 
 
 def _key(entries, default, selected, title):
@@ -225,64 +264,77 @@ def render_menu(entries, default, selected=None, title="X6100 MULTIBOOT"):
         return _cache[key].copy()
     img = _vgrad(W * S, H * S, BG_TOP, BG_BOTTOM)
     d = ImageDraw.Draw(img)
-    # the title bar, a blue line under it
-    img.paste(_vgrad(W * S, 30 * S, (26, 44, 84), (14, 24, 48)), (0, 0))
-    d.rectangle([0, 30 * S, W * S, 32 * S - 1], fill=ACCENT)
+    # the title: a window's blue across the top, the light frame's line under it
+    img.paste(_vgrad(W * S, 29 * S, WIN[0], (16, 26, 110)), (0, 0))
+    d.rectangle([0, 29 * S, W * S, 31 * S - 1], fill=FRAME)
+    d.text((16 * S + S, 15 * S + S), title, font=_font(22 * S), fill=(8, 10, 50), anchor="lm")
     d.text((16 * S, 15 * S), title, font=_font(22 * S), fill=WHITE, anchor="lm")
     if entries:
-        d.text(((W - 16) * S, 15 * S), "F1-F%d" % len(entries), font=_font(17 * S), fill=(170, 190, 225), anchor="rm")
+        d.text(((W - 16) * S, 15 * S), "F1-F%d" % len(entries), font=_font(17 * S), fill=(200, 212, 245), anchor="rm")
     for i, e in enumerate(entries):
         cx = COL_W * i + COL_W // 2
         is_def = i == default and selected is None
         is_sel = selected is not None and i == selected
-        tone = GO if is_sel else ACCENT
         lit = is_sel or is_def
-        box = ((cx - 72) * S, 76 * S, (cx + 72) * S, 372 * S)
-        _soft(img, box, 16 * S, (0, 0, 0), 7 * S, 150, dy=5 * S)
+        fill = WIN_GO if is_sel else (WIN_LIT if is_def else WIN)
+        frame = FRAME_GO if is_sel else (FRAME if is_def else FRAME_DIM)
+        box = ((cx - 72) * S, 74 * S, (cx + 72) * S, 368 * S)
+        _soft(img, box, 10 * S, (0, 0, 0), 6 * S, 170, dy=4 * S)
         if lit:
-            _soft(img, box, 16 * S, tone, 8 * S, 120)
-        top, bottom = ((30, 74, 48), (14, 40, 26)) if is_sel else (TILE_TOP, TILE_BOTTOM)
-        _panel(img, box, 16 * S, top, bottom, edge=tone if lit else (62, 72, 98), edge_w=(3 if lit else 1) * S)
-        d = ImageDraw.Draw(img)
+            _soft(img, box, 10 * S, GOLD if is_sel else GLOW, 7 * S, 130)
+        _window(img, box, 10 * S, fill, frame)
         logo = None
         if e.get("logo"):
             try:
-                logo = load_logo(e["logo"], size=120 * S, bg=top, width=128 * S, crop=e.get("crop"))
+                logo = load_logo(e["logo"], size=116 * S, bg=fill[0], width=124 * S, crop=e.get("crop"))
             except Exception:
                 logo = None
         if logo is None:
-            logo = default_logo(e["name"], size=120 * S, bg=top)
-        lx, ly = cx * S - logo.width // 2, 90 * S
-        _soft(img, (lx, ly, lx + logo.width, ly + logo.height), 22 * S, (0, 0, 0), 4 * S, 110, dy=3 * S)
-        img.paste(logo, (lx, ly), _round_mask(logo.width, logo.height, 22 * S))
+            logo = default_logo(e["name"], size=116 * S, bg=fill[0])
+        lx, ly = cx * S - logo.width // 2, 88 * S
+        _soft(img, (lx, ly, lx + logo.width, ly + logo.height), 18 * S, (0, 0, 20), 4 * S, 140, dy=3 * S)
+        img.paste(logo, (lx, ly), _round_mask(logo.width, logo.height, 18 * S))
         d = ImageDraw.Draw(img)
         f = _font(19 * S)
-        for k, line in enumerate(_wrap(d, e["name"], f, 132 * S)):
-            d.text((cx * S, (244 + 26 * k) * S), line, font=_fit_text(d, line, 132 * S, 19 * S), fill=WHITE, anchor="mm")
-        if lit:                       # a small label: what the countdown will start, or what was chosen
+        for k, line in enumerate(_wrap(d, e["name"], f, 128 * S)):
+            lf = _fit_text(d, line, 128 * S, 19 * S)
+            d.text((cx * S + S, (240 + 26 * k) * S + S), line, font=lf, fill=(6, 8, 44), anchor="mm")
+            d.text((cx * S, (240 + 26 * k) * S), line, font=lf, fill=WHITE, anchor="mm")
+        if lit:                       # what the countdown will start, or what was chosen
             label = "START" if is_sel else t("domyslny")
-            lf = _font(15 * S)
-            lw = int(d.textlength(label, font=lf)) + 22 * S
-            pill = (cx * S - lw // 2, 326 * S, cx * S + lw // 2, 354 * S)
-            d.rounded_rectangle(pill, radius=14 * S, fill=tuple(c // 4 for c in tone), outline=tone, width=S)
-            d.text((cx * S, 340 * S), label, font=lf, fill=tone, anchor="mm")
-        # the key, right above the radio's button: raised, lit when it is the one
-        ktop, kbottom = KEY_GREEN if is_sel else (KEY_BLUE if is_def else KEY_GREY)
-        kbox = ((cx - 54) * S, 402 * S, (cx + 54) * S, 466 * S)
-        _soft(img, kbox, 14 * S, (0, 0, 0), 5 * S, 170, dy=4 * S)
+            tone = GOLD if is_sel else (190, 220, 255)
+            d.text((cx * S + S, 338 * S + S), label, font=_font(16 * S), fill=(6, 8, 44), anchor="mm")
+            d.text((cx * S, 338 * S), label, font=_font(16 * S), fill=tone, anchor="mm")
+        # the key, right above the radio's button: a small window of its own
+        kbox = ((cx - 54) * S, 406 * S, (cx + 54) * S, 468 * S)
+        _soft(img, kbox, 9 * S, (0, 0, 0), 4 * S, 180, dy=3 * S)
         if lit:
-            _soft(img, kbox, 14 * S, tone, 6 * S, 90)
-        _panel(img, kbox, 14 * S, ktop, kbottom, edge=tuple(c // 2 for c in kbottom), edge_w=S)
+            _soft(img, kbox, 9 * S, GOLD if is_sel else GLOW, 5 * S, 110)
+        _window(img, kbox, 9 * S, fill, frame)
         d = ImageDraw.Draw(img)
-        d.text((cx * S + S, 434 * S + S), "F%d" % (i + 1), font=_font(30 * S), fill=tuple(c // 3 for c in kbottom), anchor="mm")
-        d.text((cx * S, 434 * S), "F%d" % (i + 1), font=_font(30 * S), fill=(255, 255, 255), anchor="mm")
+        d.text((cx * S + 2 * S, 436 * S + 2 * S), "F%d" % (i + 1), font=_font(30 * S), fill=(6, 8, 44), anchor="mm")
+        d.text((cx * S, 436 * S), "F%d" % (i + 1), font=_font(30 * S), fill=GOLD if is_sel else WHITE, anchor="mm")
     img = img.resize((W, H), Image.LANCZOS)
     # row 1 (32..63) is the countdown's: exactly black, U-Boot writes there over the picture
     ImageDraw.Draw(img).rectangle([0, TEXT_ROW_Y[0], W, TEXT_ROW_Y[1] - 1], fill=(0, 0, 0))
+    mark = selected if selected is not None else default
+    _rail(img, COL_W * mark + COL_W // 2 if entries and mark is not None else None)
     if len(_cache) > 24:
         _cache.clear()
     _cache[key] = img
     return img.copy()
+
+
+def rail_frames(entries, default):
+    """The rail's FRAMES pictures (landscape strips W wide, RAIL_Y high): the light moving along,
+    the pointer over the default system's key bobbing. Drawn over the menu at rows RAIL_Y."""
+    cx = COL_W * default + COL_W // 2 if entries and default is not None else None
+    out = []
+    for k in range(FRAMES):
+        strip = Image.new("RGB", (W, H))
+        _rail(strip, cx, frame=k)
+        out.append(strip.crop((0, RAIL_Y[0], W, RAIL_Y[1])))
+    return out
 
 
 def to_framebuffer_bmp(img):
