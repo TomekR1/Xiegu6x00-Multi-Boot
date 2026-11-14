@@ -158,44 +158,232 @@ def _wrap(draw, text, font, max_w):
     return lines[:2]
 
 
+# ------------------------------------------------------------------------------------------
+# The screen, in the manner of the classic console role-playing games' menus: blue windows
+# shaded top to bottom inside a light frame, on a near-black background; a pointer over the
+# default system's key. Drawn at twice the size and scaled down (smooth corners and letters).
+# Between the tiles and the keys runs a rail: the only part that moves on the radio (a light
+# travelling along it, the pointer bobbing), as small pictures U-Boot draws over the rail.
+# ------------------------------------------------------------------------------------------
+S = 2
+BG_TOP, BG_BOTTOM = (8, 10, 34), (0, 0, 8)
+WIN = ((62, 92, 222), (10, 16, 86))            # a window, top to bottom
+WIN_LIT = ((96, 138, 255), (20, 38, 150))      # the default system's
+WIN_GO = ((40, 150, 96), (8, 60, 40))          # the chosen one's: green
+KEY_GO = ((72, 214, 110), (22, 140, 60))
+FRAME, FRAME_DIM, FRAME_GO = (238, 241, 250), (150, 160, 200), (110, 235, 140)
+GLOW, GOLD = (110, 170, 255), (255, 214, 90)
+RAIL_Y = (376, 400)          # landscape rows of the rail; the animation's strip is exactly these
+FRAMES = 16
+_cache = {}
+
+
+def _vgrad(w, h, top, bottom):
+    col = Image.new("RGB", (1, h))
+    px = col.load()
+    for y in range(h):
+        k = y / max(h - 1, 1)
+        px[0, y] = tuple(int(a + (b - a) * k) for a, b in zip(top, bottom))
+    return col.resize((w, h))
+
+
+def _round_mask(w, h, r):
+    m = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(m).rounded_rectangle([0, 0, w - 1, h - 1], radius=r, fill=255)
+    return m
+
+
+def _soft(img, box, r, colour, blur, strength, dy=0):
+    """A blurred rounded shape of a colour under what comes next: a shade (black) or a glow"""
+    from PIL import ImageFilter
+    x0, y0, x1, y1 = box
+    pad = blur * 3
+    w, h = x1 - x0 + 2 * pad, y1 - y0 + 2 * pad
+    m = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(m).rounded_rectangle([pad, pad, w - pad - 1, h - pad - 1], radius=r, fill=strength)
+    m = m.filter(ImageFilter.GaussianBlur(blur))
+    img.paste(Image.new("RGB", (w, h), colour), (x0 - pad, y0 - pad + dy), m)
+
+
+def _window(img, box, r, fill, frame, alpha=150, frame_w=2):
+    """A window of tinted glass: the background shows through its blue (lighter at the top), a
+    sheen over its upper part, a light rim"""
+    x0, y0, x1, y1 = box
+    w, h = x1 - x0, y1 - y0
+    under = img.crop(box).convert("RGBA")
+    mask = _round_mask(w, h, r)
+    tint = _vgrad(w, h, fill[0], fill[1]).convert("RGBA")
+    tint.putalpha(mask.point(lambda v: v * alpha // 255))
+    under = Image.alpha_composite(under, tint)
+    sheen = Image.new("RGBA", (w, h), (255, 255, 255, 0))
+    fade = Image.new("L", (1, h), 0)
+    fp = fade.load()
+    for y in range(h // 2):
+        fp[0, y] = int(46 * (1 - y / (h / 2)) ** 2)
+    sheen.putalpha(Image.composite(fade.resize((w, h)), Image.new("L", (w, h), 0), mask))
+    under = Image.alpha_composite(under, sheen)
+    rim = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    ImageDraw.Draw(rim).rounded_rectangle([0, 0, w - 1, h - 1], radius=r, outline=frame + (235,), width=frame_w * S)
+    under = Image.alpha_composite(under, rim)
+    img.paste(under.convert("RGB"), (x0, y0), mask)
+
+
+def _backdrop():
+    """The background the glass lies on: night blue with soft lights in it (drawn small and
+    blurred, then enlarged: smooth and quick)"""
+    from PIL import ImageFilter
+    w, h = W // 4, H // 4
+    small = _vgrad(w, h, (10, 16, 52), (2, 3, 16))
+    d = ImageDraw.Draw(small)
+    for (cx, cy, rx, ry, colour) in ((0.16, 0.42, 0.24, 0.30, (36, 86, 230)), (0.56, 0.62, 0.26, 0.26, (110, 52, 200)),
+                                     (0.90, 0.36, 0.20, 0.30, (0, 132, 190)), (0.38, 0.95, 0.30, 0.16, (30, 60, 190))):
+        d.ellipse([(cx - rx) * w, (cy - ry) * h, (cx + rx) * w, (cy + ry) * h], fill=colour)
+    small = small.filter(ImageFilter.GaussianBlur(14))
+    small = Image.blend(small, _vgrad(w, h, (10, 16, 52), (2, 3, 16)), 0.35)
+    return small.resize((W * S, H * S), Image.BICUBIC)
+
+
+def _pointer(size, colour=(255, 255, 255)):
+    """The pointer: a triangle pointing down, dark edged (RGBA, size wide)"""
+    k = 4
+    im = Image.new("RGBA", (size * k, size * k), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    w = size * k
+    d.polygon([(w * 0.08, w * 0.12), (w * 0.92, w * 0.12), (w * 0.5, w * 0.95)], fill=(10, 14, 50, 255))
+    d.polygon([(w * 0.22, w * 0.2), (w * 0.78, w * 0.2), (w * 0.5, w * 0.78)], fill=colour + (255,))
+    return im.resize((size, size), Image.LANCZOS)
+
+
+def _rail(img, default_cx, frame=None):
+    """The rail between tiles and keys drawn into img (landscape, full size): a dark band with a
+    line through it; frame None: at rest; else the light at its place and the pointer's bob"""
+    import math
+    y0, y1 = RAIL_Y
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, y0, W, y1 - 1], fill=(3, 5, 22))
+    mid = (y0 + y1) // 2
+    d.rounded_rectangle([14, mid - 2, W - 15, mid + 2], radius=2, fill=(16, 24, 70))
+    d.line([(16, mid), (W - 17, mid)], fill=(52, 70, 150), width=1)
+    px = img.load()
+    if frame is not None:                     # the light: bright in the middle, fading both ways
+        cx = int((frame + 0.5) * W / FRAMES)
+        for dx in range(-90, 91):
+            x = (cx + dx) % W
+            k = (1 - abs(dx) / 90) ** 2
+            for dy, weight in ((-1, 0.35), (0, 1.0), (1, 0.35)):
+                r, g, b = px[x, mid + dy]
+                kk = k * weight
+                px[x, mid + dy] = (int(r + (150 - r) * kk), int(g + (200 - g) * kk), int(b + (255 - b) * kk))
+    if default_cx is not None:
+        bob = 0 if frame is None else int(round(2 + 2 * math.sin(2 * math.pi * frame / FRAMES)))
+        size = y1 - y0 - 6
+        p = _pointer(size)
+        img.paste(p, (default_cx - size // 2, y0 + 1 + bob), p)
+
+
+def _key(entries, default, selected, title):
+    return (tuple((e["name"], e.get("logo"), tuple(e.get("crop") or ())) for e in entries), default, selected,
+            title, t("domyslny"))
+
+
 def render_menu(entries, default, selected=None, title="X6100 MULTIBOOT"):
     """entries: [{"name", "logo": path or None}] in key order (F1 first). Landscape RGB image."""
-    img = Image.new("RGB", (W, H), (0, 0, 0))
+    key = _key(entries, default, selected, title)
+    if key in _cache:
+        return _cache[key].copy()
+    img = _backdrop()
     d = ImageDraw.Draw(img)
-    d.text((16, 16), title, font=_font(24), fill=WHITE, anchor="lm")
+    # the title: a window's blue across the top, the light frame's line under it
+    img.paste(_vgrad(W * S, 30 * S, WIN[0], (16, 26, 110)), (0, 0))
+    d.rectangle([0, 30 * S, W * S, 32 * S - 1], fill=(120, 150, 240))
+    d.text((16 * S + S, 15 * S + S), title, font=_font(22 * S), fill=(8, 10, 50), anchor="lm")
+    d.text((16 * S, 15 * S), title, font=_font(22 * S), fill=WHITE, anchor="lm")
     if entries:
-        d.text((W - 16, 16), "F1-F%d" % len(entries), font=_font(18), fill=GREY, anchor="rm")
-    d.line([(0, 31), (W, 31)], fill=TILE_EDGE, width=1)
-    # row 1 (32..63) is the countdown's: left black
+        d.text(((W - 16) * S, 15 * S), "F1-F%d" % len(entries), font=_font(17 * S), fill=(200, 212, 245), anchor="rm")
     for i, e in enumerate(entries):
         cx = COL_W * i + COL_W // 2
-        x0, x1 = cx - 72, cx + 72
-        is_def = i == default
+        is_def = i == default and selected is None
         is_sel = selected is not None and i == selected
-        edge = GO if is_sel else (ACCENT if is_def and selected is None else TILE_EDGE)
-        fill = (20, 48, 30) if is_sel else TILE
-        d.rounded_rectangle([x0, 76, x1, 372], radius=14, fill=fill, outline=edge, width=4 if edge != TILE_EDGE else 2)
+        lit = is_sel or is_def
+        fill = WIN_GO if is_sel else (WIN_LIT if is_def else WIN)
+        frame = FRAME_GO if is_sel else (FRAME if is_def else FRAME_DIM)
+        glow = GO if is_sel else GLOW
         logo = None
         if e.get("logo"):
             try:
-                logo = load_logo(e["logo"], size=124, bg=fill, width=136, crop=e.get("crop"))
+                logo = load_logo(e["logo"], size=124 * S, bg=fill[0], width=124 * S, crop=e.get("crop"))
             except Exception:
                 logo = None
         if logo is None:
-            logo = default_logo(e["name"], size=124, bg=fill)
-        img.paste(logo, (cx - logo.width // 2, 88))
-        f = _font(19)
-        for k, line in enumerate(_wrap(d, e["name"], f, 136)):
-            d.text((cx, 240 + 26 * k), line, font=_fit_text(d, line, 136, 19), fill=WHITE, anchor="mm")
-        if is_sel:
-            d.text((cx, 340), "START", font=_font(18), fill=GO, anchor="mm")
-        elif is_def and selected is None:
-            d.text((cx, 340), t("domyslny"), font=_font(16), fill=ACCENT, anchor="mm")
-        # the key, right above the radio's button
-        kc = GO if is_sel else (ACCENT if is_def and selected is None else (60, 68, 88))
-        d.rounded_rectangle([cx - 52, 404, cx + 52, 466], radius=10, fill=kc)
-        d.text((cx, 435), "F%d" % (i + 1), font=_font(30), fill=(255, 255, 255), anchor="mm")
-    return img
+            logo = default_logo(e["name"], size=124 * S, bg=fill[0])
+        # the system's own colour (its logo's) lights its tile from inside, under the logo
+        own = logo.resize((1, 1), Image.BOX).getpixel((0, 0))
+        own = tuple(min(255, int(c * 1.25) + 20) for c in own)
+        box = ((cx - 73) * S, 72 * S, (cx + 73) * S, 368 * S)
+        _soft(img, box, 26 * S, (0, 0, 0), 6 * S, 150, dy=4 * S)
+        if lit:
+            _soft(img, box, 26 * S, glow, 7 * S, 160)
+        _window(img, box, 26 * S, fill, frame, alpha=175 if lit else 135, frame_w=3 if lit else 2)
+        lx, ly = cx * S - logo.width // 2, 84 * S
+        _soft(img, (lx, ly + 20 * S, lx + logo.width, ly + logo.height + 6 * S), 30 * S, own, 9 * S, 150)
+        _soft(img, (lx, ly, lx + logo.width, ly + logo.height), 30 * S, (0, 0, 20), 3 * S, 120, dy=3 * S)
+        img.paste(logo, (lx, ly), _round_mask(logo.width, logo.height, 30 * S))
+        # a light rim round the logo: a button of its own on the glass
+        d = ImageDraw.Draw(img)
+        d.rounded_rectangle([lx, ly, lx + logo.width - 1, ly + logo.height - 1], radius=30 * S,
+                            outline=tuple(min(255, c + 60) for c in own), width=S)
+        # the name on a darker plate across the tile's lower part
+        plate = ((cx - 64) * S, 226 * S, (cx + 64) * S, (300 if lit else 304) * S)
+        _window(img, plate, 16 * S, ((8, 12, 48), (4, 6, 30)), tuple(c // 2 + 40 for c in own), alpha=150, frame_w=1)
+        d = ImageDraw.Draw(img)
+        f = _font(19 * S)
+        lines = _wrap(d, e["name"], f, 118 * S)
+        mid = (plate[1] + plate[3]) // 2
+        for k, line in enumerate(lines):
+            lf = _fit_text(d, line, 118 * S, 19 * S)
+            y = mid + int((k - (len(lines) - 1) / 2) * 25 * S)
+            d.text((cx * S + S, y + S), line, font=lf, fill=(0, 0, 20), anchor="mm")
+            d.text((cx * S, y), line, font=lf, fill=WHITE, anchor="mm")
+        if lit:                       # what the countdown will start, or what was chosen: a badge
+            label = "START" if is_sel else t("domyslny")
+            lf = _font(16 * S)
+            lw = int(d.textlength(label, font=lf)) + 26 * S
+            pill = (cx * S - lw // 2, 318 * S, cx * S + lw // 2, 352 * S)
+            tone = GO if is_sel else (150, 200, 255)
+            _window(img, pill, 17 * S, (tuple(c // 3 for c in tone), tuple(c // 5 for c in tone)), tone, alpha=220, frame_w=1)
+            d = ImageDraw.Draw(img)
+            d.text((cx * S, 335 * S), label, font=lf, fill=tone if not is_sel else (210, 255, 220), anchor="mm")
+        # the key, right above the radio's button: a pill of glass, green when it is the one chosen
+        kbox = ((cx - 54) * S, 406 * S, (cx + 54) * S, 468 * S)
+        _soft(img, kbox, 30 * S, (0, 0, 0), 4 * S, 170, dy=3 * S)
+        if lit:
+            _soft(img, kbox, 30 * S, glow, 5 * S, 150)
+        kfill = KEY_GO if is_sel else fill
+        _window(img, kbox, 30 * S, kfill, frame, alpha=225 if lit else 175)
+        d = ImageDraw.Draw(img)
+        d.text((cx * S + 2 * S, 436 * S + 2 * S), "F%d" % (i + 1), font=_font(30 * S), fill=(4, 8, 30), anchor="mm")
+        d.text((cx * S, 436 * S), "F%d" % (i + 1), font=_font(30 * S), fill=WHITE, anchor="mm")
+    img = img.resize((W, H), Image.LANCZOS)
+    # row 1 (32..63) is the countdown's: exactly black, U-Boot writes there over the picture
+    ImageDraw.Draw(img).rectangle([0, TEXT_ROW_Y[0], W, TEXT_ROW_Y[1] - 1], fill=(0, 0, 0))
+    mark = selected if selected is not None else default
+    _rail(img, COL_W * mark + COL_W // 2 if entries and mark is not None else None)
+    if len(_cache) > 24:
+        _cache.clear()
+    _cache[key] = img
+    return img.copy()
+
+
+def rail_frames(entries, default):
+    """The rail's FRAMES pictures (landscape strips W wide, RAIL_Y high): the light moving along,
+    the pointer over the default system's key bobbing. Drawn over the menu at rows RAIL_Y."""
+    cx = COL_W * default + COL_W // 2 if entries and default is not None else None
+    out = []
+    for k in range(FRAMES):
+        strip = Image.new("RGB", (W, H))
+        _rail(strip, cx, frame=k)
+        out.append(strip.crop((0, RAIL_Y[0], W, RAIL_Y[1])))
+    return out
 
 
 def to_framebuffer_bmp(img):

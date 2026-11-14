@@ -39,8 +39,9 @@ def notes(v):
         return ("**Wersja testowa (pre-release): do sprawdzenia przed wydaniem, nie do zwykłego użytku.**\n\n"
                 "**A test version (pre-release): for checking before the release, not for everyday use.**\n\n"
                 f"Windows {v['windows']} · macOS {v['macos']} · Linux {v['linux']}\n\n"
-                "Do sprawdzenia: sekcja 4 „Kopie ustawień (DATA)”: kopia DATA, przywracanie, DATA każdego systemu, "
-                "własna kopia DATA dla nowej karty.\n")
+                "Do sprawdzenia: nowe menu na ekranie radia (szklane okna, ruchomy pasek; wyłączenie ruchu: "
+                "`bm_anim=0` w `bootmenu.env`) oraz sekcja 4 „Kopie ustawień (DATA)”: kopia DATA, przywracanie, "
+                "DATA każdego systemu, własna kopia DATA dla nowej karty.\n")
     return f"""Kilka systemów na jednej karcie SD dla Xiegu X6100, z menu na ekranie radia (F1–F5).
 
 **Pobierz aplikację dla swojego komputera** (każda ma swój numer wersji):

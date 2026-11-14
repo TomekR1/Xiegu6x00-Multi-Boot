@@ -58,6 +58,9 @@ def project_logo(entry):
 
 DOOM_NAME = "DOOM"
 # Our own icon for the Doom tile (fire-coloured lettering, drawn for this app)
+# The menu's moving rail: its pictures' places in memory (clear of the kernel's and the script's)
+# and where on the panel they go (the rail's rows are the framebuffer's columns)
+ANIM_FRAMES, ANIM_ADDR, ANIM_STEP, ANIM_X = 16, 0x44000000, 0x10000, 376
 DOOM_LOGO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "doom.png")
 
 
@@ -127,6 +130,7 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
     a("setenv bm_default %d" % (default + 1))
     a("setenv bm_secs %d" % _secs(timeout_s))
     a("setenv bm_wait %d" % (1 if wait else 0))
+    a("setenv bm_anim 1")                  # the moving rail; bm_anim=0 in bootmenu.env: a still menu
     for n in range(MAX_SECS + 1):           # decimal -> hex, hex -> decimal
         a("setenv bm_hex_%d 'setenv bm_secs %x'" % (n, n))
         a("setenv bm_dec_%x 'setenv bm_left %d'" % (n, n))
@@ -168,11 +172,25 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
         a("    " + _shown(line))
     a("fi")
     a("")
+    if gfx:
+        # The rail's pictures into memory once (small: nothing is read from the card while the menu
+        # runs), drawn in turn over the rail, one each tenth of a second; any of them missing: still
+        a("if itest ${bm_gfx} -eq 0; then setenv bm_anim 0; fi")
+        a("if itest ${bm_anim} -eq 1; then")
+        for k in range(ANIM_FRAMES):
+            addr = ANIM_ADDR + k * ANIM_STEP
+            a("    if fatload mmc 0:1 0x%x MENU/A%02d.BMP; then setenv bm_fr_%x 'bmp display 0x%x %d 0'; "
+              "else setenv bm_anim 0; fi" % (addr, k, k, addr, ANIM_X))
+        a("fi")
+    else:
+        a("setenv bm_anim 0")
+    a("")
     a("# Keys, with a countdown each second; gpio prints every pin it reads, hence serial only")
     a("setenv bm_choice")
     a("setenv i 0")
     a("pek clear")                          # the press that switched the radio on (menu's U-Boot only)
     a('while test -z "${bm_choice}"; do')
+    a("    if itest ${bm_anim} -eq 1; then setexpr bm_f ${i} %% %x; run bm_fr_${bm_f}; fi" % ANIM_FRAMES)
     a("    setexpr bm_r ${i} % a")
     a("    if itest ${bm_r} -eq 0; then")
     a("        setexpr bm_left ${bm_ticks} - ${i}")
@@ -201,7 +219,7 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
     a("    if pek; then " + _shown(("%s[%s%s[1;31m%s          %s[0;37;40m" % (ESC, count_row, ESC, t(POWERING_OFF), ESC))
                               if ansi else t(POWERING_OFF) + "\\n") + "; sleep 1; poweroff; fi")
     a('    if test -z "${bm_choice}"; then')
-    a("        if itest ${bm_wait} -eq 1; then sleep 0.1; setexpr i ${i} + 1; setexpr i ${i} % a")
+    a("        if itest ${bm_wait} -eq 1; then sleep 0.1; setexpr i ${i} + 1; setexpr i ${i} % a0")
     a("        elif itest ${i} -ge ${bm_ticks}; then setenv bm_choice ${bm_default}; else sleep 0.1; setexpr i ${i} + 1; fi")
     a("    fi")
     a("done")
@@ -398,6 +416,8 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         from . import menu_gfx
         tiles = [tile(e) for e in entries]
         fat.add_file("MENU/MENU.BMP", menu_gfx.to_framebuffer_bmp(menu_gfx.render_menu(tiles, None if wait else default)))
+        for k, strip in enumerate(menu_gfx.rail_frames(tiles, None if wait else default)):
+            fat.add_file("MENU/A%02d.BMP" % k, menu_gfx.to_framebuffer_bmp(strip))
         for i in range(len(entries)):
             fat.add_file("MENU/SEL%d.BMP" % (i + 1),
                          menu_gfx.to_framebuffer_bmp(menu_gfx.render_menu(tiles, None if wait else default, selected=i)))
