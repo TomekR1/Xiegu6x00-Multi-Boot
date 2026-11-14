@@ -75,20 +75,93 @@ def _open(req, timeout):
     return urllib.request.urlopen(req, timeout=timeout, context=_ssl())
 
 
-def _get(url, timeout=20):
+# GitHub answers 60 questions an hour per address without an account (a release list is one; the
+# systems list asks 7). So each answer is kept on the computer with its ETag: for FRESH seconds it is
+# used as it is, after that asked again "if changed" (an unchanged answer costs nothing of the
+# limit), and when GitHub refuses, the last answer serves, with its time. Kept apart from the
+# fetched systems (those go when the app closes); a list of versions is small and checked anew.
+FRESH = 30 * 60
+last_from = {}          # url -> the time of the kept answer used instead of a fresh one (for the window)
+
+
+def _store():
+    from .i18n import _config_file
+    return os.path.join(os.path.dirname(_config_file()), "github-cache.json")
+
+
+def _load_store():
+    try:
+        with open(_store()) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_store(data):
+    path = _store()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path + ".tmp", "w") as f:
+            json.dump(data, f)
+        os.replace(path + ".tmp", path)
+    except OSError:
+        pass
+
+
+def token():
+    """A GitHub token of the user's (settings, or GITHUB_TOKEN): 5000 questions an hour instead of 60"""
+    from .i18n import setting
+    return (setting("github_token") or os.environ.get("GITHUB_TOKEN") or "").strip()
+
+
+def _get(url, timeout=20, now=None):
+    import time as _time
+    now = _time.time() if now is None else now
+    store = _load_store()
+    kept = store.get(url)
+    last_from.pop(url, None)
+    if kept and now - kept["at"] < FRESH:
+        return kept["data"]
     headers = {"User-Agent": UA, "Accept": "application/vnd.github+json"}
-    if os.environ.get("GITHUB_TOKEN"):          # in CI: a higher request limit
-        headers["Authorization"] = "Bearer " + os.environ["GITHUB_TOKEN"]
+    if token():
+        headers["Authorization"] = "Bearer " + token()
+    if kept and kept.get("etag"):
+        headers["If-None-Match"] = kept["etag"]
     req = urllib.request.Request(url, headers=headers)
     try:
         with _open(req, timeout) as r:
-            return json.loads(r.read().decode())
+            data = json.loads(r.read().decode())
+            store[url] = {"at": now, "etag": r.headers.get("ETag"), "data": data}
+            _save_store(store)
+            return data
     except urllib.error.HTTPError as e:
-        if e.code == 403 and e.headers.get("X-RateLimit-Remaining") == "0":
-            raise CatalogError(t("GitHub chwilowo ogranicza zapytania (limit na godzinę). Spróbuj za kilka minut."))
+        if e.code == 304 and kept:                       # unchanged: free of the limit
+            kept["at"] = now
+            _save_store(store)
+            return kept["data"]
+        if kept:                                         # refused (the limit) or down: the last answer
+            last_from[url] = kept["at"]
+            return kept["data"]
+        if e.code in (403, 429) and e.headers.get("X-RateLimit-Remaining") == "0":
+            reset = e.headers.get("X-RateLimit-Reset")
+            mins = max(1, int((int(reset) - now) // 60) + 1) if reset and reset.isdigit() else None
+            raise CatalogError(t("GitHub chwilowo ogranicza zapytania (60 na godzinę bez konta). Spróbuj za {m} min "
+                                 "albo wpisz token GitHub w oknie pobierania.", m=mins or "kilka"))
+        if e.code == 401:
+            raise CatalogError(t("GitHub nie przyjął tokenu: sprawdź go w oknie pobierania."))
         raise CatalogError(f"GitHub: {e.code} {e.reason}")
-    except urllib.error.URLError as e:
-        raise CatalogError(t("brak połączenia z GitHubem: {e}", e=e.reason))
+    except (urllib.error.URLError, OSError) as e:
+        if kept:
+            last_from[url] = kept["at"]
+            return kept["data"]
+        raise CatalogError(t("brak połączenia z GitHubem: {e}", e=getattr(e, "reason", e)))
+
+
+def kept_since(source):
+    """When a source's list shown is the kept one (GitHub refused or did not answer): its time, or None"""
+    times = [last_from[API.format(repo=repo, n=15)] for repo, _a in source["feeds"]
+             if API.format(repo=repo, n=15) in last_from]
+    return min(times) if times else None
 
 
 def releases(source, n=15, fetch=_get):

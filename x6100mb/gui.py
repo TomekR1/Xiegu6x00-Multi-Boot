@@ -1324,14 +1324,31 @@ class OnlineDialog:
             btn.grid(row=2 * r - 1, column=2, sticky="w")
             self.vars[src["id"]], self.boxes[src["id"]] = v, (box, btn)
             threading.Thread(target=self._load, args=(src,), daemon=True).start()
-        ttk.Label(f, text=t("Obrazy pobierane są z wydań projektów na GitHubie i zostają w pamięci podręcznej "
-                            "aplikacji."), foreground=HINT, wraplength=560).grid(row=99, column=0, columnspan=4,
-                                                                                sticky="w", pady=(8, 0))
+        ttk.Label(f, text=t("Obrazy pobierane są z wydań projektów na GitHubie. Lista wersji jest odświeżana "
+                            "co 30 minut."), foreground=HINT, wraplength=560).grid(row=99, column=0, columnspan=4,
+                                                                                  sticky="w", pady=(8, 0))
+        # An optional GitHub token: 5000 questions an hour instead of 60 (for many tries in a row)
+        tk_row = ttk.Frame(f)
+        tk_row.grid(row=100, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        ttk.Label(tk_row, text=t("Token GitHub (opcjonalnie):"), foreground=HINT).pack(side="left")
+        self.token = tk.StringVar(value=i18n.setting("github_token") or "")
+        ttk.Entry(tk_row, textvariable=self.token, show="•", width=30).pack(side="left", padx=6)
+        ttk.Button(tk_row, text=t("Zapisz"), command=self._save_token).pack(side="left")
+        ttk.Label(tk_row, text=t("podnosi limit GitHuba z 60 do 5000 zapytań na godzinę"),
+                  foreground=HINT).pack(side="left", padx=(8, 0))
+
+    def _save_token(self):
+        i18n.set_setting("github_token", self.token.get().strip())
+        messagebox.showinfo(APP, t("Token zapisany na tym komputerze.") if self.token.get().strip()
+                            else t("Token usunięty."), parent=self.win)
 
     def _load(self, src):
         try:
             rels = self.cat.releases(src)
             err = None if rels else t("brak obrazów X6100 w wydaniach")
+            since = self.cat.kept_since(src)
+            if since and rels:
+                rels[0] = dict(rels[0], kept=time.strftime("%H:%M", time.localtime(since)))
         except Exception as e:
             rels, err = [], str(e)
         self.app.q.put(("call", self._loaded, src, rels, err))
@@ -1353,6 +1370,9 @@ class OnlineDialog:
         box.state(["!disabled", "readonly"])
         stable = next((k for k, r in enumerate(rels) if not r["prerelease"]), 0)
         box.current(stable)
+        if rels and rels[0].get("kept"):
+            ttk.Label(box.master, text=t("lista z {t} (GitHub nie odpowiada)", t=rels[0]["kept"]),
+                      foreground=WARN).grid(row=box.grid_info()["row"], column=3, sticky="w", padx=(8, 0))
         btn.state(["!disabled"])
 
     def add(self, src):

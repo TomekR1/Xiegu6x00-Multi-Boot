@@ -189,6 +189,17 @@ EN = {
     "Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.":
         "Bluetooth in Doom does not work with {name}'s kernel (USB does). Move e.g. OpenX6X00 above it.",
     "Szczegóły: {p}": "Details: {p}",
+    "GitHub chwilowo ogranicza zapytania (60 na godzinę bez konta). Spróbuj za {m} min albo wpisz token GitHub w oknie pobierania.":
+        "GitHub limits the questions for a while (60 an hour without an account). Try again in {m} min, or enter a GitHub token in the download window.",
+    "GitHub nie przyjął tokenu: sprawdź go w oknie pobierania.": "GitHub did not accept the token: check it in the download window.",
+    "Obrazy pobierane są z wydań projektów na GitHubie. Lista wersji jest odświeżana co 30 minut.":
+        "The images come from the projects' releases on GitHub. The list of versions is refreshed every 30 minutes.",
+    "Token GitHub (opcjonalnie):": "GitHub token (optional):",
+    "Zapisz": "Save",
+    "podnosi limit GitHuba z 60 do 5000 zapytań na godzinę": "raises GitHub's limit from 60 to 5000 questions an hour",
+    "Token zapisany na tym komputerze.": "The token is saved on this computer.",
+    "Token usunięty.": "The token is removed.",
+    "lista z {t} (GitHub nie odpowiada)": "list from {t} (GitHub does not answer)",
     "Kopia zostanie wgrana na kartę w czytniku: {vol}. Obecna zawartość tej DATA zostanie zastąpiona.":
         "The copy will be put on the card in the reader: {vol}. What is in this DATA now will be replaced.",
     "osobna dla każdego systemu (zalecane)": "one per system (recommended)",
