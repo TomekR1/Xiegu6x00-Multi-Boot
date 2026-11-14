@@ -189,6 +189,20 @@ EN = {
     "Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.":
         "Bluetooth in Doom does not work with {name}'s kernel (USB does). Move e.g. OpenX6X00 above it.",
     "Szczegóły: {p}": "Details: {p}",
+    "Własna kopia DATA…": "Own DATA copy…",
+    "Własna kopia DATA": "Own DATA copy",
+    "Plik kopii (.zip)…": "Backup file (.zip)…",
+    "Folder z plikami DATA…": "Folder with the DATA files…",
+    "Folder z plikami DATA": "Folder with the DATA files",
+    "Nie używaj własnej kopii": "Do not use an own copy",
+    "Nie da się odczytać kopii: {e}": "The copy cannot be read: {e}",
+    "W tej kopii nie ma żadnych plików.": "There are no files in this copy.",
+    "Wgraj ustawienia z własnej kopii: {p}": "Put the settings from your own copy on the card: {p}",
+    "Własna kopia DATA: {n} plików, zostanie wgrana na nową kartę ({p}).":
+        "Own DATA copy: {n} files, it will be put on the new card ({p}).",
+    "Ustawienia z własnej kopii ({p}) zostaną wgrane na nową kartę.":
+        "The settings from your own copy ({p}) will be put on the new card.",
+    "Ustawienia: {n} plików wgranych na kartę; kopia: {zip}": "Settings: {n} files put on the card; copy: {zip}",
     "Przywróć DATA na kartę…": "Restore DATA to the card…",
     "Kopia DATA do przywrócenia": "DATA backup to restore",
     "Kopie DATA": "DATA backups",

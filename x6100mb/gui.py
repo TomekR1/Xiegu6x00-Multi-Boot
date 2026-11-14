@@ -267,6 +267,7 @@ class App:
         self.cards = []
         self.tiles = {}                   # key -> what the radio's screen shows for an entry
         self._tile_jobs = set()
+        self.data_src = None              # the user's own copy of DATA (.zip or folder) for the new card
         self._build_all()
         self.refresh_cards()
         self.root.after(100, self._poll)
@@ -489,6 +490,8 @@ class App:
         self.keep_box = ttk.Checkbutton(keep, variable=self.keep_data, text="")
         self.keep_box.pack(side="left")
         ttk.Button(keep, text=t("Przywróć DATA na kartę…"), command=self.restore_data).pack(side="right")
+        self.own_btn = ttk.Button(keep, text=t("Własna kopia DATA…"), command=self.choose_copy)
+        self.own_btn.pack(side="right", padx=(0, 6))
         ttk.Button(keep, text=t("Kopia DATA na komputer…"), command=self.backup_data).pack(side="right", padx=(0, 6))
 
         self.status = tk.StringVar(value=t("Dodaj obraz karty systemu (.img, .img.zip lub .img.xz), np. OpenX6X00."))
@@ -830,7 +833,12 @@ class App:
         except Exception:
             vols = []
         self.data_vol = vols[0]["path"] if vols else None
-        if self.data_vol:
+        if self.data_src and not os.path.exists(self.data_src):
+            self.data_src = None
+        if self.data_src:
+            self.keep_box.configure(text=t("Wgraj ustawienia z własnej kopii: {p}", p=os.path.basename(
+                self.data_src.rstrip("/\\")) or self.data_src), state="normal")
+        elif self.data_vol:
             self.keep_box.configure(text=t("Przenieś ustawienia ze starej karty (DATA: {p})", p=self.data_vol),
                                     state="normal")
         else:
@@ -850,6 +858,51 @@ class App:
             messagebox.showerror(APP, str(e))
             return
         messagebox.showinfo(APP, t("Kopia ustawień zapisana:\n{path}", path=path))
+
+    def choose_copy(self):
+        """The user's own copy of DATA for the new card: a backup .zip or a folder with the files"""
+        m = tk.Menu(self.root, tearoff=0)
+        m.add_command(label=t("Plik kopii (.zip)…"), command=lambda: self._set_copy("zip"))
+        m.add_command(label=t("Folder z plikami DATA…"), command=lambda: self._set_copy("dir"))
+        if self.data_src:
+            m.add_separator()
+            m.add_command(label=t("Nie używaj własnej kopii"), command=lambda: self._set_copy(None))
+        b = self.own_btn
+        try:
+            m.tk_popup(b.winfo_rootx(), b.winfo_rooty() + b.winfo_height())
+        finally:
+            m.grab_release()
+
+    def _set_copy(self, kind):
+        if kind is None:
+            self.data_src = None
+            self._find_data()
+            return
+        start = backup.backups_dir() if os.path.isdir(backup.backups_dir()) else os.path.expanduser("~")
+        if kind == "zip":
+            path = filedialog.askopenfilename(title=t("Własna kopia DATA"), initialdir=start,
+                                              **_filetypes([(t("Kopie DATA"), "*.zip")]))
+        else:
+            path = filedialog.askdirectory(title=t("Folder z plikami DATA"), initialdir=start)
+        if not path:
+            return
+        try:
+            if kind == "zip":
+                import zipfile
+                with zipfile.ZipFile(path) as z:
+                    n = sum(1 for i in z.infolist() if not i.is_dir())
+            else:
+                n = len(backup.files_in(path))
+        except Exception as e:
+            messagebox.showerror(APP, t("Nie da się odczytać kopii: {e}", e=e))
+            return
+        if not n:
+            messagebox.showwarning(APP, t("W tej kopii nie ma żadnych plików."))
+            return
+        self.data_src = path
+        self.keep_data.set(True)
+        self._find_data()
+        self.status.set(t("Własna kopia DATA: {n} plików, zostanie wgrana na nową kartę ({p}).", n=n, p=path))
 
     def restore_data(self):
         """A backup .zip (made here, or kept when a card was written) back onto the card's DATA partition"""
@@ -878,6 +931,8 @@ class App:
     def _take_data(self, tmp):
         """Before the card is erased: its DATA copied aside and kept as a .zip; the files for the new card"""
 
+        if self.keep_data.get() and self.data_src:      # the user's own copy goes before the old card's
+            return backup.from_copy(self.data_src, os.path.join(tmp, "DATA")), self.data_src
         if not (self.keep_data.get() and self.data_vol and os.path.isdir(self.data_vol)):
             return None, None
         src = self.data_vol
@@ -931,7 +986,7 @@ class App:
             shutil.rmtree(tmp, ignore_errors=True)
         msg = t("Zapisano {path} ({mb} MB). Można go wgrać balenaEtcherem.", path=path, mb=plan.size // 2**20)
         if files is not None:
-            msg += "\n\n" + t("Ustawienia ze starej karty: {n} plików przeniesionych; kopia: {zip}", n=len(files), zip=zip_path)
+            msg += "\n\n" + t("Ustawienia: {n} plików wgranych na kartę; kopia: {zip}", n=len(files), zip=zip_path)
         return ("msg", msg)
 
     def write_card(self):
@@ -951,7 +1006,9 @@ class App:
         text = t("Karta: {card}\n\nWSZYSTKO na tej karcie zostanie usunięte.\n\nMenu:\n{lines}\n\nDATA: {mb} MB\n\nWgrać?",
                  card=f"{card['name']} {_gb(card['size'])} ({card['path']})", lines="\n".join(lines),
                  mb=plan.info["data_mb"])
-        if self.keep_data.get() and self.data_vol:
+        if self.keep_data.get() and self.data_src:
+            text += "\n\n" + t("Ustawienia z własnej kopii ({p}) zostaną wgrane na nową kartę.", p=self.data_src)
+        elif self.keep_data.get() and self.data_vol:
             text += "\n\n" + t("Ustawienia z {p} zostaną przeniesione na nową kartę (i zapisane na komputerze).",
                                 p=self.data_vol)
         if not messagebox.askyesno(APP, text, icon="warning"):
@@ -971,8 +1028,8 @@ class App:
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         if files is not None:
-            result = (result[0], result[1] + "\n\n" + t("Ustawienia ze starej karty: {n} plików przeniesionych; "
-                                                         "kopia: {zip}", n=len(files), zip=zip_path))
+            result = (result[0], result[1] + "\n\n" + t("Ustawienia: {n} plików wgranych na kartę; kopia: {zip}",
+                                                         n=len(files), zip=zip_path))
         return result
 
     def _card_job_inproc(self, plan, dev):

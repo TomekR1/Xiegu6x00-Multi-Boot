@@ -158,44 +158,131 @@ def _wrap(draw, text, font, max_w):
     return lines[:2]
 
 
+# ------------------------------------------------------------------------------------------
+# The screen: drawn at twice the size and scaled down (smooth corners and letters), on a dark
+# blue background; tiles and keys with a soft shade, light from above, a glow round the chosen one
+# ------------------------------------------------------------------------------------------
+S = 2
+BG_TOP, BG_BOTTOM = (16, 28, 56), (4, 7, 16)
+TILE_TOP, TILE_BOTTOM = (40, 49, 72), (20, 25, 39)
+KEY_GREY = ((84, 94, 120), (46, 53, 72))
+KEY_BLUE = ((96, 190, 255), (30, 126, 214))
+KEY_GREEN = ((92, 222, 124), (30, 158, 66))
+_cache = {}
+
+
+def _vgrad(w, h, top, bottom):
+    col = Image.new("RGB", (1, h))
+    px = col.load()
+    for y in range(h):
+        k = y / max(h - 1, 1)
+        px[0, y] = tuple(int(a + (b - a) * k) for a, b in zip(top, bottom))
+    return col.resize((w, h))
+
+
+def _round_mask(w, h, r):
+    m = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(m).rounded_rectangle([0, 0, w - 1, h - 1], radius=r, fill=255)
+    return m
+
+
+def _soft(img, box, r, colour, blur, strength, dy=0):
+    """A blurred rounded shape of a colour under what comes next: a shade (black) or a glow"""
+    from PIL import ImageFilter
+    x0, y0, x1, y1 = box
+    pad = blur * 3
+    w, h = x1 - x0 + 2 * pad, y1 - y0 + 2 * pad
+    m = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(m).rounded_rectangle([pad, pad, w - pad - 1, h - pad - 1], radius=r, fill=strength)
+    m = m.filter(ImageFilter.GaussianBlur(blur))
+    img.paste(Image.new("RGB", (w, h), colour), (x0 - pad, y0 - pad + dy), m)
+
+
+def _panel(img, box, r, top, bottom, edge=None, edge_w=0, shine=True):
+    """A rounded panel filled top to bottom, a lighter line along its upper edge, an outline"""
+    x0, y0, x1, y1 = box
+    w, h = x1 - x0, y1 - y0
+    img.paste(_vgrad(w, h, top, bottom), (x0, y0), _round_mask(w, h, r))
+    d = ImageDraw.Draw(img)
+    if shine:
+        light = tuple(min(255, c + 38) for c in top)
+        d.arc([x0, y0, x0 + 2 * r, y0 + 2 * r], 180, 270, fill=light, width=S)
+        d.arc([x1 - 2 * r - 1, y0, x1 - 1, y0 + 2 * r], 270, 360, fill=light, width=S)
+        d.line([(x0 + r, y0 + S // 2), (x1 - r, y0 + S // 2)], fill=light, width=S)
+    if edge:
+        d.rounded_rectangle([x0, y0, x1 - 1, y1 - 1], radius=r, outline=edge, width=edge_w)
+
+
+def _key(entries, default, selected, title):
+    return (tuple((e["name"], e.get("logo"), tuple(e.get("crop") or ())) for e in entries), default, selected,
+            title, t("domyslny"))
+
+
 def render_menu(entries, default, selected=None, title="X6100 MULTIBOOT"):
     """entries: [{"name", "logo": path or None}] in key order (F1 first). Landscape RGB image."""
-    img = Image.new("RGB", (W, H), (0, 0, 0))
+    key = _key(entries, default, selected, title)
+    if key in _cache:
+        return _cache[key].copy()
+    img = _vgrad(W * S, H * S, BG_TOP, BG_BOTTOM)
     d = ImageDraw.Draw(img)
-    d.text((16, 16), title, font=_font(24), fill=WHITE, anchor="lm")
+    # the title bar, a blue line under it
+    img.paste(_vgrad(W * S, 30 * S, (26, 44, 84), (14, 24, 48)), (0, 0))
+    d.rectangle([0, 30 * S, W * S, 32 * S - 1], fill=ACCENT)
+    d.text((16 * S, 15 * S), title, font=_font(22 * S), fill=WHITE, anchor="lm")
     if entries:
-        d.text((W - 16, 16), "F1-F%d" % len(entries), font=_font(18), fill=GREY, anchor="rm")
-    d.line([(0, 31), (W, 31)], fill=TILE_EDGE, width=1)
-    # row 1 (32..63) is the countdown's: left black
+        d.text(((W - 16) * S, 15 * S), "F1-F%d" % len(entries), font=_font(17 * S), fill=(170, 190, 225), anchor="rm")
     for i, e in enumerate(entries):
         cx = COL_W * i + COL_W // 2
-        x0, x1 = cx - 72, cx + 72
-        is_def = i == default
+        is_def = i == default and selected is None
         is_sel = selected is not None and i == selected
-        edge = GO if is_sel else (ACCENT if is_def and selected is None else TILE_EDGE)
-        fill = (20, 48, 30) if is_sel else TILE
-        d.rounded_rectangle([x0, 76, x1, 372], radius=14, fill=fill, outline=edge, width=4 if edge != TILE_EDGE else 2)
+        tone = GO if is_sel else ACCENT
+        lit = is_sel or is_def
+        box = ((cx - 72) * S, 76 * S, (cx + 72) * S, 372 * S)
+        _soft(img, box, 16 * S, (0, 0, 0), 7 * S, 150, dy=5 * S)
+        if lit:
+            _soft(img, box, 16 * S, tone, 8 * S, 120)
+        top, bottom = ((30, 74, 48), (14, 40, 26)) if is_sel else (TILE_TOP, TILE_BOTTOM)
+        _panel(img, box, 16 * S, top, bottom, edge=tone if lit else (62, 72, 98), edge_w=(3 if lit else 1) * S)
+        d = ImageDraw.Draw(img)
         logo = None
         if e.get("logo"):
             try:
-                logo = load_logo(e["logo"], size=124, bg=fill, width=136, crop=e.get("crop"))
+                logo = load_logo(e["logo"], size=120 * S, bg=top, width=128 * S, crop=e.get("crop"))
             except Exception:
                 logo = None
         if logo is None:
-            logo = default_logo(e["name"], size=124, bg=fill)
-        img.paste(logo, (cx - logo.width // 2, 88))
-        f = _font(19)
-        for k, line in enumerate(_wrap(d, e["name"], f, 136)):
-            d.text((cx, 240 + 26 * k), line, font=_fit_text(d, line, 136, 19), fill=WHITE, anchor="mm")
-        if is_sel:
-            d.text((cx, 340), "START", font=_font(18), fill=GO, anchor="mm")
-        elif is_def and selected is None:
-            d.text((cx, 340), t("domyslny"), font=_font(16), fill=ACCENT, anchor="mm")
-        # the key, right above the radio's button
-        kc = GO if is_sel else (ACCENT if is_def and selected is None else (60, 68, 88))
-        d.rounded_rectangle([cx - 52, 404, cx + 52, 466], radius=10, fill=kc)
-        d.text((cx, 435), "F%d" % (i + 1), font=_font(30), fill=(255, 255, 255), anchor="mm")
-    return img
+            logo = default_logo(e["name"], size=120 * S, bg=top)
+        lx, ly = cx * S - logo.width // 2, 90 * S
+        _soft(img, (lx, ly, lx + logo.width, ly + logo.height), 22 * S, (0, 0, 0), 4 * S, 110, dy=3 * S)
+        img.paste(logo, (lx, ly), _round_mask(logo.width, logo.height, 22 * S))
+        d = ImageDraw.Draw(img)
+        f = _font(19 * S)
+        for k, line in enumerate(_wrap(d, e["name"], f, 132 * S)):
+            d.text((cx * S, (244 + 26 * k) * S), line, font=_fit_text(d, line, 132 * S, 19 * S), fill=WHITE, anchor="mm")
+        if lit:                       # a small label: what the countdown will start, or what was chosen
+            label = "START" if is_sel else t("domyslny")
+            lf = _font(15 * S)
+            lw = int(d.textlength(label, font=lf)) + 22 * S
+            pill = (cx * S - lw // 2, 326 * S, cx * S + lw // 2, 354 * S)
+            d.rounded_rectangle(pill, radius=14 * S, fill=tuple(c // 4 for c in tone), outline=tone, width=S)
+            d.text((cx * S, 340 * S), label, font=lf, fill=tone, anchor="mm")
+        # the key, right above the radio's button: raised, lit when it is the one
+        ktop, kbottom = KEY_GREEN if is_sel else (KEY_BLUE if is_def else KEY_GREY)
+        kbox = ((cx - 54) * S, 402 * S, (cx + 54) * S, 466 * S)
+        _soft(img, kbox, 14 * S, (0, 0, 0), 5 * S, 170, dy=4 * S)
+        if lit:
+            _soft(img, kbox, 14 * S, tone, 6 * S, 90)
+        _panel(img, kbox, 14 * S, ktop, kbottom, edge=tuple(c // 2 for c in kbottom), edge_w=S)
+        d = ImageDraw.Draw(img)
+        d.text((cx * S + S, 434 * S + S), "F%d" % (i + 1), font=_font(30 * S), fill=tuple(c // 3 for c in kbottom), anchor="mm")
+        d.text((cx * S, 434 * S), "F%d" % (i + 1), font=_font(30 * S), fill=(255, 255, 255), anchor="mm")
+    img = img.resize((W, H), Image.LANCZOS)
+    # row 1 (32..63) is the countdown's: exactly black, U-Boot writes there over the picture
+    ImageDraw.Draw(img).rectangle([0, TEXT_ROW_Y[0], W, TEXT_ROW_Y[1] - 1], fill=(0, 0, 0))
+    if len(_cache) > 24:
+        _cache.clear()
+    _cache[key] = img
+    return img.copy()
 
 
 def to_framebuffer_bmp(img):

@@ -160,3 +160,17 @@ def restore_zip(zip_path, dest):
                 shutil.copyfileobj(src, dst)
             n += 1
     return n
+
+
+def from_copy(src, dest):
+    """The user's own copy of DATA (a backup .zip, or a folder holding the files) laid out in dest
+    for a new card; [(relative, path, size)] as snapshot gives"""
+    if os.path.isdir(src):
+        return snapshot(src, dest)
+    os.makedirs(dest, exist_ok=True)
+    restore_zip(src, dest)
+    for dirpath, _dirs, files in os.walk(dest):
+        os.chmod(dirpath, 0o755)
+        for f in files:
+            os.chmod(os.path.join(dirpath, f), 0o644)
+    return files_in(dest)
