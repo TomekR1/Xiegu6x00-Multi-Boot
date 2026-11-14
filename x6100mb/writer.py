@@ -57,10 +57,11 @@ def write_image_file(plan, path, progress=None):
 def write_device(plan, dev, progress=None, allow_file=False, check=True, skip=None):
     """Every piece onto the card dev, synced, then read back (check=False: not read back; quicker,
     but a card that did not keep what was written goes unnoticed)"""
-    if allow_file and os.path.isfile(dev):
+    try:
         return _write_device(plan, dev, progress, allow_file, check, skip)
-    with devices.WindowsQuiet():
-        return _write_device(plan, dev, progress, allow_file, check, skip)
+    finally:
+        if devices.WIN and not (allow_file and os.path.isfile(dev)):
+            devices.after_write(dev)           # the card's volumes let go, also after an error
 
 
 def _write_device(plan, dev, progress=None, allow_file=False, check=True, skip=None):

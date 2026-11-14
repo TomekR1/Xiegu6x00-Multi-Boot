@@ -43,7 +43,7 @@ def notes(v):
     return f"""Kilka systemów na jednej karcie SD dla Xiegu X6100, z menu na ekranie radia (F1–F5).
 
 **Pobierz aplikację dla swojego komputera** (każda ma swój numer wersji):
-- Windows {v['windows']}: `Xiegu-Multi-Patcher.exe`
+- Windows {v['windows']}: `Xiegu-Multi-Patcher-Windows.zip` (rozpakuj i uruchom `Xiegu Multi Patcher.exe` z folderu)
 - macOS {v['macos']}: `Xiegu-Multi-Patcher-macOS.zip` (rozpakuj; za pierwszym razem: Ustawienia systemowe → Prywatność i ochrona → Otwórz mimo to)
 - Linux {v['linux']}: `Xiegu-Multi-Patcher-Linux` (`chmod +x`; do zapisu karty potrzebny pkexec)
 

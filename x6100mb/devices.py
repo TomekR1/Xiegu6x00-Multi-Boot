@@ -94,31 +94,9 @@ def _list_mac():
     return out
 
 
-def _ps(script):
-    r = _run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script])
-    if r.returncode:
-        raise DeviceError("PowerShell: " + r.stderr.decode(errors="replace"))
-    t = r.stdout.decode(errors="replace").strip()
-    return json.loads(t) if t else []
-
-
 def _list_windows():
-    disks = _ps("Get-Disk | Select-Object Number,FriendlyName,Size,BusType,IsBoot,IsSystem | ConvertTo-Json")
-    if isinstance(disks, dict):
-        disks = [disks]
-    out = []
-    for d in disks:
-        bus = str(d.get("BusType"))
-        if d.get("IsBoot") or d.get("IsSystem"):
-            continue
-        if bus not in ("USB", "SD", "MMC", "7", "12", "13"):
-            continue
-        size = int(d.get("Size") or 0)
-        if not size or size > MAX_CARD:
-            continue
-        out.append({"path": r"\\.\PhysicalDrive%d" % d["Number"], "name": d.get("FriendlyName") or "",
-                    "size": size, "bus": bus, "mounts": [], "number": d["Number"]})
-    return out
+    from . import win32disk
+    return win32disk.list_disks(MAX_CARD)
 
 
 def device_of(mount):
@@ -126,8 +104,9 @@ def device_of(mount):
     None: for a card the list above does not show but whose DATA the computer has mounted"""
     try:
         if WIN:
-            n = _ps("(Get-Partition -DriveLetter '%s').DiskNumber" % mount[0])
-            return r"\\.\PhysicalDrive%d" % int(n)
+            from . import win32disk
+            n = win32disk.disk_of_letter(mount[0])
+            return None if n is None else r"\\.\PhysicalDrive%d" % n
         if MAC:
             info = plistlib.loads(_run(["diskutil", "info", "-plist", mount]).stdout)
             whole = info.get("ParentWholeDisk")
@@ -154,13 +133,14 @@ def prepare_for_write(dev):
     if not is_listed(dev):
         raise DeviceError(f"{dev} is not a removable card (or not plugged in)")
     if WIN:
+        # The card's volumes locked and dismounted (held until after_write): Windows then lets the
+        # whole card be written and opens no window for its partitions meanwhile
+        from . import win32disk
         n = int(re.search(r"(\d+)$", dev).group(1))
-        script = f"select disk {n}\nattributes disk clear readonly\nclean\nrescan\n"
-        r = _run(["diskpart"], input=script.encode())
-        if r.returncode:
-            raise DeviceError("diskpart could not clear the card: " + r.stdout.decode(errors="replace")[-400:])
-        size = int(_ps(f"(Get-Disk -Number {n}).Size"))
-        return size
+        try:
+            return win32disk.take(n)
+        except OSError as e:
+            raise DeviceError(str(e))
     if MAC:
         r = _run(["diskutil", "unmountDisk", "force", dev])
         if r.returncode:
@@ -184,6 +164,8 @@ def unmount(dev):
     """What the computer mounted of dev let go, the card itself left as it is (before writing one
     of its areas). Windows: nothing; it lets the areas outside the partition table be written."""
     if WIN:
+        from . import win32disk
+        win32disk.take(int(re.search(r"(\d+)$", dev).group(1)))
         return
     if MAC:
         r = _run(["diskutil", "unmountDisk", "force", dev])
@@ -199,6 +181,11 @@ def unmount(dev):
 
 
 def after_write(dev):
+    if WIN and not os.path.isfile(dev):
+        from . import win32disk
+        m = re.search(r"(\d+)$", dev)
+        win32disk.release(int(m.group(1)) if m else None)
+        return
     if MAC:
         _run(["diskutil", "eject", dev])
     elif not WIN and os.path.exists(dev) and not os.path.isfile(dev):
@@ -365,103 +352,3 @@ def run_elevated(args):
         if subprocess.run(["which", tool], capture_output=True).returncode == 0:
             return subprocess.Popen([tool, "env", "PYTHONPATH=" + _src_dir()] + cmd, cwd=_src_dir())
     raise DeviceError("no pkexec: start this program with sudo to write cards")
-
-
-# --------------------------------------------------------------------------------------------
-# Windows: no windows popping up while the card is written
-# --------------------------------------------------------------------------------------------
-class WindowsQuiet:
-    """While the card is written and a while after: AutoPlay off (as the user had it afterwards), and
-    the windows Windows itself opens for the card's new partitions closed: an Explorer window of a
-    drive (DATA, BOOT: empty) and its "format the disk" question for the Linux partitions. Only windows
-    that appear meanwhile are touched; anything open before is left alone. Elsewhere: nothing."""
-
-    AFTER = 20          # seconds of watching once the writing is over
-
-    def __init__(self):
-        self.on = WIN
-        self.stop_at = None
-
-    def __enter__(self):
-        if not self.on:
-            return self
-        import atexit
-        import threading
-        self._autoplay(True)
-        atexit.register(self._autoplay, False)     # the app closed before the watching ended
-        self.before = set(self._windows())
-        self.thread = threading.Thread(target=self._watch, daemon=True)
-        self.thread.start()
-        return self
-
-    def __exit__(self, *exc):
-        if self.on:
-            import time
-            self.stop_at = time.time() + self.AFTER
-        return False
-
-    # --- AutoPlay (Settings > Bluetooth & devices > AutoPlay), the user's own value put back
-    def _autoplay(self, quiet):
-        try:
-            import winreg
-            path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers"
-            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, path) as k:
-                if quiet:
-                    try:
-                        self.saved = winreg.QueryValueEx(k, "DisableAutoplay")[0]
-                    except OSError:
-                        self.saved = None
-                    winreg.SetValueEx(k, "DisableAutoplay", 0, winreg.REG_DWORD, 1)
-                elif self.saved is None:
-                    winreg.DeleteValue(k, "DisableAutoplay")
-                else:
-                    winreg.SetValueEx(k, "DisableAutoplay", 0, winreg.REG_DWORD, self.saved)
-        except Exception:
-            pass
-
-    def _windows(self):
-        """[(hwnd, class, title)] of the visible top-level windows"""
-        import ctypes
-        from ctypes import wintypes
-        u = ctypes.windll.user32
-        out = []
-
-        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-        def each(hwnd, _):
-            if u.IsWindowVisible(hwnd):
-                cls = ctypes.create_unicode_buffer(64)
-                u.GetClassNameW(hwnd, cls, 64)
-                n = u.GetWindowTextLengthW(hwnd)
-                title = ctypes.create_unicode_buffer(n + 1)
-                u.GetWindowTextW(hwnd, title, n + 1)
-                out.append((hwnd, cls.value, title.value))
-            return True
-        try:
-            u.EnumWindows(each, 0)
-        except Exception:
-            pass
-        return out
-
-    def _watch(self):
-        import ctypes
-        import time
-        WM_CLOSE = 0x0010
-        drive = re.compile(r"\(([A-Z]):\)")             # "DATA (F:)", "DATA (F:) – Eksplorator plików"
-        try:
-            while self.stop_at is None or time.time() < self.stop_at:
-                for w in self._windows():
-                    if w in self.before:
-                        continue
-                    hwnd, cls, title = w
-                    m = drive.search(title) if cls == "CabinetWClass" else None
-                    # a card's drive only (removable), not a window of C: the user opens meanwhile
-                    explorer_drive = bool(m) and ctypes.windll.kernel32.GetDriveTypeW(m.group(1) + ":\\") == 2
-                    format_question = cls == "#32770" and title == "Microsoft Windows"
-                    if explorer_drive or format_question:
-                        ctypes.windll.user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
-                    self.before.add(w)
-                time.sleep(0.3)
-        except Exception:
-            pass
-        finally:
-            self._autoplay(False)

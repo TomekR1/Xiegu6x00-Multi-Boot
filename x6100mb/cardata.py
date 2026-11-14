@@ -231,21 +231,30 @@ def restore(dev, area, zip_path, progress=None):
         except FatError as e:
             raise CardDataError("the copy does not fit this DATA: %s" % e)
         total = sum(p.length for _o, p in pieces) or 1
-        done = 0
         if not os.path.isfile(dev):
             devices.unmount(dev)
-        with RawDev(dev, write=True) as d:
-            for off, piece in pieces:
-                pos = area["lba"] * SECTOR + off
-                for c in piece.chunks():
-                    d.write_at(pos, c)
-                    pos += len(c)
-                    done += len(c)
-                    if progress:
-                        progress("restore", done, total, "")
+        try:
+            _write_area(dev, area, pieces, total, progress)
+        finally:
+            if devices.WIN and not os.path.isfile(dev):
+                devices.after_write(dev)        # the card's volumes let go
         return len(files)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _write_area(dev, area, pieces, total, progress):
+    """The DATA's new filesystem onto the card at its place"""
+    done = 0
+    with RawDev(dev, write=True) as d:
+        for off, piece in pieces:
+            pos = area["lba"] * SECTOR + off
+            for c in piece.chunks():
+                d.write_at(pos, c)
+                pos += len(c)
+                done += len(c)
+                if progress:
+                    progress("restore", done, total, "")
 
 
 def run(req, progress=None):

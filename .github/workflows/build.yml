@@ -70,7 +70,8 @@ jobs:
         include:
           - os: windows-latest
             out: Xiegu-Multi-Patcher-Windows
-            extra: --onefile --windowed --uac-admin --icon x6100mb/assets/icon.ico
+            # One folder, not one self-unpacking file (Windows Defender takes those for malware)
+            extra: --onedir --windowed --uac-admin --icon x6100mb/assets/icon.ico
           - os: macos-latest
             out: Xiegu-Multi-Patcher-macOS
             extra: --onedir --windowed --icon x6100mb/assets/icon.icns --osx-bundle-identifier eu.multipatcher.xiegu
@@ -89,7 +90,35 @@ jobs:
         with: {name: u-boot-x6100-menu, path: x6100mb/data}
       - uses: actions/download-artifact@v4
         with: {name: doom-x6100-rootfs, path: x6100mb/data}
-      - run: pip install pyinstaller==6.11.1 pillow==11.0.0 certifi sv-ttk==2.6.0
+      - run: pip install pillow==11.0.0 certifi sv-ttk==2.6.0
+      # PyInstaller's own ready-made Windows starter is in a great many programs, bad ones too, and
+      # virus scanners flag it; one built here from its source is this app's own
+      # The Windows disk calls on a real Windows: the system disk found, every disk looked at,
+      # the system disk never offered as a card
+      - name: Windows disks
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          python - <<'PY'
+          from x6100mb import devices, win32disk
+          sysd = win32disk.system_disks()
+          print("system disks:", sysd)
+          assert sysd, "the system disk was not found"
+          for n in range(4):
+              print(n, win32disk.describe(n))
+          cards = devices.list_cards()
+          print("cards:", cards)
+          assert all(int(c["path"].rsplit("e", 1)[1]) not in sysd for c in cards)
+          print("C: lies on disk", win32disk.disk_of_letter("C"))
+          PY
+      - name: "PyInstaller (Windows: its starter built from source)"
+        if: runner.os == 'Windows'
+        shell: bash
+        env: {PYINSTALLER_COMPILE_BOOTLOADER: "1"}
+        run: pip install --no-binary pyinstaller pyinstaller==6.11.1
+      - name: PyInstaller
+        if: runner.os != 'Windows'
+        run: pip install pyinstaller==6.11.1
       - name: Build
         shell: bash
         run: |
@@ -101,7 +130,7 @@ jobs:
         run: |
           case "$RUNNER_OS" in
             macOS)   B="dist/Xiegu Multi Patcher.app/Contents/MacOS/Xiegu Multi Patcher" ;;
-            Windows) B="dist/Xiegu Multi Patcher.exe" ;;
+            Windows) B="dist/Xiegu Multi Patcher/Xiegu Multi Patcher.exe" ;;
             Linux)   B="dist/Xiegu Multi Patcher" ;;
           esac
           "$B" --help || true
@@ -116,7 +145,7 @@ jobs:
         run: |
           mkdir out
           case "$RUNNER_OS" in
-            Windows) cp "dist/Xiegu Multi Patcher.exe" out/Xiegu-Multi-Patcher.exe ;;
+            Windows) (cd dist && 7z a -tzip -mx=7 ../out/Xiegu-Multi-Patcher-Windows.zip "Xiegu Multi Patcher" >/dev/null) ;;
             macOS)   (cd dist && ditto -c -k --keepParent "Xiegu Multi Patcher.app" ../out/Xiegu-Multi-Patcher-macOS.zip) ;;
             Linux)   cp "dist/Xiegu Multi Patcher" out/Xiegu-Multi-Patcher-Linux && chmod +x out/Xiegu-Multi-Patcher-Linux ;;
           esac

@@ -14,7 +14,7 @@ Najnowsza wersja jest w zakładce **[Releases](../../releases/latest)**:
 
 | Plik | System |
 |---|---|
-| `Xiegu-Multi-Patcher.exe` | Windows 10/11 |
+| `Xiegu-Multi-Patcher-Windows.zip` | Windows 10/11: rozpakuj (prawy przycisk → Wyodrębnij wszystkie) i uruchom `Xiegu Multi Patcher.exe` z folderu |
 | `Xiegu-Multi-Patcher-macOS.zip` | macOS: rozpakuj, przenieś do Programów; za pierwszym razem macOS ją zablokuje: **Ustawienia systemowe → Prywatność i ochrona → Otwórz mimo to** (albo w Terminalu `xattr -dr com.apple.quarantine "/Applications/Xiegu Multi Patcher.app"`) |
 | `Xiegu-Multi-Patcher-Linux` | Linux x86-64: `chmod +x Xiegu-Multi-Patcher-Linux`; do zapisu karty potrzebny `pkexec` |
 
@@ -183,6 +183,11 @@ Zgłaszaj je w zakładce **[Issues](../../issues)**. Pomaga:
 
 Jeśli system Xiegu z eMMC się nie uruchomi, menu pokaże na ekranie zawartość eMMC:
 zrób zdjęcie i dołącz je do zgłoszenia.
+
+**Windows Defender albo SmartScreen ostrzega przed aplikacją.** Aplikacja nie jest podpisana certyfikatem
+(płatnym), więc Windows jej „nie zna”. Od wersji z folderem w `.zip` aplikacja nie uruchamia już żadnych
+programów pomocniczych (PowerShell, diskpart) ani nie zmienia ustawień systemu; jeśli mimo to Defender ją
+zatrzyma, zgłoś fałszywy alarm na https://www.microsoft.com/wdsi/filesubmission (plik `.exe` z folderu).
 
 ## English
 
