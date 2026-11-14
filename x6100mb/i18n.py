@@ -189,6 +189,24 @@ EN = {
     "Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.":
         "Bluetooth in Doom does not work with {name}'s kernel (USB does). Move e.g. OpenX6X00 above it.",
     "Szczegóły: {p}": "Details: {p}",
+    "Pomiń sprawdzanie karty": "Skip checking the card",
+    "Kopie DATA karty w czytniku…": "DATA copies of the card in the reader…",
+    "Kopie DATA karty w czytniku": "DATA copies of the card in the reader",
+    "zrób kopię ustawień na komputerze albo przywróć je na kartę; osobno dla każdego systemu":
+        "copy the settings to the computer or put them back on the card; each system's own",
+    "Własna kopia DATA dla nowej karty…": "Own DATA copy for the new card…",
+    "wskaż kopię (plik .zip albo folder), która trafi na nowo zapisywaną kartę":
+        "choose a copy (a .zip file or a folder) to go on the card being written",
+    "Nie widać karty ani partycji DATA. Włóż kartę z radia do czytnika, poczekaj, aż komputer ją pokaże, i kliknij Odśwież.":
+        "No card and no DATA partition to be seen. Put the radio's card in the reader, wait for the computer to show it, and click Refresh.",
+    "Kopia na komputer…": "Copy to the computer…",
+    "Przywróć z kopii…": "Restore from a copy…",
+    "Nie widać partycji DATA.": "No DATA partition to be seen.",
+    "DATA tej karty, tak jak pokazuje ją komputer.": "This card's DATA, as the computer shows it.",
+    "partycja widoczna jako dysk": "the partition shown as a drive",
+    "Każdy wiersz to osobna DATA. Kopia trafia do pliku .zip, przywracanie zastępuje jej zawartość plikami z wybranej kopii.":
+        "Each row is a DATA of its own. A copy goes to a .zip file; restoring replaces what is in it with the files of the copy you choose.",
+    "Kopia DATA na komputer": "DATA copy to the computer",
     "Pliki są w tej kopii w folderze „{f}”: na kartę trafi jego zawartość, bez tego folderu.":
         "In this copy the files are in the folder “{f}”: what is in it goes on the card, without that folder.",
     "Sprawdź kartę po zapisie (zalecane; bez tego zapis trwa krócej, ale błędna karta nie zostanie wykryta)":

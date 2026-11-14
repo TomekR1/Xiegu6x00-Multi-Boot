@@ -54,16 +54,18 @@ def write_image_file(plan, path, progress=None):
     progress("done", total, total)
 
 
-def write_device(plan, dev, progress=None, allow_file=False, check=True):
+def write_device(plan, dev, progress=None, allow_file=False, check=True, skip=None):
     """Every piece onto the card dev, synced, then read back (check=False: not read back; quicker,
     but a card that did not keep what was written goes unnoticed)"""
     if allow_file and os.path.isfile(dev):
-        return _write_device(plan, dev, progress, allow_file, check)
+        return _write_device(plan, dev, progress, allow_file, check, skip)
     with devices.WindowsQuiet():
-        return _write_device(plan, dev, progress, allow_file, check)
+        return _write_device(plan, dev, progress, allow_file, check, skip)
 
 
-def _write_device(plan, dev, progress=None, allow_file=False, check=True):
+def _write_device(plan, dev, progress=None, allow_file=False, check=True, skip=None):
+    """skip: asked during the read-back; once it says yes the rest is left unread.
+    Returns whether the whole card was read back and found right."""
     progress = progress or Progress()
     total = plan.written_bytes()
     progress("prepare", 0, total, f"preparing {dev}")
@@ -96,16 +98,17 @@ def _write_device(plan, dev, progress=None, allow_file=False, check=True):
         progress("sync", done, total, "flushing the card's cache")
         devices.sync(fd)
         devices.drop_cache(fd)
-        if check:
-            verify(plan, dev, progress, fd=fd)
+        checked = check and verify(plan, dev, progress, fd=fd, skip=skip)
     finally:
         devices.close(fd)
     devices.after_write(dev)
-    progress("done", total, total)
+    progress("done", total, total, "" if checked else "unchecked")
+    return checked
 
 
-def verify(plan, target, progress=None, fd=None):
-    """Reads every piece back; fd: an open descriptor to read through (kept open)"""
+def verify(plan, target, progress=None, fd=None, skip=None):
+    """Reads every piece back; fd: an open descriptor to read through (kept open). skip() true:
+    stops there. Returns whether everything was read (False: skipped part way)."""
     progress = progress or Progress()
     total = plan.written_bytes()
     done = 0
@@ -123,9 +126,12 @@ def verify(plan, target, progress=None, fd=None):
                 pos += len(c)
                 done += len(c)
                 progress("verify", done, total)
+                if skip is not None and skip():
+                    return False
     finally:
         if own:
             devices.close(fd)
+    return True
 
 
 def main_write_plan(argv):
@@ -136,7 +142,8 @@ def main_write_plan(argv):
     progress = Progress(file=prog_file)
     try:
         plan = Plan.load(plan_path)
-        write_device(plan, dev, progress, allow_file=allow_file, check="--no-verify" not in argv)
+        write_device(plan, dev, progress, allow_file=allow_file, check="--no-verify" not in argv,
+                     skip=lambda: os.path.exists(prog_file + ".skip"))
         return 0
     except Exception as e:      # reported to the GUI through the progress file
         from .backup import log_error

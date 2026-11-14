@@ -195,6 +195,8 @@ class ProgressWindow:
         self.detail.pack(side="right")
         self.msg = ttk.Label(f, text="", font=_font(10), foreground=HINT, wraplength=520)
         self.msg.pack(anchor="w", pady=(8, 0))
+        self.on_skip = None           # set by a card write: the read-back may be skipped
+        self.skip = ttk.Button(f, text=t("Pomiń sprawdzanie karty"), command=self._skip)
         self.bar.moving()
         self.moving, self.phase, self.t0, self.d0 = True, None, time.time(), 0
         self.win.update_idletasks()
@@ -223,10 +225,19 @@ class ProgressWindow:
         except tk.TclError:
             pass
 
+    def _skip(self):
+        if self.on_skip:
+            self.on_skip()
+        self.skip.state(["disabled"])
+
     def update(self, phase, done, total, msg=""):
         if phase != self.phase:                       # a new step: its own speed and time
             self.phase, self.t0, self.d0 = phase, time.time(), done
             self.title.configure(text=t(PHASES.get(phase, phase)) + "…")
+            if phase == "verify" and self.on_skip:
+                self.skip.pack(anchor="e", pady=(10, 0))
+            else:
+                self.skip.pack_forget()
         if total <= 0:
             if not self.moving:
                 self.bar.moving()
@@ -269,6 +280,7 @@ class App:
         self.tiles = {}                   # key -> what the radio's screen shows for an entry
         self._tile_jobs = set()
         self.data_src = None              # the user's own copy of DATA (.zip or folder) for the new card
+        self._skip, self._skip_file = threading.Event(), None
         self._build_all()
         self.refresh_cards()
         self.root.after(100, self._poll)
@@ -501,19 +513,21 @@ class App:
         cop = self._section(top, 4, t("Kopie ustawień (DATA)"))
         ttk.Label(cop, text=t("Ustawienia radia są na partycji DATA karty. Tu zrobisz ich kopię na komputerze, "
                               "przywrócisz je na kartę w czytniku albo wskażesz własną kopię dla nowej karty."),
-                  foreground=HINT, wraplength=1000, justify="left").grid(row=0, column=0, columnspan=4, sticky="w",
+                  foreground=HINT, wraplength=1000, justify="left").grid(row=0, column=0, columnspan=2, sticky="w",
                                                                          padx=8, pady=(4, 6))
-        buttons = ((t("Kopia DATA na komputer…"), "teal", self.backup_data),
-                   (t("Przywróć DATA na kartę…"), "orange", self.restore_data),
-                   (t("DATA każdego systemu…"), "blue", self.card_data),
-                   (t("Własna kopia DATA…"), "slate", self.choose_copy))
-        for k, (text, colour, cmd) in enumerate(buttons):
-            btn = ColorButton(cop, text, colour, cmd, font=_font(11, "bold"), padx=6, pady=11)
-            btn.grid(row=1, column=k, sticky="we", padx=(8 if k == 0 else 4, 8 if k == 3 else 4), pady=(0, 8))
+        buttons = ((t("Kopie DATA karty w czytniku…"), "teal", self.card_data,
+                    t("zrób kopię ustawień na komputerze albo przywróć je na kartę; osobno dla każdego systemu")),
+                   (t("Własna kopia DATA dla nowej karty…"), "blue", self.choose_copy,
+                    t("wskaż kopię (plik .zip albo folder), która trafi na nowo zapisywaną kartę")))
+        for k, (text, colour, cmd, hint) in enumerate(buttons):
+            btn = ColorButton(cop, text, colour, cmd, font=_font(12, "bold"), padx=10, pady=12)
+            btn.grid(row=1, column=k, sticky="we", padx=(8 if k == 0 else 4, 8 if k == 1 else 4), pady=(0, 2))
+            ttk.Label(cop, text=hint, foreground=HINT, wraplength=470, justify="left").grid(
+                row=2, column=k, sticky="nw", padx=(10 if k == 0 else 6, 8), pady=(0, 8))
             cop.columnconfigure(k, weight=1, uniform="copies")
         self.own_btn = btn
         own = ttk.Frame(cop)
-        own.grid(row=2, column=0, columnspan=4, sticky="we", padx=8, pady=(0, 8))
+        own.grid(row=3, column=0, columnspan=2, sticky="we", padx=8, pady=(0, 8))
         self.own_info = ttk.Label(own, text="", wraplength=880, justify="left")
         self.own_info.pack(side="left")
         self.own_clear = ttk.Button(own, text=t("Usuń wybór"), command=lambda: self._use_copy(None))
@@ -871,20 +885,6 @@ class App:
         if hasattr(self, "own_info"):
             self._show_own()
 
-    def backup_data(self):
-
-        self._find_data()
-        if not self.data_vol:
-            messagebox.showinfo(APP, t("Nie widać partycji DATA. Włóż kartę z radia do czytnika, poczekaj, aż "
-                                       "komputer ją pokaże, i kliknij Odśwież."))
-            return
-        try:
-            path = backup.save_zip(self.data_vol)
-        except Exception as e:
-            messagebox.showerror(APP, str(e))
-            return
-        messagebox.showinfo(APP, t("Kopia ustawień zapisana:\n{path}", path=path))
-
     def choose_copy(self):
         """The user's own copy of DATA for the new card: a backup .zip or a folder with the files"""
         CopyPicker(self, t("Własna kopia DATA"), t("Ta kopia zostanie wgrana na nową kartę przy „Wgraj na kartę” "
@@ -914,37 +914,18 @@ class App:
             self.own_info.configure(text=t("Nie da się odczytać kopii: {e}", e=e), foreground=WARN)
         self.own_clear.pack(side="right", padx=(8, 0))
 
-    def restore_data(self):
-        """A copy (a backup .zip, or a folder with the files) back onto the card's DATA partition"""
-        self._find_data()
-        if not self.data_vol:
-            messagebox.showinfo(APP, t("Nie widać partycji DATA. Włóż kartę z radia do czytnika, poczekaj, aż "
-                                       "komputer ją pokaże, i kliknij Odśwież."))
-            return
-        vol = self.data_vol
-
-        def go(path):
-            try:
-                n = backup.restore_copy(path, vol)
-            except Exception as e:
-                log = backup.log_error("restore DATA")
-                messagebox.showerror(APP, str(e) + ("\n\n" + t("Szczegóły: {p}", p=log) if log else ""))
-                return
-            messagebox.showinfo(APP, t("Przywrócono {n} plików na {vol}. Wysuń kartę bezpiecznie i włóż ją do radia.",
-                                       n=n, vol=vol))
-        CopyPicker(self, t("Przywróć DATA na kartę"),
-                   t("Kopia zostanie wgrana na kartę w czytniku: {vol}. Pliki o tych samych nazwach zostaną "
-                     "zastąpione.", vol=vol), t("Wgraj tę kopię na kartę"), go)
-
     def card_data(self):
-        """Each system's own DATA on the card in the reader: saved and put back one by one"""
+        """The DATA of the card in the reader: saved to the computer and put back, each system's own"""
         if self.busy:
             return
+        self._find_data()
         idx = self.card_box.current()
-        if idx < 0 or idx >= len(self.cards):
-            messagebox.showwarning(APP, t("Nie wybrano karty SD."))
+        card = self.cards[idx] if 0 <= idx < len(self.cards) else None
+        if card is None and not self.data_vol:
+            messagebox.showinfo(APP, t("Nie widać karty ani partycji DATA. Włóż kartę z radia do czytnika, poczekaj, "
+                                       "aż komputer ją pokaże, i kliknij Odśwież."))
             return
-        CardDataDialog(self, self.cards[idx])
+        CardDataDialog(self, card)
 
     def _card_request(self, req, progress=None):
         """A cardata request: here when the app may read the card itself, else through the helper
@@ -1063,8 +1044,20 @@ class App:
         if not messagebox.askyesno(APP, text, icon="warning"):
             return
         inproc = devices.is_admin() or devices.MAC   # macOS: the app writes itself, through authopen
+        self._skip.clear()
+        self._skip_file = None
         self._job(t("Zapis na kartę…") if inproc else t("Zapis na kartę (uprawnienia administratora)…"),
                   self._card_job, plan, card, inproc, self._all_settings(), self.check_card.get())
+        self.progress_win.on_skip = self._skip_check
+
+    def _skip_check(self):
+        """The read-back of the card left off where it is (the button in the progress window)"""
+        self._skip.set()
+        if self._skip_file:
+            try:
+                open(self._skip_file, "w").close()
+            except OSError:
+                pass
 
     def _card_job(self, plan, card, inproc, settings, check=True):
         tmp = tempfile.mkdtemp(prefix="x6100mb-data-")
@@ -1086,8 +1079,8 @@ class App:
             t("Karta zapisana (bez sprawdzenia). Wyjmij ją i włóż do radia.")
 
     def _card_job_inproc(self, plan, dev, check=True):
-        write_device(plan, dev, Progress(self._progress_cb), check=check)
-        return ("msg", self._ready(check))
+        checked = write_device(plan, dev, Progress(self._progress_cb), check=check, skip=self._skip.is_set)
+        return ("msg", self._ready(checked))
 
     def _card_job_elevated(self, plan, dev, check=True):
         tmp = tempfile.mkdtemp(prefix="x6100mb-")
@@ -1100,6 +1093,7 @@ class App:
                 os.chmod(dirpath, 0o777)
                 for f in files:
                     os.chmod(os.path.join(dirpath, f), 0o666)
+            self._skip_file = prog + ".skip"          # made when the read-back is to be skipped
             proc = devices.run_elevated(["write-plan", plan_file, dev, prog] + ([] if check else ["--no-verify"]))
             started = time.time()
             while True:
@@ -1115,7 +1109,7 @@ class App:
                     if st["phase"] == "error":
                         raise RuntimeError(st["msg"])
                     if st["phase"] == "done":
-                        return ("msg", self._ready(check))
+                        return ("msg", self._ready(st.get("msg") != "unchecked"))
                     self.q.put(("progress", st["phase"], st["done"], st["total"], st.get("msg", "")))
                 if proc is not None and proc.poll() is not None and not (st and st["phase"] == "done"):
                     time.sleep(0.5)
@@ -1123,7 +1117,7 @@ class App:
                         with open(prog) as f:
                             st = json.load(f)
                         if st["phase"] == "done":
-                            return ("msg", self._ready(check))
+                            return ("msg", self._ready(st.get("msg") != "unchecked"))
                         if st["phase"] == "error":
                             raise RuntimeError(st["msg"])
                     raise RuntimeError(t("Zapis przerwany (odmowa uprawnień administratora?)"))
@@ -1274,21 +1268,27 @@ class OnlineDialog:
 
 
 class CardDataDialog:
-    """The systems on the card in the reader, each with its own DATA: Save (a .zip on the computer)
-    and Restore (from a .zip), one system at a time, whichever of them ran last"""
+    """The DATA of the card in the reader: Save (a .zip on the computer) and Restore (from a .zip or
+    a folder). A card made here: each system's own DATA, whichever of them ran last. Any other card
+    (a system's own card, straight from its project), or one that cannot be read directly: the DATA
+    the computer shows as a drive."""
 
     def __init__(self, app, card):
         self.app, self.card = app, card
         self.win = tk.Toplevel(app.root)
-        self.win.title(t("DATA każdego systemu"))
+        self.win.title(t("Kopie DATA karty w czytniku"))
         self.win.transient(app.root)
         self.box = ttk.Frame(self.win)
-        self.box.pack(fill="both", expand=True, padx=14, pady=12)
-        ttk.Label(self.box, text=t("Karta: {card}", card="%s  %s  (%s)" % (card["name"], _gb(card["size"]), card["path"])),
-                  font=_font(12, "bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
-        self.note = ttk.Label(self.box, text=t("Czytam kartę…"), foreground=HINT, wraplength=620, justify="left")
-        self.note.grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 8))
-        threading.Thread(target=self._scan, daemon=True).start()
+        self.box.pack(fill="both", expand=True, padx=16, pady=14)
+        head = t("Karta: {card}", card="%s  %s  (%s)" % (card["name"], _gb(card["size"]), card["path"])) if card \
+            else t("Kopie DATA karty w czytniku")
+        ttk.Label(self.box, text=head, font=_font(12, "bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
+        self.note = ttk.Label(self.box, text=t("Czytam kartę…"), foreground=HINT, wraplength=640, justify="left")
+        self.note.grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 10))
+        if card:
+            threading.Thread(target=self._scan, daemon=True).start()
+        else:
+            self._scanned([], "no card")
 
     def _scan(self):
         try:
@@ -1298,6 +1298,14 @@ class CardDataDialog:
             areas, err = [], str(e)
         self.app.q.put(("call", self._scanned, areas, err))
 
+    def _row(self, r, title, sub, dump, restore):
+        ttk.Label(self.box, text=title, font=_font(11, "bold")).grid(row=2 + 2 * r, column=0, sticky="w", padx=(0, 18))
+        ttk.Label(self.box, text=sub, foreground=HINT).grid(row=3 + 2 * r, column=0, sticky="w", pady=(0, 10))
+        ColorButton(self.box, t("Kopia na komputer…"), "teal", dump, font=_font(11, "bold"), padx=14, pady=8).grid(
+            row=2 + 2 * r, column=1, rowspan=2, padx=(0, 8), pady=(0, 8))
+        ColorButton(self.box, t("Przywróć z kopii…"), "orange", restore, font=_font(11, "bold"), padx=14, pady=8).grid(
+            row=2 + 2 * r, column=2, rowspan=2, pady=(0, 8))
+
     def _scanned(self, areas, err):
         try:
             if not self.win.winfo_exists():
@@ -1305,21 +1313,61 @@ class CardDataDialog:
         except tk.TclError:
             return
         if err:
-            self.note.configure(text=t("Nie da się odczytać karty: {e}", e=err))
+            # Not a card made here, or no direct access to it: the DATA the computer shows as a drive
+            try:
+                vols = backup.find_data_volumes()
+            except Exception:
+                vols = []
+            if not vols:
+                self.note.configure(text=t("Nie da się odczytać karty: {e}", e=err) if self.card else
+                                    t("Nie widać partycji DATA."))
+                return
+            self.note.configure(text=t("DATA tej karty, tak jak pokazuje ją komputer."))
+            for r, v in enumerate(vols):
+                self._row(r, "DATA  (%s)" % v["path"], t("partycja widoczna jako dysk"),
+                          lambda v=v: self.dump_volume(v), lambda v=v: self.restore_volume(v))
             return
-        self.note.configure(text=t("Każdy wiersz to osobna DATA. „Zrzuć” zapisuje ją do pliku .zip, „Przywróć” "
-                                   "zastępuje jej zawartość plikami z wybranej kopii.") if len(areas) > 1 else
+        self.note.configure(text=t("Każdy wiersz to osobna DATA. Kopia trafia do pliku .zip, przywracanie zastępuje "
+                                   "jej zawartość plikami z wybranej kopii.") if len(areas) > 1 else
                             t("Ta karta ma jedną, wspólną DATA dla wszystkich systemów."))
         for r, a in enumerate(areas):
             who = "  ·  ".join("%s %s" % (k, n) for k, n in zip(a["keys"], a["names"]))
-            ttk.Label(self.box, text=who, font=_font(11, "bold")).grid(row=2 + 2 * r, column=0, sticky="w", padx=(0, 16))
-            ttk.Label(self.box, text="%d MB%s" % (a["sectors"] * 512 // 2**20, "  ·  " + t("ostatnio uruchomiony")
-                                                  if a["active"] and len(areas) > 1 else ""),
-                      foreground=HINT).grid(row=3 + 2 * r, column=0, sticky="w", pady=(0, 8))
-            ttk.Button(self.box, text=t("Zrzuć…"), command=lambda a=a: self.dump(a)).grid(
-                row=2 + 2 * r, column=1, rowspan=2, padx=(0, 6))
-            ttk.Button(self.box, text=t("Przywróć…"), command=lambda a=a: self.restore(a)).grid(
-                row=2 + 2 * r, column=2, rowspan=2)
+            self._row(r, who, "%d MB%s" % (a["sectors"] * 512 // 2**20, "  ·  " + t("ostatnio uruchomiony")
+                                           if a["active"] and len(areas) > 1 else ""),
+                      lambda a=a: self.dump(a), lambda a=a: self.restore(a))
+
+    def _save_as(self, title, name):
+        os.makedirs(backup.backups_dir(), exist_ok=True)
+        return filedialog.asksaveasfilename(parent=self.win, title=title, initialdir=backup.backups_dir(),
+                                            initialfile=name, defaultextension=".zip",
+                                            **({} if devices.MAC else {"filetypes": [(t("Kopie DATA"), "*.zip")]}))
+
+    def dump_volume(self, v):
+        if self.app.busy:
+            return
+        path = self._save_as(t("Kopia DATA na komputer"), time.strftime("DATA-%Y-%m-%d_%H-%M.zip"))
+        if not path:
+            return
+
+        def job():
+            backup.save_zip(v["path"], path)
+            return ("msg", t("Kopia ustawień zapisana:\n{path}", path=path))
+        self.app._job(t("Kopia DATA na komputer"), job)
+
+    def restore_volume(self, v):
+        if self.app.busy:
+            return
+        app = self.app
+
+        def go(path):
+            def job():
+                n = backup.restore_copy(path, v["path"])
+                return ("msg", t("Przywrócono {n} plików na {vol}. Wysuń kartę bezpiecznie i włóż ją do radia.",
+                                 n=n, vol=v["path"]))
+            app._job(t("Przywróć DATA na kartę"), job)
+        CopyPicker(app, t("Przywróć DATA na kartę"),
+                   t("Kopia zostanie wgrana na kartę w czytniku: {vol}. Pliki o tych samych nazwach zostaną "
+                     "zastąpione.", vol=v["path"]), t("Wgraj tę kopię na kartę"), go, parent=self.win)
 
     def _label(self, a):
         return " + ".join(a["names"])
@@ -1327,12 +1375,9 @@ class CardDataDialog:
     def dump(self, a):
         if self.app.busy:
             return
-        os.makedirs(backup.backups_dir(), exist_ok=True)
         name = "DATA-%s-%s-%s.zip" % (a["keys"][0], "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in a["names"][0]),
                                       time.strftime("%Y-%m-%d_%H-%M"))
-        path = filedialog.asksaveasfilename(parent=self.win, title=t("Zrzut DATA: {name}", name=self._label(a)),
-                                            initialdir=backup.backups_dir(), initialfile=name, defaultextension=".zip",
-                                            **({} if devices.MAC else {"filetypes": [(t("Kopie DATA"), "*.zip")]}))
+        path = self._save_as(t("Zrzut DATA: {name}", name=self._label(a)), name)
         if not path:
             return
         app, dev = self.app, self.card["path"]
