@@ -189,6 +189,9 @@ EN = {
     "Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.":
         "Bluetooth in Doom does not work with {name}'s kernel (USB does). Move e.g. OpenX6X00 above it.",
     "Szczegóły: {p}": "Details: {p}",
+    "Osobnych DATA systemów nie udało się odczytać z karty: {e}": "The systems' own DATA could not be read from the card: {e}",
+    "Ta karta ma jedną, wspólną DATA dla wszystkich systemów. Osobną DATA dla każdego systemu ma karta zapisana z ustawieniem „Partycja DATA: osobna dla każdego systemu” (sekcja 2).":
+        "This card has one DATA shared by all its systems. A card written with “DATA partition: one per system” (section 2) has a DATA for each system.",
     "Pomiń sprawdzanie karty": "Skip checking the card",
     "Kopie DATA karty w czytniku…": "DATA copies of the card in the reader…",
     "Kopie DATA karty w czytniku": "DATA copies of the card in the reader",

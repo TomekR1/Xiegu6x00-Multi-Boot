@@ -1322,14 +1322,17 @@ class CardDataDialog:
                 self.note.configure(text=t("Nie da się odczytać karty: {e}", e=err) if self.card else
                                     t("Nie widać partycji DATA."))
                 return
-            self.note.configure(text=t("DATA tej karty, tak jak pokazuje ją komputer."))
+            why = "" if not self.card else "\n" + t("Osobnych DATA systemów nie udało się odczytać z karty: {e}", e=err)
+            self.note.configure(text=t("DATA tej karty, tak jak pokazuje ją komputer.") + why,
+                                foreground=WARN if why else HINT)
             for r, v in enumerate(vols):
                 self._row(r, "DATA  (%s)" % v["path"], t("partycja widoczna jako dysk"),
                           lambda v=v: self.dump_volume(v), lambda v=v: self.restore_volume(v))
             return
         self.note.configure(text=t("Każdy wiersz to osobna DATA. Kopia trafia do pliku .zip, przywracanie zastępuje "
                                    "jej zawartość plikami z wybranej kopii.") if len(areas) > 1 else
-                            t("Ta karta ma jedną, wspólną DATA dla wszystkich systemów."))
+                            t("Ta karta ma jedną, wspólną DATA dla wszystkich systemów. Osobną DATA dla każdego systemu "
+                              "ma karta zapisana z ustawieniem „Partycja DATA: osobna dla każdego systemu” (sekcja 2)."))
         for r, a in enumerate(areas):
             who = "  ·  ".join("%s %s" % (k, n) for k, n in zip(a["keys"], a["names"]))
             self._row(r, who, "%d MB%s" % (a["sectors"] * 512 // 2**20, "  ·  " + t("ostatnio uruchomiony")
