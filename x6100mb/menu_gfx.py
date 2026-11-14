@@ -204,15 +204,42 @@ def _soft(img, box, r, colour, blur, strength, dy=0):
     img.paste(Image.new("RGB", (w, h), colour), (x0 - pad, y0 - pad + dy), m)
 
 
-def _window(img, box, r, fill, frame, frame_w=3):
-    """A window: a dark line, the light frame, inside it the blue shaded top to bottom"""
+def _window(img, box, r, fill, frame, alpha=150, frame_w=2):
+    """A window of tinted glass: the background shows through its blue (lighter at the top), a
+    sheen over its upper part, a light rim"""
     x0, y0, x1, y1 = box
-    d = ImageDraw.Draw(img)
-    d.rounded_rectangle([x0 - S, y0 - S, x1 + S - 1, y1 + S - 1], radius=r + S, fill=(6, 8, 26))
-    d.rounded_rectangle([x0, y0, x1 - 1, y1 - 1], radius=r, fill=frame)
-    k = frame_w * S
-    w, h = x1 - x0 - 2 * k, y1 - y0 - 2 * k
-    img.paste(_vgrad(w, h, fill[0], fill[1]), (x0 + k, y0 + k), _round_mask(w, h, max(r - k, 2)))
+    w, h = x1 - x0, y1 - y0
+    under = img.crop(box).convert("RGBA")
+    mask = _round_mask(w, h, r)
+    tint = _vgrad(w, h, fill[0], fill[1]).convert("RGBA")
+    tint.putalpha(mask.point(lambda v: v * alpha // 255))
+    under = Image.alpha_composite(under, tint)
+    sheen = Image.new("RGBA", (w, h), (255, 255, 255, 0))
+    fade = Image.new("L", (1, h), 0)
+    fp = fade.load()
+    for y in range(h // 2):
+        fp[0, y] = int(46 * (1 - y / (h / 2)) ** 2)
+    sheen.putalpha(Image.composite(fade.resize((w, h)), Image.new("L", (w, h), 0), mask))
+    under = Image.alpha_composite(under, sheen)
+    rim = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    ImageDraw.Draw(rim).rounded_rectangle([0, 0, w - 1, h - 1], radius=r, outline=frame + (235,), width=frame_w * S)
+    under = Image.alpha_composite(under, rim)
+    img.paste(under.convert("RGB"), (x0, y0), mask)
+
+
+def _backdrop():
+    """The background the glass lies on: night blue with soft lights in it (drawn small and
+    blurred, then enlarged: smooth and quick)"""
+    from PIL import ImageFilter
+    w, h = W // 4, H // 4
+    small = _vgrad(w, h, (10, 16, 52), (2, 3, 16))
+    d = ImageDraw.Draw(small)
+    for (cx, cy, rx, ry, colour) in ((0.16, 0.42, 0.24, 0.30, (36, 86, 230)), (0.56, 0.62, 0.26, 0.26, (110, 52, 200)),
+                                     (0.90, 0.36, 0.20, 0.30, (0, 132, 190)), (0.38, 0.95, 0.30, 0.16, (30, 60, 190))):
+        d.ellipse([(cx - rx) * w, (cy - ry) * h, (cx + rx) * w, (cy + ry) * h], fill=colour)
+    small = small.filter(ImageFilter.GaussianBlur(14))
+    small = Image.blend(small, _vgrad(w, h, (10, 16, 52), (2, 3, 16)), 0.35)
+    return small.resize((W * S, H * S), Image.BICUBIC)
 
 
 def _pointer(size, colour=(255, 255, 255)):
@@ -232,9 +259,10 @@ def _rail(img, default_cx, frame=None):
     import math
     y0, y1 = RAIL_Y
     d = ImageDraw.Draw(img)
-    d.rectangle([0, y0, W, y1 - 1], fill=(2, 3, 16))
+    d.rectangle([0, y0, W, y1 - 1], fill=(3, 5, 22))
     mid = (y0 + y1) // 2
-    d.line([(0, mid), (W, mid)], fill=(40, 52, 120), width=1)
+    d.rounded_rectangle([14, mid - 2, W - 15, mid + 2], radius=2, fill=(16, 24, 70))
+    d.line([(16, mid), (W - 17, mid)], fill=(52, 70, 150), width=1)
     px = img.load()
     if frame is not None:                     # the light: bright in the middle, fading both ways
         cx = int((frame + 0.5) * W / FRAMES)
@@ -262,11 +290,11 @@ def render_menu(entries, default, selected=None, title="X6100 MULTIBOOT"):
     key = _key(entries, default, selected, title)
     if key in _cache:
         return _cache[key].copy()
-    img = _vgrad(W * S, H * S, BG_TOP, BG_BOTTOM)
+    img = _backdrop()
     d = ImageDraw.Draw(img)
     # the title: a window's blue across the top, the light frame's line under it
-    img.paste(_vgrad(W * S, 29 * S, WIN[0], (16, 26, 110)), (0, 0))
-    d.rectangle([0, 29 * S, W * S, 31 * S - 1], fill=FRAME)
+    img.paste(_vgrad(W * S, 30 * S, WIN[0], (16, 26, 110)), (0, 0))
+    d.rectangle([0, 30 * S, W * S, 32 * S - 1], fill=(120, 150, 240))
     d.text((16 * S + S, 15 * S + S), title, font=_font(22 * S), fill=(8, 10, 50), anchor="lm")
     d.text((16 * S, 15 * S), title, font=_font(22 * S), fill=WHITE, anchor="lm")
     if entries:
@@ -279,21 +307,21 @@ def render_menu(entries, default, selected=None, title="X6100 MULTIBOOT"):
         fill = WIN_GO if is_sel else (WIN_LIT if is_def else WIN)
         frame = FRAME_GO if is_sel else (FRAME if is_def else FRAME_DIM)
         box = ((cx - 72) * S, 74 * S, (cx + 72) * S, 368 * S)
-        _soft(img, box, 10 * S, (0, 0, 0), 6 * S, 170, dy=4 * S)
+        _soft(img, box, 24 * S, (0, 0, 0), 6 * S, 150, dy=4 * S)
         if lit:
-            _soft(img, box, 10 * S, GOLD if is_sel else GLOW, 7 * S, 130)
-        _window(img, box, 10 * S, fill, frame)
+            _soft(img, box, 24 * S, GOLD if is_sel else GLOW, 7 * S, 150)
+        _window(img, box, 24 * S, fill, frame, alpha=175 if lit else 135)
         logo = None
         if e.get("logo"):
             try:
-                logo = load_logo(e["logo"], size=116 * S, bg=fill[0], width=124 * S, crop=e.get("crop"))
+                logo = load_logo(e["logo"], size=112 * S, bg=fill[0], width=112 * S, crop=e.get("crop"))
             except Exception:
                 logo = None
         if logo is None:
-            logo = default_logo(e["name"], size=116 * S, bg=fill[0])
-        lx, ly = cx * S - logo.width // 2, 88 * S
-        _soft(img, (lx, ly, lx + logo.width, ly + logo.height), 18 * S, (0, 0, 20), 4 * S, 140, dy=3 * S)
-        img.paste(logo, (lx, ly), _round_mask(logo.width, logo.height, 18 * S))
+            logo = default_logo(e["name"], size=112 * S, bg=fill[0])
+        lx, ly = cx * S - logo.width // 2, 92 * S
+        _soft(img, (lx, ly, lx + logo.width, ly + logo.height), 28 * S, (0, 0, 20), 4 * S, 140, dy=3 * S)
+        img.paste(logo, (lx, ly), _round_mask(logo.width, logo.height, 28 * S))
         d = ImageDraw.Draw(img)
         f = _font(19 * S)
         for k, line in enumerate(_wrap(d, e["name"], f, 128 * S)):
@@ -307,10 +335,10 @@ def render_menu(entries, default, selected=None, title="X6100 MULTIBOOT"):
             d.text((cx * S, 338 * S), label, font=_font(16 * S), fill=tone, anchor="mm")
         # the key, right above the radio's button: a small window of its own
         kbox = ((cx - 54) * S, 406 * S, (cx + 54) * S, 468 * S)
-        _soft(img, kbox, 9 * S, (0, 0, 0), 4 * S, 180, dy=3 * S)
+        _soft(img, kbox, 30 * S, (0, 0, 0), 4 * S, 170, dy=3 * S)
         if lit:
-            _soft(img, kbox, 9 * S, GOLD if is_sel else GLOW, 5 * S, 110)
-        _window(img, kbox, 9 * S, fill, frame)
+            _soft(img, kbox, 30 * S, GOLD if is_sel else GLOW, 5 * S, 140)
+        _window(img, kbox, 30 * S, fill, frame, alpha=215 if lit else 175)
         d = ImageDraw.Draw(img)
         d.text((cx * S + 2 * S, 436 * S + 2 * S), "F%d" % (i + 1), font=_font(30 * S), fill=(6, 8, 44), anchor="mm")
         d.text((cx * S, 436 * S), "F%d" % (i + 1), font=_font(30 * S), fill=GOLD if is_sel else WHITE, anchor="mm")
