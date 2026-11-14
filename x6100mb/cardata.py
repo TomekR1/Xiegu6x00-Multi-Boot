@@ -175,9 +175,8 @@ def restore(dev, area, zip_path, progress=None):
     """The DATA at area built anew from zip_path (what was in it is replaced); how many files"""
     tmp = tempfile.mkdtemp(prefix="x6100mb-restore-")
     try:
-        from .backup import files_in, restore_zip
-        restore_zip(zip_path, tmp)
-        files = files_in(tmp)
+        from .backup import from_copy
+        files = from_copy(zip_path, os.path.join(tmp, "DATA"))        # a .zip or a folder
         if not files:
             raise CardDataError("there are no files in this copy")
         size = area["sectors"] * SECTOR

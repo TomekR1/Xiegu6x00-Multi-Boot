@@ -33,9 +33,9 @@ HEAD_BG, HEAD_FG, HEAD_SUB, LINK = "#0f2742", "#ffffff", "#a9bcd3", "#8fc3ff"
 # Colours of the light and the dark theme; _apply_colours() sets the module's names from one
 THEMES = {
     "light": {"HINT": "#5b6573", "ACCENT": "#0067c0", "BADGE_FG": "#ffffff", "PAGE_BG": "#fafafa",
-              "TEXT_FG": "#1c1c1c", "H1": "#c62828", "H2": "#0f2742", "TREE_BG": (255, 255, 255)},
+              "TEXT_FG": "#1c1c1c", "WARN": "#b45309", "H1": "#c62828", "H2": "#0f2742", "TREE_BG": (255, 255, 255)},
     "dark": {"HINT": "#9aa3ad", "ACCENT": "#57c8ff", "BADGE_FG": "#0b1a2a", "PAGE_BG": "#1c1c1c",
-             "TEXT_FG": "#e6e6e6", "H1": "#ff6b6b", "H2": "#8fc3ff", "TREE_BG": (28, 28, 28)},
+             "TEXT_FG": "#e6e6e6", "WARN": "#ffb454", "H1": "#ff6b6b", "H2": "#8fc3ff", "TREE_BG": (28, 28, 28)},
 }
 THEME_NAMES = {"light": "Jasny", "dark": "Ciemny"}
 HINT = "#5b6573"
@@ -43,7 +43,7 @@ BADGE_FG, H1, H2, TREE_BG = "#ffffff", "#c62828", "#0f2742", (255, 255, 255)
 SCREEN_W, SCREEN_H = 640, 384          # the radio's 800x480 to start with; it grows with the window
 RED, RED_HOVER = "#d32f2f", "#ef4444"
 ACCENT = "#0067c0"
-PAGE_BG, TEXT_FG = "#fafafa", "#1c1c1c"
+PAGE_BG, TEXT_FG, WARN = "#fafafa", "#1c1c1c", "#b45309"
 
 
 def _theme_name():
@@ -490,6 +490,12 @@ class App:
         self.keep_data = tk.BooleanVar(value=True)
         self.keep_box = ttk.Checkbutton(keep, variable=self.keep_data, text="")
         self.keep_box.pack(side="left")
+        self.check_card = tk.BooleanVar(value=getattr(self, "_check_card", True))
+        ttk.Checkbutton(out, variable=self.check_card,
+                        text=t("Sprawdź kartę po zapisie (zalecane; bez tego zapis trwa krócej, ale błędna karta "
+                               "nie zostanie wykryta)"),
+                        command=lambda: setattr(self, "_check_card", self.check_card.get())).grid(
+            row=2, column=0, columnspan=4, sticky="w", padx=8, pady=(0, 6))
         # The settings' copies (DATA), at the very bottom: of the card in the reader, of each system
         # on it, and an own copy for the new card
         cop = self._section(top, 4, t("Kopie ustawień (DATA)"))
@@ -506,6 +512,11 @@ class App:
             btn.grid(row=1, column=k, sticky="we", padx=(8 if k == 0 else 4, 8 if k == 3 else 4), pady=(0, 8))
             cop.columnconfigure(k, weight=1, uniform="copies")
         self.own_btn = btn
+        own = ttk.Frame(cop)
+        own.grid(row=2, column=0, columnspan=4, sticky="we", padx=8, pady=(0, 8))
+        self.own_info = ttk.Label(own, text="", wraplength=880, justify="left")
+        self.own_info.pack(side="left")
+        self.own_clear = ttk.Button(own, text=t("Usuń wybór"), command=lambda: self._use_copy(None))
 
         self.status = tk.StringVar(value=t("Dodaj obraz karty systemu (.img, .img.zip lub .img.xz), np. OpenX6X00."))
         foot = ttk.Frame(top, style="Card.TFrame", padding=(12, 8))
@@ -857,6 +868,8 @@ class App:
         else:
             self.keep_box.configure(text=t("Przenieś ustawienia: włóż starą kartę i kliknij Odśwież"),
                                     state="disabled")
+        if hasattr(self, "own_info"):
+            self._show_own()
 
     def backup_data(self):
 
@@ -874,72 +887,54 @@ class App:
 
     def choose_copy(self):
         """The user's own copy of DATA for the new card: a backup .zip or a folder with the files"""
-        m = tk.Menu(self.root, tearoff=0)
-        m.add_command(label=t("Plik kopii (.zip)…"), command=lambda: self._set_copy("zip"))
-        m.add_command(label=t("Folder z plikami DATA…"), command=lambda: self._set_copy("dir"))
-        if self.data_src:
-            m.add_separator()
-            m.add_command(label=t("Nie używaj własnej kopii"), command=lambda: self._set_copy(None))
-        b = self.own_btn
-        try:
-            m.tk_popup(b.winfo_rootx(), b.winfo_rooty() + b.winfo_height())
-        finally:
-            m.grab_release()
+        CopyPicker(self, t("Własna kopia DATA"), t("Ta kopia zostanie wgrana na nową kartę przy „Wgraj na kartę” "
+                                                   "albo „Zapisz jako plik .img…”."),
+                   t("Użyj tej kopii"), self._use_copy, start=self.data_src)
 
-    def _set_copy(self, kind):
-        if kind is None:
-            self.data_src = None
-            self._find_data()
-            return
-        start = backup.backups_dir() if os.path.isdir(backup.backups_dir()) else os.path.expanduser("~")
-        if kind == "zip":
-            path = filedialog.askopenfilename(title=t("Własna kopia DATA"), initialdir=start,
-                                              **_filetypes([(t("Kopie DATA"), "*.zip")]))
-        else:
-            path = filedialog.askdirectory(title=t("Folder z plikami DATA"), initialdir=start)
-        if not path:
+    def _use_copy(self, path):
+        self.data_src = path
+        if path:
+            self.keep_data.set(True)
+        self._find_data()
+
+    def _show_own(self):
+        """The standing line in section 4: which own copy is chosen, where it is, what is in it"""
+        if not self.data_src:
+            self.own_info.configure(text=t("Własna kopia dla nowej karty: nie wybrano."), foreground=HINT)
+            self.own_clear.pack_forget()
             return
         try:
-            if kind == "zip":
-                import zipfile
-                with zipfile.ZipFile(path) as z:
-                    n = sum(1 for i in z.infolist() if not i.is_dir())
-            else:
-                n = len(backup.files_in(path))
+            d = backup.describe(self.data_src)
+            text = t("Własna kopia dla nowej karty: {p}  ·  {n} plików, {mb} MB", p=self.data_src, n=d["files"],
+                     mb="%.1f" % (d["bytes"] / 2**20))
+            if not d["data"]:
+                text += "\n⚠ " + t("To nie wygląda na DATA z radia (brak bazy ustawień). Sprawdź, czy to właściwa kopia.")
+            self.own_info.configure(text=text, foreground=WARN if not d["data"] else TEXT_FG)
         except Exception as e:
-            messagebox.showerror(APP, t("Nie da się odczytać kopii: {e}", e=e))
-            return
-        if not n:
-            messagebox.showwarning(APP, t("W tej kopii nie ma żadnych plików."))
-            return
-        self.data_src = path
-        self.keep_data.set(True)
-        self._find_data()
-        self.status.set(t("Własna kopia DATA: {n} plików, zostanie wgrana na nową kartę ({p}).", n=n, p=path))
+            self.own_info.configure(text=t("Nie da się odczytać kopii: {e}", e=e), foreground=WARN)
+        self.own_clear.pack(side="right", padx=(8, 0))
 
     def restore_data(self):
-        """A backup .zip (made here, or kept when a card was written) back onto the card's DATA partition"""
+        """A copy (a backup .zip, or a folder with the files) back onto the card's DATA partition"""
         self._find_data()
         if not self.data_vol:
             messagebox.showinfo(APP, t("Nie widać partycji DATA. Włóż kartę z radia do czytnika, poczekaj, aż "
                                        "komputer ją pokaże, i kliknij Odśwież."))
             return
-        os.makedirs(backup.backups_dir(), exist_ok=True)
-        path = filedialog.askopenfilename(title=t("Kopia DATA do przywrócenia"), initialdir=backup.backups_dir(),
-                                          **_filetypes([(t("Kopie DATA"), "*.zip")]))
-        if not path:
-            return
-        if not messagebox.askyesno(APP, t("Przywrócić ustawienia z {zip} na {vol}?\nPliki o tych samych nazwach "
-                                          "zostaną zastąpione.", zip=os.path.basename(path), vol=self.data_vol)):
-            return
-        try:
-            n = backup.restore_zip(path, self.data_vol)
-        except Exception as e:
-            log = backup.log_error("restore DATA")
-            messagebox.showerror(APP, str(e) + ("\n\n" + t("Szczegóły: {p}", p=log) if log else ""))
-            return
-        messagebox.showinfo(APP, t("Przywrócono {n} plików na {vol}. Wysuń kartę bezpiecznie i włóż ją do radia.",
-                                   n=n, vol=self.data_vol))
+        vol = self.data_vol
+
+        def go(path):
+            try:
+                n = backup.restore_copy(path, vol)
+            except Exception as e:
+                log = backup.log_error("restore DATA")
+                messagebox.showerror(APP, str(e) + ("\n\n" + t("Szczegóły: {p}", p=log) if log else ""))
+                return
+            messagebox.showinfo(APP, t("Przywrócono {n} plików na {vol}. Wysuń kartę bezpiecznie i włóż ją do radia.",
+                                       n=n, vol=vol))
+        CopyPicker(self, t("Przywróć DATA na kartę"),
+                   t("Kopia zostanie wgrana na kartę w czytniku: {vol}. Pliki o tych samych nazwach zostaną "
+                     "zastąpione.", vol=vol), t("Wgraj tę kopię na kartę"), go)
 
     def card_data(self):
         """Each system's own DATA on the card in the reader: saved and put back one by one"""
@@ -1069,16 +1064,16 @@ class App:
             return
         inproc = devices.is_admin() or devices.MAC   # macOS: the app writes itself, through authopen
         self._job(t("Zapis na kartę…") if inproc else t("Zapis na kartę (uprawnienia administratora)…"),
-                  self._card_job, plan, card, inproc, self._all_settings())
+                  self._card_job, plan, card, inproc, self._all_settings(), self.check_card.get())
 
-    def _card_job(self, plan, card, inproc, settings):
+    def _card_job(self, plan, card, inproc, settings, check=True):
         tmp = tempfile.mkdtemp(prefix="x6100mb-data-")
         os.chmod(tmp, 0o755)
         try:
             files, zip_path = self._take_data(tmp)
             if files is not None:
                 plan = self._plan(card_bytes=card["size"], data_files=files, settings=settings)
-            result = (self._card_job_inproc if inproc else self._card_job_elevated)(plan, card["path"])
+            result = (self._card_job_inproc if inproc else self._card_job_elevated)(plan, card["path"], check)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         if files is not None:
@@ -1086,11 +1081,15 @@ class App:
                                                          n=len(files), zip=zip_path))
         return result
 
-    def _card_job_inproc(self, plan, dev):
-        write_device(plan, dev, Progress(self._progress_cb))
-        return ("msg", t("Karta gotowa i sprawdzona. Wyjmij ją i włóż do radia."))
+    def _ready(self, check):
+        return t("Karta gotowa i sprawdzona. Wyjmij ją i włóż do radia.") if check else \
+            t("Karta zapisana (bez sprawdzenia). Wyjmij ją i włóż do radia.")
 
-    def _card_job_elevated(self, plan, dev):
+    def _card_job_inproc(self, plan, dev, check=True):
+        write_device(plan, dev, Progress(self._progress_cb), check=check)
+        return ("msg", self._ready(check))
+
+    def _card_job_elevated(self, plan, dev, check=True):
         tmp = tempfile.mkdtemp(prefix="x6100mb-")
         try:
             plan_file = os.path.join(tmp, "plan.json")
@@ -1101,7 +1100,7 @@ class App:
                 os.chmod(dirpath, 0o777)
                 for f in files:
                     os.chmod(os.path.join(dirpath, f), 0o666)
-            proc = devices.run_elevated(["write-plan", plan_file, dev, prog])
+            proc = devices.run_elevated(["write-plan", plan_file, dev, prog] + ([] if check else ["--no-verify"]))
             started = time.time()
             while True:
                 time.sleep(0.3)
@@ -1116,7 +1115,7 @@ class App:
                     if st["phase"] == "error":
                         raise RuntimeError(st["msg"])
                     if st["phase"] == "done":
-                        return ("msg", t("Karta gotowa i sprawdzona. Wyjmij ją i włóż do radia."))
+                        return ("msg", self._ready(check))
                     self.q.put(("progress", st["phase"], st["done"], st["total"], st.get("msg", "")))
                 if proc is not None and proc.poll() is not None and not (st and st["phase"] == "done"):
                     time.sleep(0.5)
@@ -1124,7 +1123,7 @@ class App:
                         with open(prog) as f:
                             st = json.load(f)
                         if st["phase"] == "done":
-                            return ("msg", t("Karta gotowa i sprawdzona. Wyjmij ją i włóż do radia."))
+                            return ("msg", self._ready(check))
                         if st["phase"] == "error":
                             raise RuntimeError(st["msg"])
                     raise RuntimeError(t("Zapis przerwany (odmowa uprawnień administratora?)"))
@@ -1346,27 +1345,112 @@ class CardDataDialog:
     def restore(self, a):
         if self.app.busy:
             return
-        start = backup.backups_dir() if os.path.isdir(backup.backups_dir()) else os.path.expanduser("~")
-        path = filedialog.askopenfilename(parent=self.win, title=t("Kopia DATA dla: {name}", name=self._label(a)),
-                                          initialdir=start, **_filetypes([(t("Kopie DATA"), "*.zip")]))
-        if not path:
-            return
-        if not messagebox.askyesno(APP, t("Przywrócić DATA systemu {name} z {zip}?\n\nObecna zawartość tej DATA "
-                                          "zostanie zastąpiona.", name=self._label(a), zip=os.path.basename(path)),
-                                   icon="warning", parent=self.win):
-            return
         app, dev = self.app, self.card["path"]
 
-        def job():
-            # Windows keeps the DATA it shows as a drive to itself: that one through the drive
-            vols = backup.find_data_volumes() if devices.WIN and a["active"] else []
-            if vols:
-                n = backup.restore_zip(path, vols[0]["path"])
-            else:
-                n = app._card_request({"op": "restore", "dev": dev, "area": a, "zip": path}, app._progress_cb)["files"]
-            return ("msg", t("DATA systemu {name}: przywrócono {n} plików. Wysuń kartę bezpiecznie i włóż ją do radia.",
-                             name=self._label(a), n=n))
-        app._job(t("Przywracanie DATA: {name}", name=self._label(a)), job)
+        def go(path):
+            def job():
+                # Windows keeps the DATA it shows as a drive to itself: that one through the drive
+                vols = backup.find_data_volumes() if devices.WIN and a["active"] else []
+                if vols:
+                    n = backup.restore_copy(path, vols[0]["path"])
+                else:
+                    n = app._card_request({"op": "restore", "dev": dev, "area": a, "zip": path}, app._progress_cb)["files"]
+                return ("msg", t("DATA systemu {name}: przywrócono {n} plików. Wysuń kartę bezpiecznie i włóż ją do radia.",
+                                 name=self._label(a), n=n))
+            app._job(t("Przywracanie DATA: {name}", name=self._label(a)), job)
+        CopyPicker(app, t("Kopia DATA dla: {name}", name=self._label(a)),
+                   t("Obecna zawartość DATA systemu {name} zostanie zastąpiona tą kopią.", name=self._label(a)),
+                   t("Wgraj tę kopię na kartę"), go, parent=self.win)
+
+
+class CopyPicker:
+    """Choosing a copy of DATA: a backup .zip or a folder with the files loose. Shows which one was
+    chosen (its whole path), how much is in it and whether it looks like a radio's DATA; only the
+    button at the bottom acts on it."""
+
+    def __init__(self, app, title, note, ok_text, on_ok, start=None, parent=None):
+        self.app, self.on_ok, self.path = app, on_ok, None
+        self.win = tk.Toplevel(parent or app.root)
+        self.win.title(title)
+        self.win.transient(parent or app.root)
+        self.win.resizable(False, False)
+        f = ttk.Frame(self.win, padding=(18, 14))
+        f.pack(fill="both", expand=True)
+        ttk.Label(f, text=title, font=_font(14, "bold")).pack(anchor="w")
+        ttk.Label(f, text=note, foreground=HINT, wraplength=600, justify="left").pack(anchor="w", pady=(4, 10))
+        row = ttk.Frame(f)
+        row.pack(fill="x")
+        ColorButton(row, t("Wybierz plik .zip…"), "blue", lambda: self.pick("zip"), font=_font(11, "bold"),
+                    padx=14, pady=9).pack(side="left")
+        ColorButton(row, t("Wybierz folder z plikami…"), "teal", lambda: self.pick("dir"), font=_font(11, "bold"),
+                    padx=14, pady=9).pack(side="left", padx=(8, 0))
+        box = ttk.Frame(f, style="Card.TFrame", padding=(12, 10))
+        box.pack(fill="x", pady=(12, 12))
+        ttk.Label(box, text=t("Wybrana kopia:"), foreground=HINT).pack(anchor="w")
+        self.name = ttk.Label(box, text=t("nie wybrano"), font=_font(12, "bold"), wraplength=580, justify="left")
+        self.name.pack(anchor="w")
+        self.where = ttk.Label(box, text="", foreground=HINT, wraplength=580, justify="left")
+        self.where.pack(anchor="w")
+        self.what = ttk.Label(box, text="", wraplength=580, justify="left")
+        self.what.pack(anchor="w", pady=(4, 0))
+        bottom = ttk.Frame(f)
+        bottom.pack(fill="x")
+        self.ok = ColorButton(bottom, ok_text, "green", self.accept, font=_font(12, "bold"), padx=20, pady=10)
+        self.ok.pack(side="right")
+        ttk.Button(bottom, text=t("Anuluj"), command=self.win.destroy).pack(side="right", padx=(0, 8))
+        self.ok.state(["disabled"])
+        if start and os.path.exists(start):
+            self.show(start)
+        self.win.update_idletasks()
+        r = app.root
+        self.win.geometry("+%d+%d" % (max(r.winfo_rootx() + (r.winfo_width() - self.win.winfo_reqwidth()) // 2, 0),
+                                      max(r.winfo_rooty() + 120, 0)))
+
+    def pick(self, kind):
+        start = backup.backups_dir() if os.path.isdir(backup.backups_dir()) else os.path.expanduser("~")
+        if kind == "zip":
+            path = filedialog.askopenfilename(parent=self.win, title=t("Kopia DATA (.zip)"), initialdir=start,
+                                              **_filetypes([(t("Kopie DATA"), "*.zip")]))
+        else:
+            path = filedialog.askdirectory(parent=self.win, title=t("Folder z plikami DATA"), initialdir=start)
+        if path:
+            self.show(path)
+
+    def show(self, path):
+        self.path = None
+        self.ok.state(["disabled"])
+        self.name.configure(text=os.path.basename(path.rstrip("/\\")) or path)
+        self.where.configure(text=path)
+        try:
+            d = backup.describe(path)
+        except Exception as e:
+            self.what.configure(text="✕ " + t("Nie da się odczytać kopii: {e}", e=e), foreground=WARN)
+            return
+        if not d["files"]:
+            self.what.configure(text="✕ " + t("W tej kopii nie ma żadnych plików."), foreground=WARN)
+            return
+        text = t("{n} plików, {mb} MB", n=d["files"], mb="%.1f" % (d["bytes"] / 2**20)) + ":  " + ", ".join(d["names"]) + \
+            (" …" if d["files"] > len(d["names"]) else "")
+        if d["data"]:
+            self.what.configure(text="✓ " + t("Wygląda na DATA z radia.") + "  " + text, foreground=TEXT_FG)
+        else:
+            self.what.configure(text="⚠ " + t("To nie wygląda na DATA z radia (brak bazy ustawień). Sprawdź, czy to "
+                                              "właściwa kopia.") + "\n" + text, foreground=WARN)
+        self.path = path
+        self.ok.state(["!disabled"])
+
+    def accept(self):
+        if not self.path:
+            return
+        path = self.path
+        try:
+            if not backup.describe(path)["data"] and not messagebox.askyesno(
+                    APP, t("Ta kopia nie wygląda na DATA z radia. Użyć jej mimo to?"), icon="warning", parent=self.win):
+                return
+        except Exception:
+            return
+        self.win.destroy()
+        self.on_ok(path)
 
 
 def _filetypes(types):
@@ -1489,7 +1573,17 @@ def main():
     root = tk.Tk()
     _set_icon(root)
     _theme(root)
-    App(root)
+    app = App(root)
     _fit_screen(root)
+
+    def close():
+        # What was fetched and unpacked goes with the window: the next start takes the systems fresh
+        # from their projects, never an older one left here (not in the middle of writing a card:
+        # the writer still reads them)
+        if not app.busy:
+            from .image import clear_cache
+            clear_cache()
+        root.destroy()
+    root.protocol("WM_DELETE_WINDOW", close)
     root.mainloop()
     return 0

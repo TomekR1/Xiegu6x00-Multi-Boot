@@ -189,6 +189,31 @@ EN = {
     "Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.":
         "Bluetooth in Doom does not work with {name}'s kernel (USB does). Move e.g. OpenX6X00 above it.",
     "Szczegóły: {p}": "Details: {p}",
+    "Sprawdź kartę po zapisie (zalecane; bez tego zapis trwa krócej, ale błędna karta nie zostanie wykryta)":
+        "Check the card after writing (recommended; without it writing is quicker, but a bad card goes unnoticed)",
+    "Karta zapisana (bez sprawdzenia). Wyjmij ją i włóż do radia.": "The card is written (not checked). Take it out and put it in the radio.",
+    "Usuń wybór": "Clear the choice",
+    "Ta kopia zostanie wgrana na nową kartę przy „Wgraj na kartę” albo „Zapisz jako plik .img…”.":
+        "This copy will be put on the new card by Write to the card or Save as an .img file.",
+    "Użyj tej kopii": "Use this copy",
+    "Własna kopia dla nowej karty: nie wybrano.": "Own copy for the new card: none chosen.",
+    "Własna kopia dla nowej karty: {p}  ·  {n} plików, {mb} MB": "Own copy for the new card: {p}  ·  {n} files, {mb} MB",
+    "To nie wygląda na DATA z radia (brak bazy ustawień). Sprawdź, czy to właściwa kopia.":
+        "This does not look like a radio's DATA (no settings database). Check that it is the right copy.",
+    "Przywróć DATA na kartę": "Restore DATA to the card",
+    "Kopia zostanie wgrana na kartę w czytniku: {vol}. Pliki o tych samych nazwach zostaną zastąpione.":
+        "The copy will be put on the card in the reader: {vol}. Files of the same name will be replaced.",
+    "Wgraj tę kopię na kartę": "Put this copy on the card",
+    "Obecna zawartość DATA systemu {name} zostanie zastąpiona tą kopią.": "What is in the DATA of {name} now will be replaced by this copy.",
+    "Wybierz plik .zip…": "Choose a .zip file…",
+    "Wybierz folder z plikami…": "Choose a folder with the files…",
+    "Wybrana kopia:": "Chosen copy:",
+    "nie wybrano": "none chosen",
+    "Anuluj": "Cancel",
+    "Kopia DATA (.zip)": "DATA copy (.zip)",
+    "{n} plików, {mb} MB": "{n} files, {mb} MB",
+    "Wygląda na DATA z radia.": "Looks like a radio's DATA.",
+    "Ta kopia nie wygląda na DATA z radia. Użyć jej mimo to?": "This copy does not look like a radio's DATA. Use it anyway?",
     "Kopie ustawień (DATA)": "Copies of the settings (DATA)",
     "Ustawienia radia są na partycji DATA karty. Tu zrobisz ich kopię na komputerze, przywrócisz je na kartę w czytniku albo wskażesz własną kopię dla nowej karty.":
         "The radio's settings are on the card's DATA partition. Here you copy them to the computer, put them back on the card in the reader, or choose a copy of your own for the new card.",

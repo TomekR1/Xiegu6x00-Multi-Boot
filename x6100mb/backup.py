@@ -174,3 +174,34 @@ def from_copy(src, dest):
         for f in files:
             os.chmod(os.path.join(dirpath, f), 0o644)
     return files_in(dest)
+
+
+def restore_copy(src, dest):
+    """A copy of DATA (a backup .zip, or a folder holding the files loose) onto the DATA partition
+    dest; files of the same name are replaced; how many"""
+    if not os.path.isdir(src):
+        return restore_zip(src, dest)
+    n = 0
+    for rel, path, _size in files_in(src):
+        target = os.path.join(dest, *rel.split("/"))
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        shutil.copyfile(path, target)
+        n += 1
+    return n
+
+
+def describe(src):
+    """What a copy holds: {"files", "bytes", "data": whether it looks like a radio's DATA, "names"}.
+    A radio's DATA has its settings in a database (params.db and the like), often a backups folder
+    (WiFi, Bluetooth, SSH keys), logs: any of these says it is one."""
+    if os.path.isdir(src):
+        items = [(rel, size) for rel, _p, size in files_in(src)]
+    else:
+        with zipfile.ZipFile(src) as z:
+            items = [(i.filename.replace("\\", "/"), i.file_size) for i in z.infolist()
+                     if not i.is_dir() and not _skip(i.filename.replace("\\", "/").split("/")[-1])]
+    names = [n.lower() for n, _s in items]
+    looks = any(n.endswith((".db", ".sqlite", ".adi", ".adif")) or n.split("/")[0] in ("backups", "logs", "log")
+                or n.split("/")[-1] in ("params.db", "msg.db", "settings.json", "ft8.log", "wpa_supplicant.conf")
+                for n in names)
+    return {"files": len(items), "bytes": sum(sz for _n, sz in items), "data": looks, "names": [n for n, _s in items][:6]}

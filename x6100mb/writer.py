@@ -54,15 +54,16 @@ def write_image_file(plan, path, progress=None):
     progress("done", total, total)
 
 
-def write_device(plan, dev, progress=None, allow_file=False):
-    """Every piece onto the card dev, synced, then read back"""
+def write_device(plan, dev, progress=None, allow_file=False, check=True):
+    """Every piece onto the card dev, synced, then read back (check=False: not read back; quicker,
+    but a card that did not keep what was written goes unnoticed)"""
     if allow_file and os.path.isfile(dev):
-        return _write_device(plan, dev, progress, allow_file)
+        return _write_device(plan, dev, progress, allow_file, check)
     with devices.WindowsQuiet():
-        return _write_device(plan, dev, progress, allow_file)
+        return _write_device(plan, dev, progress, allow_file, check)
 
 
-def _write_device(plan, dev, progress=None, allow_file=False):
+def _write_device(plan, dev, progress=None, allow_file=False, check=True):
     progress = progress or Progress()
     total = plan.written_bytes()
     progress("prepare", 0, total, f"preparing {dev}")
@@ -95,7 +96,8 @@ def _write_device(plan, dev, progress=None, allow_file=False):
         progress("sync", done, total, "flushing the card's cache")
         devices.sync(fd)
         devices.drop_cache(fd)
-        verify(plan, dev, progress, fd=fd)
+        if check:
+            verify(plan, dev, progress, fd=fd)
     finally:
         devices.close(fd)
     devices.after_write(dev)
@@ -134,7 +136,7 @@ def main_write_plan(argv):
     progress = Progress(file=prog_file)
     try:
         plan = Plan.load(plan_path)
-        write_device(plan, dev, progress, allow_file=allow_file)
+        write_device(plan, dev, progress, allow_file=allow_file, check="--no-verify" not in argv)
         return 0
     except Exception as e:      # reported to the GUI through the progress file
         from .backup import log_error
