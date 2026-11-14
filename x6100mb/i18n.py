@@ -189,6 +189,22 @@ EN = {
     "Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.":
         "Bluetooth in Doom does not work with {name}'s kernel (USB does). Move e.g. OpenX6X00 above it.",
     "Szczegóły: {p}": "Details: {p}",
+    "osobna dla każdego systemu (własne ustawienia i logi; zalecane)": "one per system (own settings and logs; recommended)",
+    "Przenieś ustawienia ze starej karty na nową (każdego systemu osobno; kopie zostają na komputerze)":
+        "Carry the settings over from the old card to the new one (each system's own; copies stay on the computer)",
+    "Ustawienia przeniesione (nowy system ← stara karta, liczba plików):": "Settings carried over (new system ← old card, number of files):",
+    "Żaden system ze starej karty nie ma odpowiednika na nowej: ustawień nie przeniesiono.":
+        "No system of the old card has its match on the new one: no settings were carried over.",
+    "Bez odpowiednika na nowej karcie (kopia została na komputerze): {names}": "No match on the new card (the copy stays on the computer): {names}",
+    "Kopie: {dir}": "Copies: {dir}",
+    "Ustawienia każdego systemu z tej karty zostaną najpierw skopiowane na komputer i przeniesione do tego samego systemu na nowej karcie.":
+        "Each system's settings on this card will first be copied to the computer and carried over to the same system on the new card.",
+    "Kopia systemu: {name}": "Copy of the system: {name}",
+    "To kopia innego systemu niż ten, do którego ją przywracasz ({name}).": "This is a copy of another system than the one you are restoring it to ({name}).",
+    "To kopia systemu {a}, a przywracasz ją do systemu {b}. Wgrać mimo to?": "This is a copy of {a}, and you are restoring it to {b}. Put it there anyway?",
+    "Kopia wszystkich systemów na komputer": "Copy every system to the computer",
+    "nie da się odczytać": "cannot be read",
+    "Kopie DATA każdego systemu zapisane w\n{dir}": "Each system's DATA copied to\n{dir}",
     "Osobnych DATA systemów nie udało się odczytać z karty: {e}": "The systems' own DATA could not be read from the card: {e}",
     "Ta karta ma jedną, wspólną DATA dla wszystkich systemów. Osobną DATA dla każdego systemu ma karta zapisana z ustawieniem „Partycja DATA: osobna dla każdego systemu” (sekcja 2).":
         "This card has one DATA shared by all its systems. A card written with “DATA partition: one per system” (section 2) has a DATA for each system.",

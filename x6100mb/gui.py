@@ -456,12 +456,12 @@ class App:
         ttk.Label(opts, text=t("(na karcie DATA zajmuje całe wolne miejsce)"), foreground=HINT,
                   wraplength=300).grid(row=0, column=4, sticky="w", **pad)
         ttk.Label(opts, text=t("Partycja DATA:")).grid(row=1, column=0, sticky="w", **pad)
-        self.data_mode = tk.StringVar(value="shared")
+        self.data_mode = tk.StringVar(value="separate")      # each system its own settings
         dm = ttk.Frame(opts)
         dm.grid(row=1, column=1, columnspan=4, sticky="w")
-        ttk.Radiobutton(dm, text=t("wspólna dla wszystkich systemów"), value="shared",
+        ttk.Radiobutton(dm, text=t("osobna dla każdego systemu (własne ustawienia i logi; zalecane)"), value="separate",
                         variable=self.data_mode).pack(side="left", padx=(0, 12))
-        ttk.Radiobutton(dm, text=t("osobna dla każdego systemu (własne ustawienia i logi)"), value="separate",
+        ttk.Radiobutton(dm, text=t("wspólna dla wszystkich systemów"), value="shared",
                         variable=self.data_mode).pack(side="left")
         self.wait = tk.BooleanVar(value=False)
         ttk.Checkbutton(opts, text=t("Bez automatycznego startu: system uruchamia się dopiero po wciśnięciu "
@@ -717,7 +717,7 @@ class App:
         if len(self.entries) >= MAX_ENTRIES:
             messagebox.showwarning(APP, t("Menu ma najwyżej {n} pozycji (F1–F{n}).", n=MAX_ENTRIES))
             return
-        OnlineDialog(self)
+        self._single("online", lambda: OnlineDialog(self))
 
     def _fetch_and_add(self, source, rel):
         from . import catalog
@@ -759,7 +759,15 @@ class App:
         self._redraw(len(self.entries) - 1)
 
     def doom_readme(self):
-        win = tk.Toplevel(self.root)
+        old = getattr(self, "_readme", None)
+        try:
+            if old is not None and old.winfo_exists():
+                old.lift()
+                old.focus_force()
+                return
+        except tk.TclError:
+            pass
+        win = self._readme = tk.Toplevel(self.root)
         win.title(t("Doom: przeczytaj najpierw"))
         win.transient(self.root)
         txt = tk.Text(win, wrap="word", width=96, height=34, padx=16, pady=12, relief="flat",
@@ -876,20 +884,18 @@ class App:
         if self.data_src:
             self.keep_box.configure(text=t("Wgraj ustawienia z własnej kopii: {p}", p=os.path.basename(
                 self.data_src.rstrip("/\\")) or self.data_src), state="normal")
-        elif self.data_vol:
-            self.keep_box.configure(text=t("Przenieś ustawienia ze starej karty (DATA: {p})", p=self.data_vol),
-                                    state="normal")
         else:
-            self.keep_box.configure(text=t("Przenieś ustawienia: włóż starą kartę i kliknij Odśwież"),
-                                    state="disabled")
+            self.keep_box.configure(text=t("Przenieś ustawienia ze starej karty na nową (każdego systemu osobno; kopie "
+                                           "zostają na komputerze)"), state="normal")
         if hasattr(self, "own_info"):
             self._show_own()
 
     def choose_copy(self):
         """The user's own copy of DATA for the new card: a backup .zip or a folder with the files"""
-        CopyPicker(self, t("Własna kopia DATA"), t("Ta kopia zostanie wgrana na nową kartę przy „Wgraj na kartę” "
-                                                   "albo „Zapisz jako plik .img…”."),
-                   t("Użyj tej kopii"), self._use_copy, start=self.data_src)
+        self._single("picker", lambda: CopyPicker(
+            self, t("Własna kopia DATA"), t("Ta kopia zostanie wgrana na nową kartę przy „Wgraj na kartę” albo "
+                                            "„Zapisz jako plik .img…”."),
+            t("Użyj tej kopii"), self._use_copy, start=self.data_src))
 
     def _use_copy(self, path):
         self.data_src = path
@@ -914,18 +920,44 @@ class App:
             self.own_info.configure(text=t("Nie da się odczytać kopii: {e}", e=e), foreground=WARN)
         self.own_clear.pack(side="right", padx=(8, 0))
 
+    def _card_in_reader(self):
+        """The card in the reader: the one chosen in the list, else the one whose DATA the computer
+        has mounted (a card the list does not show); None when there is neither"""
+        idx = self.card_box.current()
+        if 0 <= idx < len(self.cards):
+            return self.cards[idx]
+        if self.data_vol:
+            dev = devices.device_of(self.data_vol)
+            if dev:
+                return {"path": dev, "name": "DATA", "size": 0, "mounts": [self.data_vol]}
+        return None
+
+    def _single(self, key, make):
+        """One window of a kind at a time: asked for again, the open one comes to the front"""
+        wins = self.__dict__.setdefault("_wins", {})
+        w = wins.get(key)
+        try:
+            if w is not None and w.win.winfo_exists():
+                w.win.deiconify()
+                w.win.lift()
+                w.win.focus_force()
+                return w
+        except tk.TclError:
+            pass
+        wins[key] = make()
+        return wins[key]
+
     def card_data(self):
         """The DATA of the card in the reader: saved to the computer and put back, each system's own"""
         if self.busy:
             return
         self._find_data()
-        idx = self.card_box.current()
-        card = self.cards[idx] if 0 <= idx < len(self.cards) else None
+        card = self._card_in_reader()
         if card is None and not self.data_vol:
             messagebox.showinfo(APP, t("Nie widać karty ani partycji DATA. Włóż kartę z radia do czytnika, poczekaj, "
                                        "aż komputer ją pokaże, i kliknij Odśwież."))
             return
-        CardDataDialog(self, card)
+        self._single("card_data", lambda: CardDataDialog(self, card))
 
     def _card_request(self, req, progress=None):
         """A cardata request: here when the app may read the card itself, else through the helper
@@ -958,17 +990,49 @@ class App:
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
-    def _take_data(self, tmp):
-        """Before the card is erased: its DATA copied aside and kept as a .zip; the files for the new card"""
+    def _take_data(self, tmp, card=None):
+        """Before the card is erased: its settings copied aside and kept as .zip files on the computer.
+        Returns (what compose takes as data_files, a line for the user about it), or (None, None).
 
-        if self.keep_data.get() and self.data_src:      # the user's own copy goes before the old card's
-            return backup.from_copy(self.data_src, os.path.join(tmp, "DATA")), self.data_src
-        if not (self.keep_data.get() and self.data_vol and os.path.isdir(self.data_vol)):
+        A card made here with a DATA per system: every system's DATA, each to the system of the same
+        name (else of the same project) on the new card, wherever it now stands in the menu. Any other
+        card: the DATA the computer shows, to the default system."""
+        if not self.keep_data.get():
             return None, None
-        src = self.data_vol
-        files = backup.snapshot(src, os.path.join(tmp, "DATA"))
+        if self.data_src:                         # the user's own copy goes before the old card's
+            files = backup.from_copy(self.data_src, os.path.join(tmp, "DATA"))
+            return files, t("Ustawienia: {n} plików wgranych na kartę; kopia: {zip}", n=len(files), zip=self.data_src)
+        from . import cardata
+        if card is not None:
+            try:
+                os.makedirs(backup.backups_dir(), exist_ok=True)
+                areas = self._card_request({"op": "dump_all", "dev": card["path"], "dir": backup.backups_dir()},
+                                           self._progress_cb)["areas"]
+            except Exception:
+                backup.log_error("settings of each system")
+                areas = []
+            areas = [a for a in areas if a.get("zip") and a.get("files")]
+            if areas:
+                new = [(i, e["name"]) for i, e in enumerate(self.entries) if e["kind"] == "sd"]
+                hit = cardata.match(areas, [n for _i, n in new])
+                data, lines = {}, []
+                for k, a in hit.items():
+                    i, name = new[k]
+                    data[i] = backup.from_copy(a["zip"], os.path.join(tmp, "DATA%d" % i))
+                    lines.append("  %s  ←  %s (%d)" % (name, " + ".join(a["names"]), len(data[i])))
+                left = [a for a in areas if all(a is not h for h in hit.values())]
+                text = t("Ustawienia przeniesione (nowy system ← stara karta, liczba plików):") + "\n" + "\n".join(lines) \
+                    if lines else t("Żaden system ze starej karty nie ma odpowiednika na nowej: ustawień nie przeniesiono.")
+                if left:
+                    text += "\n" + t("Bez odpowiednika na nowej karcie (kopia została na komputerze): {names}",
+                                     names=", ".join(" + ".join(a["names"]) for a in left))
+                text += "\n" + t("Kopie: {dir}", dir=backup.backups_dir())
+                return (data or None), text
+        if not (self.data_vol and os.path.isdir(self.data_vol)):
+            return None, None
+        files = backup.snapshot(self.data_vol, os.path.join(tmp, "DATA"))
         zip_path = backup.save_zip(os.path.join(tmp, "DATA"))
-        return files, zip_path
+        return files, t("Ustawienia: {n} plików wgranych na kartę; kopia: {zip}", n=len(files), zip=zip_path)
 
     # ---------------------------------------------------------------- building
     def _settings(self):
@@ -1003,20 +1067,20 @@ class App:
                                             **({} if devices.MAC else {"filetypes": [(t("Obraz karty"), "*.img")]}))
         if not path:
             return
-        self._job(t("Zapis obrazu…"), self._save_job, plan, path, self._all_settings())
+        self._job(t("Zapis obrazu…"), self._save_job, plan, path, self._all_settings(), self._card_in_reader())
 
-    def _save_job(self, plan, path, settings):
+    def _save_job(self, plan, path, settings, card=None):
         tmp = tempfile.mkdtemp(prefix="x6100mb-data-")
         try:
-            files, zip_path = self._take_data(tmp)
+            files, note = self._take_data(tmp, card)
             if files is not None:
                 plan = self._plan(data_files=files, settings=settings)
             write_image_file(plan, path, Progress(self._progress_cb))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         msg = t("Zapisano {path} ({mb} MB). Można go wgrać balenaEtcherem.", path=path, mb=plan.size // 2**20)
-        if files is not None:
-            msg += "\n\n" + t("Ustawienia: {n} plików wgranych na kartę; kopia: {zip}", n=len(files), zip=zip_path)
+        if note:
+            msg += "\n\n" + note
         return ("msg", msg)
 
     def write_card(self):
@@ -1038,9 +1102,9 @@ class App:
                  mb=plan.info["data_mb"])
         if self.keep_data.get() and self.data_src:
             text += "\n\n" + t("Ustawienia z własnej kopii ({p}) zostaną wgrane na nową kartę.", p=self.data_src)
-        elif self.keep_data.get() and self.data_vol:
-            text += "\n\n" + t("Ustawienia z {p} zostaną przeniesione na nową kartę (i zapisane na komputerze).",
-                                p=self.data_vol)
+        elif self.keep_data.get():
+            text += "\n\n" + t("Ustawienia każdego systemu z tej karty zostaną najpierw skopiowane na komputer i "
+                                "przeniesione do tego samego systemu na nowej karcie.")
         if not messagebox.askyesno(APP, text, icon="warning"):
             return
         inproc = devices.is_admin() or devices.MAC   # macOS: the app writes itself, through authopen
@@ -1063,15 +1127,18 @@ class App:
         tmp = tempfile.mkdtemp(prefix="x6100mb-data-")
         os.chmod(tmp, 0o755)
         try:
-            files, zip_path = self._take_data(tmp)
+            files, note = self._take_data(tmp, card)
             if files is not None:
                 plan = self._plan(card_bytes=card["size"], data_files=files, settings=settings)
+            for dirpath, _dirs, names in os.walk(tmp):       # the writer may run with other rights
+                os.chmod(dirpath, 0o755)
+                for f in names:
+                    os.chmod(os.path.join(dirpath, f), 0o644)
             result = (self._card_job_inproc if inproc else self._card_job_elevated)(plan, card["path"], check)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-        if files is not None:
-            result = (result[0], result[1] + "\n\n" + t("Ustawienia: {n} plików wgranych na kartę; kopia: {zip}",
-                                                         n=len(files), zip=zip_path))
+        if note:
+            result = (result[0], result[1] + "\n\n" + note)
         return result
 
     def _ready(self, check):
@@ -1333,6 +1400,10 @@ class CardDataDialog:
                                    "jej zawartość plikami z wybranej kopii.") if len(areas) > 1 else
                             t("Ta karta ma jedną, wspólną DATA dla wszystkich systemów. Osobną DATA dla każdego systemu "
                               "ma karta zapisana z ustawieniem „Partycja DATA: osobna dla każdego systemu” (sekcja 2)."))
+        if len(areas) > 1:
+            ColorButton(self.box, t("Kopia wszystkich systemów na komputer"), "blue", self.dump_all,
+                        font=_font(11, "bold"), padx=14, pady=8).grid(row=2 + 2 * len(areas), column=0, columnspan=3,
+                                                                     sticky="we", pady=(6, 0))
         for r, a in enumerate(areas):
             who = "  ·  ".join("%s %s" % (k, n) for k, n in zip(a["keys"], a["names"]))
             self._row(r, who, "%d MB%s" % (a["sectors"] * 512 // 2**20, "  ·  " + t("ostatnio uruchomiony")
@@ -1368,12 +1439,27 @@ class CardDataDialog:
                 return ("msg", t("Przywrócono {n} plików na {vol}. Wysuń kartę bezpiecznie i włóż ją do radia.",
                                  n=n, vol=v["path"]))
             app._job(t("Przywróć DATA na kartę"), job)
-        CopyPicker(app, t("Przywróć DATA na kartę"),
-                   t("Kopia zostanie wgrana na kartę w czytniku: {vol}. Pliki o tych samych nazwach zostaną "
-                     "zastąpione.", vol=v["path"]), t("Wgraj tę kopię na kartę"), go, parent=self.win)
+        app._single("picker", lambda: CopyPicker(
+            app, t("Przywróć DATA na kartę"),
+            t("Kopia zostanie wgrana na kartę w czytniku: {vol}. Pliki o tych samych nazwach zostaną "
+              "zastąpione.", vol=v["path"]), t("Wgraj tę kopię na kartę"), go, parent=self.win))
 
     def _label(self, a):
         return " + ".join(a["names"])
+
+    def dump_all(self):
+        if self.app.busy:
+            return
+        app, dev = self.app, self.card["path"]
+        os.makedirs(backup.backups_dir(), exist_ok=True)
+
+        def job():
+            areas = app._card_request({"op": "dump_all", "dev": dev, "dir": backup.backups_dir()}, app._progress_cb)["areas"]
+            lines = ["  %s: %s" % (" + ".join(a["names"]), os.path.basename(a["zip"]) if a.get("zip") else
+                                   t("nie da się odczytać")) for a in areas]
+            return ("msg", t("Kopie DATA każdego systemu zapisane w\n{dir}", dir=backup.backups_dir()) + "\n\n" +
+                    "\n".join(lines))
+        app._job(t("Kopia wszystkich systemów na komputer"), job)
 
     def dump(self, a):
         if self.app.busy:
@@ -1406,9 +1492,10 @@ class CardDataDialog:
                 return ("msg", t("DATA systemu {name}: przywrócono {n} plików. Wysuń kartę bezpiecznie i włóż ją do radia.",
                                  name=self._label(a), n=n))
             app._job(t("Przywracanie DATA: {name}", name=self._label(a)), job)
-        CopyPicker(app, t("Kopia DATA dla: {name}", name=self._label(a)),
-                   t("Obecna zawartość DATA systemu {name} zostanie zastąpiona tą kopią.", name=self._label(a)),
-                   t("Wgraj tę kopię na kartę"), go, parent=self.win)
+        app._single("picker", lambda: CopyPicker(
+            app, t("Kopia DATA dla: {name}", name=self._label(a)),
+            t("Obecna zawartość DATA systemu {name} zostanie zastąpiona tą kopią.", name=self._label(a)),
+            t("Wgraj tę kopię na kartę"), go, parent=self.win, expect=a))
 
 
 class CopyPicker:
@@ -1416,8 +1503,9 @@ class CopyPicker:
     chosen (its whole path), how much is in it and whether it looks like a radio's DATA; only the
     button at the bottom acts on it."""
 
-    def __init__(self, app, title, note, ok_text, on_ok, start=None, parent=None):
+    def __init__(self, app, title, note, ok_text, on_ok, start=None, parent=None, expect=None):
         self.app, self.on_ok, self.path = app, on_ok, None
+        self.expect, self.other = expect, None       # the DATA area the copy is for (its systems)
         self.win = tk.Toplevel(parent or app.root)
         self.win.title(title)
         self.win.transient(parent or app.root)
@@ -1479,11 +1567,21 @@ class CopyPicker:
             return
         text = t("{n} plików, {mb} MB", n=d["files"], mb="%.1f" % (d["bytes"] / 2**20)) + ":  " + ", ".join(d["names"]) + \
             (" …" if d["files"] > len(d["names"]) else "")
+        self.other = None
+        who = d.get("whose")
+        if who and who.get("names"):
+            text += "\n" + t("Kopia systemu: {name}", name=" + ".join(who["names"]))
+            if self.expect and not (set(who.get("ids", [])) & set(self.expect.get("ids", [])) or
+                                    set(who["names"]) & set(self.expect["names"])):
+                self.other = " + ".join(who["names"])
+                text += "\n⚠ " + t("To kopia innego systemu niż ten, do którego ją przywracasz ({name}).",
+                                   name=" + ".join(self.expect["names"]))
         if d.get("inner"):
             text += "\n" + t("Pliki są w tej kopii w folderze „{f}”: na kartę trafi jego zawartość, bez tego folderu.",
                              f=d["inner"])
         if d["data"]:
-            self.what.configure(text="✓ " + t("Wygląda na DATA z radia.") + "  " + text, foreground=TEXT_FG)
+            self.what.configure(text="✓ " + t("Wygląda na DATA z radia.") + "  " + text,
+                                foreground=WARN if self.other else TEXT_FG)
         else:
             self.what.configure(text="⚠ " + t("To nie wygląda na DATA z radia (brak bazy ustawień). Sprawdź, czy to "
                                               "właściwa kopia.") + "\n" + text, foreground=WARN)
@@ -1494,6 +1592,10 @@ class CopyPicker:
         if not self.path:
             return
         path = self.path
+        if self.other and not messagebox.askyesno(
+                APP, t("To kopia systemu {a}, a przywracasz ją do systemu {b}. Wgrać mimo to?", a=self.other,
+                       b=" + ".join(self.expect["names"])), icon="warning", parent=self.win):
+            return
         try:
             if not backup.describe(path)["data"] and not messagebox.askyesno(
                     APP, t("Ta kopia nie wygląda na DATA z radia. Użyć jej mimo to?"), icon="warning", parent=self.win):

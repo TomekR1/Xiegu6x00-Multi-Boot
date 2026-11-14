@@ -149,6 +149,52 @@ class ComposeTest(unittest.TestCase):
                 self.assertEqual(zz.read("settings.db"), b"system %d" % k)
                 self.assertEqual(len(zz.read("backups/a long file name.conf")), 5000)
 
+    def test_settings_follow_their_system_to_a_new_card(self):
+        """A new card with the systems in another order and newer versions: each system's settings
+        from the old card land in the same system's DATA, not in whatever stands at its old place"""
+        import zipfile
+        from x6100mb import backup, cardata
+        a, b = os.path.join(self.tmp, "a.img"), os.path.join(self.tmp, "b.img")
+        fake_card(a)
+        fake_card(b)
+        old = os.path.join(self.tmp, "old.img")
+        write_image_file(compose([{"kind": "sd", "name": "OpenX6X00 v0.3.11", "sys": SourceSystem(a, a)},
+                                  {"kind": "sd", "name": "R1CBU v0.29", "sys": SourceSystem(b, b)}],
+                                 data_mb=40, data_mode="separate"), old)
+        areas = cardata.run({"op": "scan", "dev": old})["areas"]
+        self.assertEqual([x["ids"] for x in areas], [["openx6x00"], ["r1cbu"]])
+        for area in areas:
+            z = os.path.join(self.tmp, "in.zip")
+            with zipfile.ZipFile(z, "w") as zz:
+                zz.writestr("params.db", ("settings of " + area["ids"][0]).encode())
+            cardata.run({"op": "restore", "dev": old, "area": area, "zip": z})
+        # every system's DATA off the old card, each into a .zip that says whose it is
+        copies = os.path.join(self.tmp, "copies")
+        dumped = cardata.run({"op": "dump_all", "dev": old, "dir": copies})["areas"]
+        self.assertEqual([x["files"] for x in dumped], [1, 1])
+        self.assertEqual(cardata.copy_of(dumped[1]["zip"])["ids"], ["r1cbu"])
+        self.assertEqual(backup.describe(dumped[0]["zip"])["whose"]["names"], ["OpenX6X00 v0.3.11"])
+        # the new card: the other way round, newer versions, a third system that was not there
+        names = ["R1CBU v0.30", "CX8ANM v1.1.5", "OpenX6X00 v0.3.12"]
+        hit = cardata.match(dumped, names)
+        self.assertEqual({k: v["ids"][0] for k, v in hit.items()}, {0: "r1cbu", 2: "openx6x00"})
+        data = {i: backup.from_copy(ar["zip"], os.path.join(self.tmp, "lay%d" % i)) for i, ar in hit.items()}
+        c = os.path.join(self.tmp, "c.img")
+        fake_card(c)
+        new = os.path.join(self.tmp, "new.img")
+        plan = compose([{"kind": "sd", "name": n, "sys": SourceSystem(p, p)} for n, p in zip(names, (b, c, a))],
+                       data_mb=40, data_mode="separate", data_files=data)
+        self.assertEqual(plan.info["data_files"], 2)
+        write_image_file(plan, new)
+        got = {}
+        for area in cardata.run({"op": "scan", "dev": new})["areas"]:
+            z = os.path.join(self.tmp, "o.zip")
+            n = cardata.run({"op": "dump", "dev": new, "area": area, "zip": z})["files"]
+            with zipfile.ZipFile(z) as zz:
+                got[area["names"][0]] = zz.read("params.db").decode() if n else None
+        self.assertEqual(got, {"R1CBU v0.30": "settings of r1cbu", "CX8ANM v1.1.5": None,
+                               "OpenX6X00 v0.3.12": "settings of openx6x00"})
+
     def test_doom_extra(self):
         import lzma
         from x6100mb.compose import resolve_extras

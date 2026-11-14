@@ -20,6 +20,45 @@ from .fat import Fat32Builder, FatError, FatReader
 from .image import SECTOR, read_mbr
 
 MANIFEST = "MENU/CARD.JSON"
+MARK = b"x6100mb DATA "          # a copy's .zip comment: MARK + JSON {"ids": [...], "names": [...]}
+
+
+def system_id(name):
+    """What a system is, whatever its version and its place in the menu: its project ("openx6x00",
+    "r1cbu"), else its name without the version. A copy of its DATA goes back to this system."""
+    from .catalog import source_for
+    src = source_for(name)
+    if src:
+        return src["id"]
+    base = re.sub(r"[\s_-]*v?\d+(\.\d+)+.*$", "", name.strip().lower())
+    return re.sub(r"[^a-z0-9]+", "-", base).strip("-") or "system"
+
+
+def copy_of(zip_path):
+    """Whose DATA a copy holds, as its .zip says: {"ids", "names"}, or None (a folder, another's zip)"""
+    try:
+        with zipfile.ZipFile(zip_path) as z:
+            c = z.comment
+        return json.loads(c[len(MARK):].decode()) if c.startswith(MARK) else None
+    except Exception:
+        return None
+
+
+def match(areas, names):
+    """Which of a card's DATA areas belongs to each of the new card's systems: {index in names: area}.
+    The same name first, then the same project; each area once. The order in the menu plays no part."""
+    out, free = {}, list(areas)
+    for exact in (True, False):
+        for i, name in enumerate(names):
+            if i in out:
+                continue
+            for a in free:
+                hit = name in a["names"] if exact else system_id(name) in a.get("ids", [system_id(n) for n in a["names"]])
+                if hit:
+                    out[i] = a
+                    free.remove(a)
+                    break
+    return out
 
 
 class CardDataError(Exception):
@@ -116,10 +155,12 @@ def scan(f):
     for s in systems:
         if not s.get("data_lba"):
             continue
-        a = areas.setdefault(s["data_lba"], {"keys": [], "names": [], "lba": s["data_lba"],
+        a = areas.setdefault(s["data_lba"], {"keys": [], "names": [], "ids": [], "lba": s["data_lba"],
                                              "sectors": s["data_sectors"], "active": s["data_lba"] == active[0]})
         a["keys"].append(s["key"])
         a["names"].append(s["name"])
+        if s.get("kind", "sd") != "extra":             # an extra (Doom) only borrows the DATA
+            a["ids"].append(s.get("id") or system_id(s["name"]))
     if not areas:
         raise CardDataError("no system with DATA on this card")
     return [areas[k] for k in sorted(areas)]
@@ -157,6 +198,7 @@ def dump(f, area, zip_path, progress=None):
     os.makedirs(os.path.dirname(os.path.abspath(zip_path)), exist_ok=True)
     tmp = zip_path + ".part"
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+        z.comment = MARK + json.dumps({"ids": area.get("ids", []), "names": area.get("names", [])}).encode()
         for name, first, size in files:
             z.writestr(name, _file_bytes(fat, first, size) if size else b"")
             done += size
@@ -214,6 +256,18 @@ def run(req, progress=None):
     with RawDev(dev) as f:
         if op == "scan":
             return {"areas": scan(f)}
+        if op == "dump_all":                 # every system's DATA, each into a .zip of its own in a folder
+            import time
+            areas = scan(f)
+            stamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+            for a in areas:
+                who = (a.get("ids") or [system_id(a["names"][0])])[0]
+                a["zip"] = os.path.join(req["dir"], "DATA-%s-%s.zip" % (who, stamp))
+                try:
+                    a["files"] = dump(f, a, a["zip"], progress)
+                except CardDataError as e:
+                    a["zip"], a["files"], a["error"] = None, 0, str(e)
+            return {"areas": areas}
         if op == "dump":
             return {"files": dump(f, req["area"], req["zip"], progress)}
     raise CardDataError("unknown request")

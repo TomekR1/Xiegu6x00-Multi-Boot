@@ -429,7 +429,10 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         if e["kind"] != "sd":
             continue
         at = data_areas[owners.index(owner(e))] if n_data > 1 else data_areas[0]
-        systems.append({"key": KEYS[i][0], "name": e["name"], "data_lba": at, "data_sectors": data_sectors})
+        extra = getattr(e["sys"], "donor", None) is not None
+        from .cardata import system_id
+        systems.append({"key": KEYS[i][0], "name": e["name"], "id": system_id(e["name"]),
+                        "kind": "extra" if extra else "sd", "data_lba": at, "data_sectors": data_sectors})
     fat.add_file("MENU/CARD.JSON", json.dumps({"data_mode": data_mode, "systems": systems}, indent=1).encode())
     fat.add_file("boot.scr", make_script_image(script))
     fat.add_file("boot.cmd", script.encode())
@@ -467,8 +470,20 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     # (data_files: [(relative path, file, size)]) on the one the card starts with
     for at in data_areas:
         data = Fat32Builder(data_sectors * SECTOR, at, label="DATA")
-        if data_files and at == active:
-            for rel, path, size in data_files:
+        if isinstance(data_files, dict):
+            # each system's own settings: {index among entries: files}; one shared DATA takes the
+            # default system's (else whichever there is)
+            if n_data > 1:
+                own = owners[data_areas.index(at)]
+                mine = data_files.get(next(i for i, e in enumerate(entries) if e is own))
+            else:
+                first_owner = owner(def_sd)
+                mine = data_files.get(next(i for i, e in enumerate(entries) if e is first_owner)) or \
+                    next(iter(data_files.values()), None)
+        else:
+            mine = data_files if data_files and at == active else None
+        if mine:
+            for rel, path, size in mine:
                 data.add_file(rel, src=(path, 0, size))
         for off, piece in data.extents():
             plan.add(at * SECTOR + off, piece)
@@ -480,7 +495,7 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         "default": default, "timeout": timeout_s, "wait": wait, "uboot": ub.uboot_version,
         "boot_mb": boot_size // MIB, "data_mb": data_sectors * SECTOR // MIB, "size": size,
         "data_mode": data_mode, "data_partitions": n_data, "screen": screen, "graphics": gfx,
-        "data_files": len(data_files or ()),
+        "data_files": sum(len(v) for v in data_files.values()) if isinstance(data_files, dict) else len(data_files or ()),
     }
     plan.script = script
     return plan

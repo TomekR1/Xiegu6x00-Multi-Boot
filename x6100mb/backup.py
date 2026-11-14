@@ -255,5 +255,9 @@ def describe(src):
     looks = any(n.endswith((".db", ".sqlite", ".adi", ".adif")) or n.split("/")[0] in ("backups", "logs", "log")
                 or n.split("/")[-1] in ("params.db", "msg.db", "settings.json", "ft8.log", "wpa_supplicant.conf")
                 for n in names)
+    whose = None
+    if not os.path.isdir(src):
+        from .cardata import copy_of
+        whose = copy_of(src)
     return {"files": len(items), "bytes": sum(sz for _n, sz in items), "data": looks,
-            "names": [n for n, _s in items][:6], "inner": inner.rstrip("/")}
+            "names": [n for n, _s in items][:6], "inner": inner.rstrip("/"), "whose": whose}

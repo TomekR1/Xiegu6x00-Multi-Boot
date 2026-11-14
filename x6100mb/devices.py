@@ -70,7 +70,8 @@ def _list_linux():
 
 
 def _list_mac():
-    r = _run(["diskutil", "list", "-plist", "external", "physical"])
+    # Every physical disk, not only the external ones: a Mac's built-in card reader is "internal"
+    r = _run(["diskutil", "list", "-plist", "physical"])
     if r.returncode:
         raise DeviceError("diskutil list failed")
     out = []
@@ -79,7 +80,11 @@ def _list_mac():
         if i.returncode:
             continue
         info = plistlib.loads(i.stdout)
-        if info.get("Internal") or info.get("VirtualOrPhysical") == "Virtual":
+        if info.get("VirtualOrPhysical") == "Virtual":
+            continue
+        card = str(info.get("BusProtocol") or "").lower() in ("secure digital", "sd", "mmc") or \
+            info.get("RemovableMedia") or info.get("Removable") or info.get("Ejectable")
+        if info.get("Internal") and not card:          # the Mac's own disk
             continue
         size = int(info.get("TotalSize") or info.get("Size") or 0)
         if not size or size > MAX_CARD:
@@ -114,6 +119,27 @@ def _list_windows():
         out.append({"path": r"\\.\PhysicalDrive%d" % d["Number"], "name": d.get("FriendlyName") or "",
                     "size": size, "bus": bus, "mounts": [], "number": d["Number"]})
     return out
+
+
+def device_of(mount):
+    """The whole card a mounted volume lies on (/dev/disk4, /dev/sdb, PhysicalDrive2), or
+    None: for a card the list above does not show but whose DATA the computer has mounted"""
+    try:
+        if WIN:
+            n = _ps("(Get-Partition -DriveLetter '%s').DiskNumber" % mount[0])
+            return r"\\.\PhysicalDrive%d" % int(n)
+        if MAC:
+            info = plistlib.loads(_run(["diskutil", "info", "-plist", mount]).stdout)
+            whole = info.get("ParentWholeDisk")
+            return "/dev/" + whole if whole else None
+        r = _run(["findmnt", "-n", "-o", "SOURCE", mount])
+        part = r.stdout.decode().strip()
+        if not part:
+            return None
+        whole = _run(["lsblk", "-n", "-o", "PKNAME", part]).stdout.decode().strip().split("\n")[0]
+        return "/dev/" + whole if whole else None
+    except Exception:
+        return None
 
 
 def is_listed(path):
