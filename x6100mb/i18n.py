@@ -189,6 +189,8 @@ EN = {
     "Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.":
         "Bluetooth in Doom does not work with {name}'s kernel (USB does). Move e.g. OpenX6X00 above it.",
     "Szczegóły: {p}": "Details: {p}",
+    "Pliki są w tej kopii w folderze „{f}”: na kartę trafi jego zawartość, bez tego folderu.":
+        "In this copy the files are in the folder “{f}”: what is in it goes on the card, without that folder.",
     "Sprawdź kartę po zapisie (zalecane; bez tego zapis trwa krócej, ale błędna karta nie zostanie wykryta)":
         "Check the card after writing (recommended; without it writing is quicker, but a bad card goes unnoticed)",
     "Karta zapisana (bez sprawdzenia). Wyjmij ją i włóż do radia.": "The card is written (not checked). Take it out and put it in the radio.",

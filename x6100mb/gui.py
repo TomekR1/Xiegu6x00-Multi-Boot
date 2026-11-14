@@ -1431,6 +1431,9 @@ class CopyPicker:
             return
         text = t("{n} plików, {mb} MB", n=d["files"], mb="%.1f" % (d["bytes"] / 2**20)) + ":  " + ", ".join(d["names"]) + \
             (" …" if d["files"] > len(d["names"]) else "")
+        if d.get("inner"):
+            text += "\n" + t("Pliki są w tej kopii w folderze „{f}”: na kartę trafi jego zawartość, bez tego folderu.",
+                             f=d["inner"])
         if d["data"]:
             self.what.configure(text="✓ " + t("Wygląda na DATA z radia.") + "  " + text, foreground=TEXT_FG)
         else:

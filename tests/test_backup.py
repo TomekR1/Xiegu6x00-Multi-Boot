@@ -52,6 +52,33 @@ class BackupTest(unittest.TestCase):
         with open(os.path.join(dst, "backups", "wifi.conf")) as f:
             self.assertEqual(f.read(), "backups/wifi.conf")
 
+    def test_copy_wrapped_in_a_folder(self):
+        """A copy zipped as a folder, or unpacked into one: its files go on the card's DATA itself,
+        not into a folder on it (there the radio finds no settings)"""
+        self.assertEqual(backup.data_root(["params.db", "backups/wifi.conf"]), "")
+        self.assertEqual(backup.data_root(["DATA-1/params.db", "DATA-1/backups/wifi.conf"]), "DATA-1/")
+        self.assertEqual(backup.data_root(["a/DATA/params.db", "a/DATA/backups/x", "a/readme.txt"]), "a/DATA/")
+        self.assertEqual(backup.data_root(["only/one.txt", "only/two.txt"]), "only/")
+        self.assertEqual(backup.data_root(["backups/wifi.conf"]), "")
+        self.assertEqual(backup.data_root(["one.txt", "dir/two.txt"]), "")
+        z = os.path.join(self.d, "wrapped.zip")
+        with zipfile.ZipFile(z, "w") as zz:
+            zz.writestr("DATA-2026/params.db", "db")
+            zz.writestr("DATA-2026/backups/wifi.conf", "wifi")
+        folder = os.path.join(self.d, "unpacked")
+        os.makedirs(os.path.join(folder, "DATA-2026", "backups"))
+        for rel in ("params.db", "backups/wifi.conf"):
+            with open(os.path.join(folder, "DATA-2026", *rel.split("/")), "w") as f:
+                f.write(rel)
+        for k, src in enumerate((z, folder)):
+            self.assertEqual(backup.describe(src)["inner"], "DATA-2026")
+            dst = os.path.join(self.d, "card%d" % k)
+            os.makedirs(dst)
+            self.assertEqual(backup.restore_copy(src, dst), 2)
+            self.assertEqual(sorted(os.listdir(dst)), ["backups", "params.db"])
+            lay = os.path.join(self.d, "new%d" % k)
+            self.assertEqual(sorted(r for r, _p, _s in backup.from_copy(src, lay)), ["backups/wifi.conf", "params.db"])
+
     def test_windows_drive_root(self):
         """A drive's root already ends in a backslash: the check that a file stays on the card
         must still let the card's own files through"""
