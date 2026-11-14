@@ -114,7 +114,7 @@ EN = {
     "Język:": "Language:",
     "Łączenie…": "Connecting…",
     "zostało {t}": "{t} left",
-    "Kopia DATA na komputer…": "Back DATA up to the computer…",
+    "Kopia DATA na komputer…": "Back up DATA…",
     "Przenieś ustawienia ze starej karty (DATA: {p})": "Carry the old card's settings over (DATA: {p})",
     "Przenieś ustawienia: włóż starą kartę i kliknij Odśwież": "Carry settings over: put the old card in, click Refresh",
     "Nie widać partycji DATA. Włóż kartę z radia do czytnika, poczekaj, aż komputer ją pokaże, i kliknij Odśwież.":
@@ -189,6 +189,9 @@ EN = {
     "Bluetooth w Doomie nie zadziała z jądrem {name} (USB tak). Przesuń wyżej np. OpenX6X00.":
         "Bluetooth in Doom does not work with {name}'s kernel (USB does). Move e.g. OpenX6X00 above it.",
     "Szczegóły: {p}": "Details: {p}",
+    "Kopie ustawień (DATA)": "Copies of the settings (DATA)",
+    "Ustawienia radia są na partycji DATA karty. Tu zrobisz ich kopię na komputerze, przywrócisz je na kartę w czytniku albo wskażesz własną kopię dla nowej karty.":
+        "The radio's settings are on the card's DATA partition. Here you copy them to the computer, put them back on the card in the reader, or choose a copy of your own for the new card.",
     "Ustawienia na karcie w czytniku:": "Settings on the card in the reader:",
     "DATA każdego systemu…": "Each system's DATA…",
     "DATA każdego systemu": "Each system's DATA",

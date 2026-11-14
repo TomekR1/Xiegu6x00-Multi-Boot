@@ -490,15 +490,22 @@ class App:
         self.keep_data = tk.BooleanVar(value=True)
         self.keep_box = ttk.Checkbutton(keep, variable=self.keep_data, text="")
         self.keep_box.pack(side="left")
-        self.own_btn = ttk.Button(keep, text=t("Własna kopia DATA…"), command=self.choose_copy)
-        self.own_btn.pack(side="right")
-        # The card in the reader: its settings saved and put back, also each system's own
-        tools = ttk.Frame(out)
-        tools.grid(row=2, column=0, columnspan=4, sticky="we", padx=8, pady=(0, 6))
-        ttk.Label(tools, text=t("Ustawienia na karcie w czytniku:"), foreground=HINT).pack(side="left")
-        ttk.Button(tools, text=t("Przywróć DATA na kartę…"), command=self.restore_data).pack(side="right")
-        ttk.Button(tools, text=t("Kopia DATA na komputer…"), command=self.backup_data).pack(side="right", padx=(0, 6))
-        ttk.Button(tools, text=t("DATA każdego systemu…"), command=self.card_data).pack(side="right", padx=(0, 6))
+        # The settings' copies (DATA), at the very bottom: of the card in the reader, of each system
+        # on it, and an own copy for the new card
+        cop = self._section(top, 4, t("Kopie ustawień (DATA)"))
+        ttk.Label(cop, text=t("Ustawienia radia są na partycji DATA karty. Tu zrobisz ich kopię na komputerze, "
+                              "przywrócisz je na kartę w czytniku albo wskażesz własną kopię dla nowej karty."),
+                  foreground=HINT, wraplength=1000, justify="left").grid(row=0, column=0, columnspan=4, sticky="w",
+                                                                         padx=8, pady=(4, 6))
+        buttons = ((t("Kopia DATA na komputer…"), "teal", self.backup_data),
+                   (t("Przywróć DATA na kartę…"), "orange", self.restore_data),
+                   (t("DATA każdego systemu…"), "blue", self.card_data),
+                   (t("Własna kopia DATA…"), "slate", self.choose_copy))
+        for k, (text, colour, cmd) in enumerate(buttons):
+            btn = ColorButton(cop, text, colour, cmd, font=_font(11, "bold"), padx=6, pady=11)
+            btn.grid(row=1, column=k, sticky="we", padx=(8 if k == 0 else 4, 8 if k == 3 else 4), pady=(0, 8))
+            cop.columnconfigure(k, weight=1, uniform="copies")
+        self.own_btn = btn
 
         self.status = tk.StringVar(value=t("Dodaj obraz karty systemu (.img, .img.zip lub .img.xz), np. OpenX6X00."))
         foot = ttk.Frame(top, style="Card.TFrame", padding=(12, 8))
@@ -1474,7 +1481,7 @@ def _fit_screen(root):
     root.update_idletasks()
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
     w = min(max(root.winfo_reqwidth(), 1120), sw - 40)
-    h = min(1000, sh - 110)                 # room for the title bar and the taskbar
+    h = min(1040, sh - 110)                 # room for the title bar and the taskbar
     root.geometry("%dx%d+%d+%d" % (w, h, max((sw - w) // 2, 0), max((sh - 80 - h) // 2, 0)))
 
 
