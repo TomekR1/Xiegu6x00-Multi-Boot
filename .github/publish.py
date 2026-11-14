@@ -8,6 +8,7 @@ number went up (the release exists for another commit) releases nothing.
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -18,7 +19,10 @@ SHA = os.environ["GITHUB_SHA"]
 MINE = sys.argv[1:]                       # this job's files: its app and the U-Boot
 # A version given with a hyphen (v0.2.11-test1): a pre-release for testers, not the newest release
 # on the repository's page; made of this build's own files only
-TEST = "-" in (os.environ.get("GIVEN") or "")
+TEST = bool(re.search(r"-(test|beta|rc)", os.environ.get("GIVEN") or ""))
+# What a release holds; anything else in it (a file of an earlier way of packing, carried over) goes
+KNOWN = {"Xiegu-Multi-Patcher-Windows.zip", "Xiegu-Multi-Patcher-macOS.zip", "Xiegu-Multi-Patcher-Linux",
+         "u-boot-x6100-menu.bin"}
 
 
 def gh(*args, check=True):
@@ -59,6 +63,18 @@ Ostatnia zmiana: {msg or 'zobacz historię zmian'}
 
 Problemy zgłaszaj w Issues. Aplikacja: SQ6RT, https://www.qrz.com/db/SQ6RT
 """
+
+
+def tidy(tag):
+    """Files in the release on tag that it should not hold (KNOWN says which) removed"""
+    for rid, assets in releases_of(tag):
+        if not [a for a in assets if a not in KNOWN]:
+            continue
+        r = gh("api", "repos/%s/releases/%d/assets" % (REPO, rid), check=False)
+        for asset in json.loads(r.stdout or "[]") if r.returncode == 0 else []:
+            if asset["name"] not in KNOWN:
+                gh("api", "-X", "DELETE", "repos/%s/releases/assets/%d" % (REPO, asset["id"]), check=False)
+                print("removed a file the release should not hold:", asset["name"])
 
 
 def releases_of(tag):
@@ -117,6 +133,7 @@ def main():
     have = tag_commit(tag)
     if have and have != SHA:
         print(f"{tag} is out already (another commit): no version number went up, nothing to release")
+        tidy(tag)
         return
     names = {os.path.basename(m) for m in MINE}
     if not releases_of(tag):
@@ -134,7 +151,7 @@ def main():
             if prev.returncode == 0 and not TEST:
                 p = json.loads(prev.stdout)
                 for a in p["assets"]:
-                    if a["name"] not in names and a["name"].startswith("Xiegu-Multi-Patcher"):
+                    if a["name"] not in names and a["name"] in KNOWN:
                         gh("release", "download", p["tagName"], "-R", REPO, "-p", a["name"], "-D", tmp)
                 carried = glob.glob(os.path.join(tmp, "*"))
             nf = os.path.join(tmp, "notes.md")
@@ -147,6 +164,7 @@ def main():
             prune_tests(tag)
             gh("release", "delete", "test-build", "--cleanup-tag", "--yes", "-R", REPO, check=False)
             merge_duplicates(tag)
+            tidy(tag)
             return
         print("the tag was made by another job: waiting for its release")
         for _ in range(60):
@@ -163,6 +181,7 @@ def main():
     else:
         raise SystemExit("upload failed")
     merge_duplicates(tag)
+    tidy(tag)
     if not TEST:
         gh("release", "edit", tag, "-R", REPO, "--latest")
     print(f"{tag}: {', '.join(os.path.basename(m) for m in MINE)} in")
