@@ -259,7 +259,7 @@ class App:
     def __init__(self, root):
         self.root = root
         root.title(APP + (" " + app_version() if app_version() else ""))
-        root.minsize(940, 760)
+        root.minsize(760, 420)
         self.entries = []                 # {"kind", "name", "sys"?}
         self.default = 0
         self.q = queue.Queue()
@@ -273,15 +273,62 @@ class App:
 
     # ---------------------------------------------------------------- layout
     def _build_all(self, keep=None):
+        # Everything under the header scrolls when the window is lower than its contents (a small
+        # or scaled laptop screen): a canvas holding the body, a scrollbar shown only when needed
         self.top = ttk.Frame(self.root)
         self.top.pack(fill="both", expand=True, padx=10, pady=(0, 8))
-        self._build(self.top)
+        self._scroll = tk.Canvas(self.top, highlightthickness=0, bg=PAGE_BG, width=900, height=400)
+        self._sbar = ttk.Scrollbar(self.top, orient="vertical", command=self._scroll.yview)
+        self._scroll.configure(yscrollcommand=self._sbar.set)
+        self._scroll.pack(side="left", fill="both", expand=True)
+        self.body = ttk.Frame(self._scroll)
+        self._body_id = self._scroll.create_window(0, 0, window=self.body, anchor="nw")
+        self._build(self.body)
+        self._scroll.bind("<Configure>", lambda e: self._fit_body())
+        self.body.bind("<Configure>", lambda e: self._fit_body())
+        self.root.bind_all("<MouseWheel>", self._wheel)
+        self.root.bind_all("<Button-4>", self._wheel)
+        self.root.bind_all("<Button-5>", self._wheel)
         if keep:
             for name, value in keep.items():
                 getattr(self, name).set(value)
             self._toggle_adv()
             self.timeout_box.state(["disabled"] if self.wait.get() else ["!disabled"])
         self._redraw()
+
+    def _fit_body(self):
+        """The body as wide as the window and at least as high; lower than its contents: scrolling"""
+        c = self._scroll
+        w, h = c.winfo_width(), c.winfo_height()
+        need = self.body.winfo_reqheight()
+        if w < 2 or h < 2:
+            return
+        size = (w, max(h, need))
+        if size != getattr(self, "_body_size", None):
+            self._body_size = size
+            c.itemconfigure(self._body_id, width=size[0], height=size[1])
+            c.configure(scrollregion=(0, 0, size[0], size[1]))
+        scroll = need > h + 1
+        if scroll and not self._sbar.winfo_ismapped():
+            self._sbar.pack(side="right", fill="y")
+        elif not scroll and self._sbar.winfo_ismapped():
+            self._sbar.pack_forget()
+            c.yview_moveto(0)
+
+    def _wheel(self, ev):
+        """The mouse wheel scrolls the main window (not a list or a text of another window)"""
+        try:
+            if ev.widget.winfo_toplevel() is not self.root or not self._sbar.winfo_ismapped():
+                return
+            if isinstance(ev.widget, (ttk.Combobox, ttk.Spinbox, tk.Text, tk.Listbox)):
+                return
+        except (AttributeError, tk.TclError):
+            return
+        if getattr(ev, "num", 0) in (4, 5):
+            step = -1 if ev.num == 4 else 1
+        else:
+            step = -1 if ev.delta > 0 else 1
+        self._scroll.yview_scroll(step * 3, "units")
 
     def switch_theme(self, name):
         if name == _theme_name() or self.busy:
@@ -317,7 +364,7 @@ class App:
         pad = {"padx": 8, "pady": 4}
 
         head = tk.Frame(self.root, bg=HEAD_BG)
-        head.pack(fill="x", before=top)
+        head.pack(fill="x", before=self.top)
         self._head = head
         inner = tk.Frame(head, bg=HEAD_BG)
         inner.pack(fill="x", padx=16, pady=9)
@@ -362,7 +409,7 @@ class App:
         left = ttk.Frame(box)
         left.pack(side="left", fill="both", expand=True)
         self.sw, self.sh, self.sox, self.soy = SCREEN_W, SCREEN_H, 0, 0
-        self.screen = tk.Canvas(left, width=SCREEN_W, height=SCREEN_H, bg=PAGE_BG, highlightthickness=0,
+        self.screen = tk.Canvas(left, width=SCREEN_W * 2 // 3, height=SCREEN_H * 2 // 3, bg=PAGE_BG, highlightthickness=0,
                                 cursor="hand2")
         self.screen.pack(side="top", fill="both", expand=True)
         self.screen.bind("<Configure>", self._screen_resized)
@@ -1224,12 +1271,12 @@ def _set_icon(root):
 
 
 def _fit_screen(root):
-    """A window taller or wider than the screen made smaller (the radio's screen in it shrinks)"""
+    """The window as large as its contents like, but never larger than the screen (then it scrolls)"""
     root.update_idletasks()
-    w, h = root.winfo_reqwidth(), root.winfo_reqheight()
-    sw, sh = root.winfo_screenwidth(), root.winfo_screenheight() - 80
-    if w > sw or h > sh:
-        root.geometry("%dx%d+0+0" % (min(w, sw), min(h, sh)))
+    sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+    w = min(max(root.winfo_reqwidth(), 1120), sw - 40)
+    h = min(940, sh - 110)                  # room for the title bar and the taskbar
+    root.geometry("%dx%d+%d+%d" % (w, h, max((sw - w) // 2, 0), max((sh - 80 - h) // 2, 0)))
 
 
 def main():
