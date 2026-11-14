@@ -120,6 +120,35 @@ class ComposeTest(unittest.TestCase):
             self.assertIn("mmc write 0x45100000 0 1", script)
 
 
+    def test_each_systems_data_saved_and_restored(self):
+        """One DATA per system: each found on the card, written from a .zip and read back, the other
+        left as it was (the app's "DATA of each system")"""
+        import zipfile
+        from x6100mb import cardata
+        a, b = os.path.join(self.tmp, "a.img"), os.path.join(self.tmp, "b.img")
+        fake_card(a)
+        fake_card(b)
+        out = os.path.join(self.tmp, "out.img")
+        plan = compose([{"kind": "sd", "name": "One", "sys": SourceSystem(a, a)},
+                        {"kind": "sd", "name": "Two", "sys": SourceSystem(b, b)}],
+                       default=1, data_mb=40, data_mode="separate")
+        write_image_file(plan, out)
+        areas = cardata.run({"op": "scan", "dev": out})["areas"]
+        self.assertEqual([x["names"] for x in areas], [["One"], ["Two"]])
+        self.assertEqual([x["active"] for x in areas], [False, True])
+        for k, area in enumerate(areas):
+            z = os.path.join(self.tmp, "in%d.zip" % k)
+            with zipfile.ZipFile(z, "w") as zz:
+                zz.writestr("settings.db", b"system %d" % k)
+                zz.writestr("backups/a long file name.conf", b"x" * 5000)
+            self.assertEqual(cardata.run({"op": "restore", "dev": out, "area": area, "zip": z})["files"], 2)
+        for k, area in enumerate(areas):
+            z = os.path.join(self.tmp, "out%d.zip" % k)
+            self.assertEqual(cardata.run({"op": "dump", "dev": out, "area": area, "zip": z})["files"], 2)
+            with zipfile.ZipFile(z) as zz:
+                self.assertEqual(zz.read("settings.db"), b"system %d" % k)
+                self.assertEqual(len(zz.read("backups/a long file name.conf")), 5000)
+
     def test_doom_extra(self):
         import lzma
         from x6100mb.compose import resolve_extras

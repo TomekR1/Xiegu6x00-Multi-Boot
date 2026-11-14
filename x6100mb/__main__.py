@@ -48,6 +48,9 @@ def _load(paths):
 
 
 def cli(argv):
+    if argv and argv[0] == "card-data":
+        from .cardata import main_card_data
+        return main_card_data(argv[1:])
     if argv and argv[0] == "write-plan":
         from .writer import main_write_plan
         return main_write_plan(argv[1:])

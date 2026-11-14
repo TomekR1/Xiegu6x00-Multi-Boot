@@ -154,6 +154,24 @@ def prepare_for_write(dev):
         os.close(fd)
 
 
+def unmount(dev):
+    """What the computer mounted of dev let go, the card itself left as it is (before writing one
+    of its areas). Windows: nothing; it lets the areas outside the partition table be written."""
+    if WIN:
+        return
+    if MAC:
+        r = _run(["diskutil", "unmountDisk", "force", dev])
+        if r.returncode:
+            raise DeviceError("could not unmount the card: " + r.stderr.decode(errors="replace"))
+        return
+    for c in list_cards():
+        if c["path"] == dev:
+            for m in c["mounts"]:
+                r = _run(["umount", m])
+                if r.returncode:
+                    raise DeviceError(f"could not unmount {m}: " + r.stderr.decode(errors="replace"))
+
+
 def after_write(dev):
     if MAC:
         _run(["diskutil", "eject", dev])

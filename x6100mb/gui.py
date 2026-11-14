@@ -55,7 +55,8 @@ def _apply_colours(name):
     globals().update(THEMES[name])
 PHASES = {"download": "Pobieranie", "prepare": "Przygotowanie karty", "write": "Zapis",
           "sync": "Opróżnianie bufora karty",
-          "verify": "Weryfikacja", "unzip": "Rozpakowywanie", "done": "Gotowe"}
+          "verify": "Weryfikacja", "unzip": "Rozpakowywanie", "done": "Gotowe",
+          "backup": "Zrzut DATA", "restore": "Przywracanie DATA"}
 
 
 def _gb(n):
@@ -489,10 +490,15 @@ class App:
         self.keep_data = tk.BooleanVar(value=True)
         self.keep_box = ttk.Checkbutton(keep, variable=self.keep_data, text="")
         self.keep_box.pack(side="left")
-        ttk.Button(keep, text=t("Przywróć DATA na kartę…"), command=self.restore_data).pack(side="right")
         self.own_btn = ttk.Button(keep, text=t("Własna kopia DATA…"), command=self.choose_copy)
-        self.own_btn.pack(side="right", padx=(0, 6))
-        ttk.Button(keep, text=t("Kopia DATA na komputer…"), command=self.backup_data).pack(side="right", padx=(0, 6))
+        self.own_btn.pack(side="right")
+        # The card in the reader: its settings saved and put back, also each system's own
+        tools = ttk.Frame(out)
+        tools.grid(row=2, column=0, columnspan=4, sticky="we", padx=8, pady=(0, 6))
+        ttk.Label(tools, text=t("Ustawienia na karcie w czytniku:"), foreground=HINT).pack(side="left")
+        ttk.Button(tools, text=t("Przywróć DATA na kartę…"), command=self.restore_data).pack(side="right")
+        ttk.Button(tools, text=t("Kopia DATA na komputer…"), command=self.backup_data).pack(side="right", padx=(0, 6))
+        ttk.Button(tools, text=t("DATA każdego systemu…"), command=self.card_data).pack(side="right", padx=(0, 6))
 
         self.status = tk.StringVar(value=t("Dodaj obraz karty systemu (.img, .img.zip lub .img.xz), np. OpenX6X00."))
         foot = ttk.Frame(top, style="Card.TFrame", padding=(12, 8))
@@ -928,6 +934,47 @@ class App:
         messagebox.showinfo(APP, t("Przywrócono {n} plików na {vol}. Wysuń kartę bezpiecznie i włóż ją do radia.",
                                    n=n, vol=self.data_vol))
 
+    def card_data(self):
+        """Each system's own DATA on the card in the reader: saved and put back one by one"""
+        if self.busy:
+            return
+        idx = self.card_box.current()
+        if idx < 0 or idx >= len(self.cards):
+            messagebox.showwarning(APP, t("Nie wybrano karty SD."))
+            return
+        CardDataDialog(self, self.cards[idx])
+
+    def _card_request(self, req, progress=None):
+        """A cardata request: here when the app may read the card itself, else through the helper
+        with administrator rights"""
+        from . import cardata
+        if devices.is_admin() or devices.MAC or os.path.isfile(req["dev"]):
+            return cardata.run(req, progress)
+        tmp = tempfile.mkdtemp(prefix="x6100mb-")
+        try:
+            os.chmod(tmp, 0o777)
+            rq, rs = os.path.join(tmp, "request.json"), os.path.join(tmp, "result.json")
+            with open(rq, "w") as f:
+                json.dump(req, f)
+            os.chmod(rq, 0o666)
+            proc = devices.run_elevated(["card-data", rq, rs])
+            started = time.time()
+            while not os.path.exists(rs):
+                time.sleep(0.3)
+                if proc is not None and proc.poll() is not None:
+                    time.sleep(0.5)
+                    if not os.path.exists(rs):
+                        raise RuntimeError(t("Odczyt karty przerwany (odmowa uprawnień administratora?)"))
+                if proc is None and time.time() - started > 600:
+                    raise RuntimeError(t("Odczyt karty przerwany (odmowa uprawnień administratora?)"))
+            with open(rs) as f:
+                out = json.load(f)
+            if "error" in out:
+                raise RuntimeError(out["error"])
+            return out["ok"]
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
     def _take_data(self, tmp):
         """Before the card is erased: its DATA copied aside and kept as a .zip; the files for the new card"""
 
@@ -1220,6 +1267,101 @@ class OnlineDialog:
         app.root.after(50, lambda: app._job(text, app._fetch_and_add, src, rel))
 
 
+class CardDataDialog:
+    """The systems on the card in the reader, each with its own DATA: Save (a .zip on the computer)
+    and Restore (from a .zip), one system at a time, whichever of them ran last"""
+
+    def __init__(self, app, card):
+        self.app, self.card = app, card
+        self.win = tk.Toplevel(app.root)
+        self.win.title(t("DATA każdego systemu"))
+        self.win.transient(app.root)
+        self.box = ttk.Frame(self.win)
+        self.box.pack(fill="both", expand=True, padx=14, pady=12)
+        ttk.Label(self.box, text=t("Karta: {card}", card="%s  %s  (%s)" % (card["name"], _gb(card["size"]), card["path"])),
+                  font=_font(12, "bold")).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
+        self.note = ttk.Label(self.box, text=t("Czytam kartę…"), foreground=HINT, wraplength=620, justify="left")
+        self.note.grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        threading.Thread(target=self._scan, daemon=True).start()
+
+    def _scan(self):
+        try:
+            areas, err = self.app._card_request({"op": "scan", "dev": self.card["path"]})["areas"], None
+        except Exception as e:
+            backup.log_error("card-data scan")
+            areas, err = [], str(e)
+        self.app.q.put(("call", self._scanned, areas, err))
+
+    def _scanned(self, areas, err):
+        try:
+            if not self.win.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if err:
+            self.note.configure(text=t("Nie da się odczytać karty: {e}", e=err))
+            return
+        self.note.configure(text=t("Każdy wiersz to osobna DATA. „Zrzuć” zapisuje ją do pliku .zip, „Przywróć” "
+                                   "zastępuje jej zawartość plikami z wybranej kopii.") if len(areas) > 1 else
+                            t("Ta karta ma jedną, wspólną DATA dla wszystkich systemów."))
+        for r, a in enumerate(areas):
+            who = "  ·  ".join("%s %s" % (k, n) for k, n in zip(a["keys"], a["names"]))
+            ttk.Label(self.box, text=who, font=_font(11, "bold")).grid(row=2 + 2 * r, column=0, sticky="w", padx=(0, 16))
+            ttk.Label(self.box, text="%d MB%s" % (a["sectors"] * 512 // 2**20, "  ·  " + t("ostatnio uruchomiony")
+                                                  if a["active"] and len(areas) > 1 else ""),
+                      foreground=HINT).grid(row=3 + 2 * r, column=0, sticky="w", pady=(0, 8))
+            ttk.Button(self.box, text=t("Zrzuć…"), command=lambda a=a: self.dump(a)).grid(
+                row=2 + 2 * r, column=1, rowspan=2, padx=(0, 6))
+            ttk.Button(self.box, text=t("Przywróć…"), command=lambda a=a: self.restore(a)).grid(
+                row=2 + 2 * r, column=2, rowspan=2)
+
+    def _label(self, a):
+        return " + ".join(a["names"])
+
+    def dump(self, a):
+        if self.app.busy:
+            return
+        os.makedirs(backup.backups_dir(), exist_ok=True)
+        name = "DATA-%s-%s-%s.zip" % (a["keys"][0], "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in a["names"][0]),
+                                      time.strftime("%Y-%m-%d_%H-%M"))
+        path = filedialog.asksaveasfilename(parent=self.win, title=t("Zrzut DATA: {name}", name=self._label(a)),
+                                            initialdir=backup.backups_dir(), initialfile=name, defaultextension=".zip",
+                                            **({} if devices.MAC else {"filetypes": [(t("Kopie DATA"), "*.zip")]}))
+        if not path:
+            return
+        app, dev = self.app, self.card["path"]
+
+        def job():
+            n = app._card_request({"op": "dump", "dev": dev, "area": a, "zip": path}, app._progress_cb)["files"]
+            return ("msg", t("DATA systemu {name}: {n} plików zapisanych w\n{path}", name=self._label(a), n=n, path=path))
+        app._job(t("Zrzut DATA: {name}", name=self._label(a)), job)
+
+    def restore(self, a):
+        if self.app.busy:
+            return
+        start = backup.backups_dir() if os.path.isdir(backup.backups_dir()) else os.path.expanduser("~")
+        path = filedialog.askopenfilename(parent=self.win, title=t("Kopia DATA dla: {name}", name=self._label(a)),
+                                          initialdir=start, **_filetypes([(t("Kopie DATA"), "*.zip")]))
+        if not path:
+            return
+        if not messagebox.askyesno(APP, t("Przywrócić DATA systemu {name} z {zip}?\n\nObecna zawartość tej DATA "
+                                          "zostanie zastąpiona.", name=self._label(a), zip=os.path.basename(path)),
+                                   icon="warning", parent=self.win):
+            return
+        app, dev = self.app, self.card["path"]
+
+        def job():
+            # Windows keeps the DATA it shows as a drive to itself: that one through the drive
+            vols = backup.find_data_volumes() if devices.WIN and a["active"] else []
+            if vols:
+                n = backup.restore_zip(path, vols[0]["path"])
+            else:
+                n = app._card_request({"op": "restore", "dev": dev, "area": a, "zip": path}, app._progress_cb)["files"]
+            return ("msg", t("DATA systemu {name}: przywrócono {n} plików. Wysuń kartę bezpiecznie i włóż ją do radia.",
+                             name=self._label(a), n=n))
+        app._job(t("Przywracanie DATA: {name}", name=self._label(a)), job)
+
+
 def _filetypes(types):
     """Tk on macOS crashes on some file filters (patterns with two dots, '*'): none there"""
     if devices.MAC:
@@ -1332,7 +1474,7 @@ def _fit_screen(root):
     root.update_idletasks()
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
     w = min(max(root.winfo_reqwidth(), 1120), sw - 40)
-    h = min(940, sh - 110)                  # room for the title bar and the taskbar
+    h = min(1000, sh - 110)                 # room for the title bar and the taskbar
     root.geometry("%dx%d+%d+%d" % (w, h, max((sw - w) // 2, 0), max((sh - 80 - h) // 2, 0)))
 
 

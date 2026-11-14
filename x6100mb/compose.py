@@ -421,6 +421,16 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         for i in range(len(entries)):
             fat.add_file("MENU/SEL%d.BMP" % (i + 1),
                          menu_gfx.to_framebuffer_bmp(menu_gfx.render_menu(tiles, None if wait else default, selected=i)))
+    # What is on the card and where each system's DATA lies: for the app, to save and put back
+    # one system's DATA (cardata.py)
+    import json
+    systems = []
+    for i, e in enumerate(entries):
+        if e["kind"] != "sd":
+            continue
+        at = data_areas[owners.index(owner(e))] if n_data > 1 else data_areas[0]
+        systems.append({"key": KEYS[i][0], "name": e["name"], "data_lba": at, "data_sectors": data_sectors})
+    fat.add_file("MENU/CARD.JSON", json.dumps({"data_mode": data_mode, "systems": systems}, indent=1).encode())
     fat.add_file("boot.scr", make_script_image(script))
     fat.add_file("boot.cmd", script.encode())
     fat.add_file("bootmenu.env", env_file(default, timeout_s, xiegu, wait))
