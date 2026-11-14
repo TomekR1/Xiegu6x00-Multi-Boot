@@ -29,20 +29,23 @@ def app_version():
     except (OSError, ValueError):
         return ""
 AUTHOR_URL = "https://www.qrz.com/db/SQ6RT"
-HEAD_BG, HEAD_FG, HEAD_SUB, LINK = "#0f2742", "#ffffff", "#a9bcd3", "#8fc3ff"
+LINE, SOFT, ACCENT_HOVER, BORDER = "#e5e7eb", "#f0f1f3", "#1d4ed8", "#cfd4dc"
 # Colours of the light and the dark theme; _apply_colours() sets the module's names from one
 THEMES = {
-    "light": {"HINT": "#5b6573", "ACCENT": "#0067c0", "BADGE_FG": "#ffffff", "PAGE_BG": "#fafafa",
-              "TEXT_FG": "#1c1c1c", "WARN": "#b45309", "H1": "#c62828", "H2": "#0f2742", "TREE_BG": (255, 255, 255)},
-    "dark": {"HINT": "#9aa3ad", "ACCENT": "#57c8ff", "BADGE_FG": "#0b1a2a", "PAGE_BG": "#1c1c1c",
-             "TEXT_FG": "#e6e6e6", "WARN": "#ffb454", "H1": "#ff6b6b", "H2": "#8fc3ff", "TREE_BG": (28, 28, 28)},
+    "light": {"HINT": "#6b7280", "ACCENT": "#2563eb", "ACCENT_HOVER": "#1d4ed8", "BADGE_FG": "#ffffff",
+              "PAGE_BG": "#fafafa", "TEXT_FG": "#111827", "LINE": "#e5e7eb", "SOFT": "#f0f1f3", "BORDER": "#cfd4dc",
+              "WARN": "#b45309", "H1": "#111827", "H2": "#111827", "TREE_BG": (255, 255, 255),
+              "RED": "#dc2626", "GREEN": "#16a34a"},
+    "dark": {"HINT": "#9ca3af", "ACCENT": "#60a5fa", "ACCENT_HOVER": "#93c5fd", "BADGE_FG": "#0b1220",
+             "PAGE_BG": "#1c1c1c", "TEXT_FG": "#e5e7eb", "LINE": "#33363b", "SOFT": "#26282c", "BORDER": "#474b52",
+             "WARN": "#f59e0b", "H1": "#e5e7eb", "H2": "#e5e7eb", "TREE_BG": (28, 28, 28),
+             "RED": "#f87171", "GREEN": "#4ade80"},
 }
 THEME_NAMES = {"light": "Jasny", "dark": "Ciemny"}
 HINT = "#5b6573"
 BADGE_FG, H1, H2, TREE_BG = "#ffffff", "#c62828", "#0f2742", (255, 255, 255)
 SCREEN_W, SCREEN_H = 640, 384          # the radio's 800x480 to start with; it grows with the window
-RED, RED_HOVER = "#d32f2f", "#ef4444"
-GREEN = "#1e8e3e"
+RED, GREEN = "#dc2626", "#16a34a"
 ACCENT = "#0067c0"
 PAGE_BG, TEXT_FG, WARN = "#fafafa", "#1c1c1c", "#b45309"
 
@@ -65,24 +68,43 @@ def _gb(n):
 
 
 # Colours of the app's own buttons: (normal, under the pointer)
-BTN = {
-    "blue": ("#1f6fd1", "#3a86e8"), "teal": ("#0f8b8d", "#17a7aa"), "orange": ("#d9822b", "#eb9845"),
-    "doom": ("#8e1b1b", "#ad2626"), "green": ("#2e9d4f", "#39b95f"), "slate": ("#55707d", "#68848f"),
-    "red": ("#d32f2f", "#ef4444"),
-}
+# Flat buttons of three kinds: the one main action (filled with the accent), the others (outlined,
+# quiet) and a warning one (outlined, red text). The colour names used across the app map to them.
+BTN = {"green": "primary", "primary": "primary", "red": "danger", "danger": "danger"}
+
+
+def _kind(colour):
+    return BTN.get(colour, "secondary")
+
+
+def _round_rect(c, x0, y0, x1, y1, r, fill, outline=None):
+    """A rounded rectangle on canvas c from straight parts and quarter circles: crisp edges (a smoothed
+    polygon wobbles along its long sides)"""
+    d = 2 * r
+    for (ax, ay), start in (((x0, y0), 90), ((x1 - d, y0), 0), ((x1 - d, y1 - d), 270), ((x0, y1 - d), 180)):
+        c.create_arc(ax, ay, ax + d, ay + d, start=start, extent=90, style="pieslice", fill=fill, outline=fill)
+    c.create_rectangle(x0 + r, y0, x1 - r, y1, fill=fill, outline=fill)
+    c.create_rectangle(x0, y0 + r, x1, y1 - r, fill=fill, outline=fill)
+    if outline and outline != fill:
+        for (ax, ay), start in (((x0, y0), 90), ((x1 - d, y0), 0), ((x1 - d, y1 - d), 270), ((x0, y1 - d), 180)):
+            c.create_arc(ax, ay, ax + d, ay + d, start=start, extent=90, style="arc", outline=outline)
+        c.create_line(x0 + r, y0, x1 - r + 1, y0, fill=outline)
+        c.create_line(x0 + r, y1, x1 - r + 1, y1, fill=outline)
+        c.create_line(x0, y0 + r, x0, y1 - r + 1, fill=outline)
+        c.create_line(x1, y0 + r, x1, y1 - r + 1, fill=outline)
 
 
 class ColorButton(tk.Canvas):
-    """A rounded coloured button that looks the same on Windows, macOS and Linux (themed buttons take
-    no colour on every system); state(["disabled"]) and state(["!disabled"]) as a ttk button"""
+    """A flat button that looks the same on Windows, macOS and Linux: the main action filled with
+    the accent, the others outlined; state(["disabled"]) and state(["!disabled"]) as a ttk button"""
 
-    def __init__(self, parent, text, colour, command, image=None, font=None, padx=18, pady=11, radius=12,
+    def __init__(self, parent, text, colour, command, image=None, font=None, padx=16, pady=9, radius=6,
                  width=None):
         import tkinter.font as tkfont
-        self._c, self._h = BTN[colour]
+        self._kind = _kind(colour)
         self._cmd, self._on, self._hover = command, True, False
         self._text, self._image, self._r = text, image, radius
-        self._font = font or _font(11, "bold")
+        self._font = font or _font(11, "bold" if self._kind == "primary" else "normal")
         f = tkfont.Font(font=self._font)
         tw, th = f.measure(text), f.metrics("linespace")
         iw = image.width() + 10 if image is not None else 0
@@ -100,24 +122,31 @@ class ColorButton(tk.Canvas):
         self._hover = on
         self._draw()
 
+    def _colours(self):
+        """(fill, outline, text) for the kind, the state and the hover"""
+        if not self._on:
+            return (SOFT, LINE, HINT) if self._kind != "primary" else (LINE, LINE, HINT)
+        if self._kind == "primary":
+            return (ACCENT_HOVER if self._hover else ACCENT,) * 2 + (BADGE_FG,)
+        return (SOFT if self._hover else PAGE_BG, BORDER if not self._hover else HINT,
+                RED if self._kind == "danger" else TEXT_FG)
+
     def _draw(self):
         self.delete("all")
+        self.configure(bg=PAGE_BG)
         w, h = max(self.winfo_width(), int(self["width"])), max(self.winfo_height(), int(self["height"]))
         if self.winfo_ismapped():
             w, h = self.winfo_width(), self.winfo_height()
-        r = min(self._r, h // 2)
-        fill = (self._h if self._hover else self._c) if self._on else "#a7adb3"
-        pts = [r, 0, w - r, 0, w, 0, w, r, w, h - r, w, h, w - r, h, r, h, 0, h, 0, h - r, 0, r, 0, 0]
-        self.create_polygon(pts, smooth=True, fill=fill, outline="")
+        fill, outline, fg = self._colours()
+        _round_rect(self, 0, 0, w - 1, h - 1, min(self._r, h // 2), fill, outline)
         if self._image is not None:
             import tkinter.font as tkfont
             tw = tkfont.Font(font=self._font).measure(self._text)
-            x0 = (w - (self._image.width() + 10 + tw)) // 2
-            self.create_image(x0, h // 2, image=self._image, anchor="w")
-            self.create_text(x0 + self._image.width() + 10, h // 2, text=self._text, fill="#ffffff",
-                             font=self._font, anchor="w")
+            x = (w - (self._image.width() + 10 + tw)) // 2
+            self.create_image(x, h // 2, image=self._image, anchor="w")
+            self.create_text(x + self._image.width() + 10, h // 2, text=self._text, fill=fg, font=self._font, anchor="w")
         else:
-            self.create_text(w // 2, h // 2, text=self._text, fill="#ffffff", font=self._font)
+            self.create_text(w // 2, h // 2, text=self._text, fill=fg, font=self._font)
 
     def state(self, flags):
         on = "!disabled" in flags
@@ -133,7 +162,7 @@ class BigBar(tk.Canvas):
     def __init__(self, parent, width=520, height=24):
         super().__init__(parent, width=width, height=height, highlightthickness=0, bd=0, bg=PAGE_BG)
         self.w, self.h, self.frac, self.run, self.pos = width, height, 0.0, False, 0.0
-        self.colour = "#2e9d4f"
+        self.colour = ACCENT
         self.bind("<Configure>", self._resized)
         self._draw()
 
@@ -146,13 +175,11 @@ class BigBar(tk.Canvas):
         h, r = self.h, self.h // 2
         if x1 - x0 < 2 * r:
             x1 = x0 + 2 * r
-        pts = [x0 + r, 0, x1 - r, 0, x1, 0, x1, r, x1, h - r, x1, h, x1 - r, h, x0 + r, h, x0, h, x0, h - r,
-               x0, r, x0, 0]
-        self.create_polygon(pts, smooth=True, fill=fill, outline="")
+        _round_rect(self, x0, 0, x1 - 1, h - 1, r, fill)
 
     def _draw(self):
         self.delete("all")
-        self._round(0, self.w, "#d7dde3" if PAGE_BG.lower() > "#888888" else "#3a3f45")
+        self._round(0, self.w, LINE)
         if self.run:
             x0 = (self.w + 160) * self.pos - 160
             self._round(max(0, x0), min(self.w, x0 + 160), ACCENT)
@@ -188,16 +215,16 @@ class ProgressPanel(ttk.Frame):
     the last result or a hint what to do next."""
 
     def __init__(self, parent, status):
-        super().__init__(parent, style="Card.TFrame", padding=(16, 8))
+        super().__init__(parent, padding=(4, 10, 4, 4))
         self.status = status                       # the app's status line (a StringVar), shown at rest
-        top = ttk.Frame(self, style="Card.TFrame")
+        top = ttk.Frame(self)
         top.pack(fill="x")
-        self.title = ttk.Label(top, text="", font=_font(13, "bold"))
+        self.title = ttk.Label(top, text="", font=_font(12, "bold"))
         self.title.pack(side="left")
-        self.pct = ttk.Label(top, text="", font=_font(16, "bold"), foreground=ACCENT)
+        self.pct = ttk.Label(top, text="", font=_font(12, "bold"), foreground=ACCENT)
         self.pct.pack(side="right")
-        self.bar = BigBar(self, width=600, height=18)          # shown while a job runs
-        low = self.low = ttk.Frame(self, style="Card.TFrame")
+        self.bar = BigBar(self, width=600, height=8)           # shown while a job runs
+        low = self.low = ttk.Frame(self)
         low.pack(fill="x", pady=(2, 0))
         self.skip = ttk.Button(low, text=t("Pomiń sprawdzanie karty"), command=self._skip)
         self.detail = ttk.Label(low, textvariable=status, foreground=HINT, wraplength=900, justify="left")
@@ -223,7 +250,7 @@ class ProgressPanel(ttk.Frame):
         self.title.configure(text=text, foreground=TEXT_FG)
         self.pct.configure(text="")
         self.status.set(t("Łączenie…") if "download" in self.steps else t("Pracuję…"))
-        self.bar.colour = "#2e9d4f"
+        self.bar.colour = ACCENT
         self.bar.pack(fill="x", pady=(6, 4), before=self.low)
         self.bar.moving()
         self.moving = True
@@ -292,10 +319,12 @@ class App:
         # What the app is doing: docked at the bottom of the window, outside what scrolls
         self.status = tk.StringVar(value=t("Zacznij od „+ Z internetu…”: wybierz system, a aplikacja sama go pobierze."))
         self.panel = ProgressPanel(self.root, self.status)
-        self.panel.pack(side="bottom", fill="x", padx=10, pady=(0, 10))
+        self.panel.pack(side="bottom", fill="x", padx=24, pady=(0, 10))
+        self._panel_line = tk.Frame(self.root, bg=LINE, height=1)
+        self._panel_line.pack(side="bottom", fill="x")
         self.top = ttk.Frame(self.root)
-        self.top.pack(fill="both", expand=True, padx=10, pady=(0, 8))
-        self._scroll = tk.Canvas(self.top, highlightthickness=0, bg=PAGE_BG, width=900, height=400)
+        self.top.pack(fill="both", expand=True, padx=14, pady=(4, 6))
+        self._scroll = tk.Canvas(self.top, highlightthickness=0, bg=PAGE_BG, width=300, height=300)
         self._sbar = ttk.Scrollbar(self.top, orient="vertical", command=self._scroll.yview)
         self._scroll.configure(yscrollcommand=self._sbar.set)
         self._scroll.pack(side="left", fill="both", expand=True)
@@ -327,18 +356,25 @@ class App:
             b.rowconfigure(i, weight=0)
         if wide:
             self.colA.grid(row=0, column=0, sticky="nsew")
-            self.colB.grid(row=0, column=1, sticky="new", padx=(12, 0))
+            self.colB.grid(row=0, column=1, sticky="new", padx=(28, 6))
             b.columnconfigure(0, weight=1)
             b.rowconfigure(0, weight=1)
         else:
             self.colA.grid(row=0, column=0, sticky="nsew")
-            self.colB.grid(row=1, column=0, sticky="new")
+            self.colB.grid(row=1, column=0, sticky="new", padx=(0, 6))
             b.columnconfigure(0, weight=1)
             b.rowconfigure(0, weight=1)
 
+    def _left_min(self):
+        """The narrowest the radio's screen with its tools under it may be"""
+        return max(SCREEN_W * 5 // 8, self._tools.winfo_reqwidth())
+
     def _wide_width(self):
-        """The window's inner width from which both columns fit side by side"""
-        return self.colA.winfo_reqwidth() + self.colB.winfo_reqwidth() + 12
+        """The window's inner width from which both columns fit side by side: the left one at its
+        smallest (the radio's screen at its smallest and the buttons beside it; not what it asks now,
+        which grows with the screen and would keep the window in one column), the right one whole"""
+        left = self._left_min() + self._btns.winfo_reqwidth() + 16
+        return left + self.colB.winfo_reqwidth() + 34
 
     def _fit_body(self):
         """The body as wide as the window and at least as high; lower than its contents: scrolling.
@@ -357,7 +393,7 @@ class App:
             c.configure(scrollregion=(0, 0, size[0], size[1]))
         scroll = need > h + 1
         if scroll and not self._sbar.winfo_ismapped():
-            self._sbar.pack(side="right", fill="y")
+            self._sbar.pack(side="right", fill="y", before=self._scroll)     # its room first, then the page
         elif not scroll and self._sbar.winfo_ismapped():
             self._sbar.pack_forget()
             c.yview_moveto(0)
@@ -399,6 +435,7 @@ class App:
         card = self.card_box.current()
         self.top.destroy()
         self.panel.destroy()
+        self._panel_line.destroy()
         self._head.destroy()
         self._build_all(keep)
         for k, v in xiegu.items():
@@ -411,25 +448,19 @@ class App:
     def _build(self, top):
         pad = {"padx": 8, "pady": 4}
 
-        head = tk.Frame(self.root, bg=HEAD_BG)
+        head = tk.Frame(self.root, bg=PAGE_BG)
         head.pack(fill="x", before=self.top)
         self._head = head
-        inner = tk.Frame(head, bg=HEAD_BG)
-        inner.pack(fill="x", padx=16, pady=6)
-        icon = _icon_image(self.root, 48)
+        inner = tk.Frame(head, bg=PAGE_BG)
+        inner.pack(fill="x", padx=24, pady=(14, 12))
+        icon = _icon_image(self.root, 40)
         if icon is not None:
-            tk.Label(inner, image=icon, bg=HEAD_BG).pack(side="left", padx=(0, 12))
-        titles = tk.Frame(inner, bg=HEAD_BG)
-        titles.pack(side="left", fill="x", expand=True)
-        tk.Label(titles, text=APP + (" " + app_version() if app_version() else ""), bg=HEAD_BG, fg=HEAD_FG, font=_font(18, "bold")).pack(anchor="w")
-        tk.Label(titles, text=t("Kilka systemów na jednej karcie SD dla Xiegu X6100: przy włączaniu radia menu na "
-                                "ekranie, wybór klawiszem F1–F5."), bg=HEAD_BG, fg=HEAD_SUB,
-                 font=_font(10), wraplength=560, justify="left").pack(anchor="w")
-        side = tk.Frame(inner, bg=HEAD_BG)
-        side.pack(side="right", anchor="n")
+            tk.Label(inner, image=icon, bg=PAGE_BG).pack(side="left", padx=(0, 12))
+        side = tk.Frame(inner, bg=PAGE_BG)
+        side.pack(side="right", anchor="center")
         self.lang_var = tk.StringVar(value=i18n.LANGS[i18n.lang()])
-        pick = tk.Frame(side, bg=HEAD_BG)
-        pick.pack(anchor="e")
+        pick = tk.Frame(side, bg=PAGE_BG)
+        pick.pack(side="top", anchor="e")
         langs = ttk.Combobox(pick, textvariable=self.lang_var, values=list(i18n.LANGS.values()),
                              state="readonly", width=8)
         langs.pack(side="right")
@@ -441,11 +472,28 @@ class App:
         themes.pack(side="right", padx=(0, 8))
         themes.bind("<<ComboboxSelected>>", lambda e: self.switch_theme(
             next(k for k, v in THEME_NAMES.items() if t(v) == self.theme_var.get())))
-        author = tk.Label(side, text=t("aplikacja: SQ6RT"), bg=HEAD_BG, fg=LINK, cursor="hand2",
-                          font=_font(10, "underline"))
-        author.pack(anchor="e", pady=(6, 0))
+        author = tk.Label(side, text=t("aplikacja: SQ6RT"), bg=PAGE_BG, fg=HINT, cursor="hand2", font=_font(10))
+        author.pack(side="bottom", anchor="e", pady=(6, 0))
         author.bind("<Button-1>", lambda e: webbrowser.open(AUTHOR_URL))
-        tk.Frame(head, bg=ACCENT, height=3).pack(fill="x", side="bottom")
+        author.bind("<Enter>", lambda e: author.configure(fg=ACCENT))
+        author.bind("<Leave>", lambda e: author.configure(fg=HINT))
+        titles = tk.Frame(inner, bg=PAGE_BG)
+        titles.pack(side="left", fill="x", expand=True)
+        name = tk.Frame(titles, bg=PAGE_BG)
+        name.pack(anchor="w")
+        tk.Label(name, text=APP, bg=PAGE_BG, fg=TEXT_FG, font=_font(16, "bold")).pack(side="left")
+        if app_version():
+            tk.Label(name, text=app_version(), bg=PAGE_BG, fg=HINT, font=_font(11)).pack(side="left", padx=(8, 0), pady=(4, 0))
+        tk.Label(titles, text=t("Kilka systemów na jednej karcie SD dla Xiegu X6100: przy włączaniu radia menu na "
+                                "ekranie, wybór klawiszem F1–F5."), bg=PAGE_BG, fg=HINT,
+                 font=_font(10), wraplength=520, justify="left").pack(anchor="w")
+        tk.Frame(head, bg=LINE, height=1).pack(fill="x", side="bottom")
+        self._subtitle = [w for w in titles.winfo_children() if isinstance(w, tk.Label)][-1]
+
+        def head_resized(ev, side=side):
+            room = ev.width - side.winfo_reqwidth() - 48 - 100
+            self._subtitle.configure(wraplength=max(220, min(620, room)))
+        head.bind("<Configure>", head_resized)
 
         # Two columns side by side on a wide window (the menu left, the settings and the writing right:
         # everything in sight), one under the other on a narrow one; _fit_body chooses
@@ -454,9 +502,10 @@ class App:
         box = self._section(self.colA, 1, t("Menu na ekranie radia"), expand=True)
         btns = ttk.Frame(box)
         btns.pack(side="right", fill="y", padx=(12, 2), pady=2)
+        self._btns = btns
         for text, cmd, colour in (("+ Z internetu…", self.add_online, "blue"), ("+ Obraz karty…", self.add_image, "teal"),
                                   ("+ Xiegu z eMMC", self.add_xiegu, "orange")):
-            ColorButton(btns, t(text), colour, cmd, width=17).pack(fill="x", pady=4)
+            ColorButton(btns, t(text), "secondary", cmd, width=17).pack(fill="x", pady=3)
         self._build_extras(btns)
         left = ttk.Frame(box)
         left.pack(side="left", fill="both", expand=True)
@@ -468,20 +517,21 @@ class App:
         self.screen.bind("<Button-1>", self._screen_click)
         self.screen.bind("<Double-1>", lambda e: (self._screen_click(e), self.rename()))
         self.info = ttk.Label(left, text="", foreground=HINT, wraplength=SCREEN_W * 5 // 8, justify="left")
-        tools = ttk.Frame(left)
-        tools.pack(side="bottom", fill="x", pady=(6, 0))
-        self.info.pack(side="bottom", anchor="w", pady=(6, 0))
+        tools = self._tools = ttk.Frame(left)
+        # the screen as wide as the room, its height from its width (5:3); its info and tools right under it
         self.screen.pack_forget()
-        self.screen.pack(side="top", fill="both", expand=True)
+        self.screen.pack(side="top", fill="x")
+        self.info.pack(side="top", anchor="w", pady=(8, 0))
+        tools.pack(side="top", fill="x", pady=(8, 0))
         self.tile_tools = []
         for text, cmd in (("←", lambda: self.move(-1)), ("→", lambda: self.move(1)),
-                          ("★  " + t("Domyślny"), self.set_default), ("✎  " + t("Zmień nazwę"), self.rename),
-                          ("▣  " + t("Logo…"), self.choose_logo)):
-            b_ = ttk.Button(tools, text=text, command=cmd, width=3 if len(text) == 1 else 0)
+                          (t("Domyślny"), self.set_default), (t("Zmień nazwę"), self.rename),
+                          (t("Logo…"), self.choose_logo)):
+            b_ = ColorButton(tools, text, "secondary", cmd, font=_font(10), padx=12 if len(text) > 1 else 10, pady=6)
             b_.pack(side="left", padx=(0, 6))
             self.tile_tools.append(b_)
-        b_ = ttk.Button(tools, text="✕  " + t("Usuń"), command=self.remove)
-        b_.pack(side="left", padx=(12, 0))
+        b_ = ColorButton(tools, t("Usuń"), "danger", self.remove, font=_font(10), padx=12, pady=6)
+        b_.pack(side="left", padx=(10, 0))
         self.tile_tools.append(b_)
         self.selected = None
 
@@ -528,7 +578,8 @@ class App:
         self.card = tk.StringVar()
         self.card_box = ttk.Combobox(out, textvariable=self.card, state="readonly", width=30)
         self.card_box.grid(row=0, column=1, sticky="we", **pad)
-        ttk.Button(out, text=t("Odśwież"), command=self.refresh_cards).grid(row=0, column=2, **pad)
+        ColorButton(out, t("Odśwież"), "secondary", self.refresh_cards, font=_font(10), padx=12, pady=6).grid(
+            row=0, column=2, **pad)
         out.columnconfigure(1, weight=1)
         # The settings of the card in the reader (its DATA partition) onto the new one
         self.keep_data = tk.BooleanVar(value=True)
@@ -540,11 +591,11 @@ class App:
             row=2, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 2))
         b = ttk.Frame(out)
         b.grid(row=3, column=0, columnspan=3, sticky="we", padx=8, pady=(6, 8))
-        self.btn_card = ColorButton(b, "⬇  " + t("Wgraj na kartę"), "green", self.write_card, font=_font(14, "bold"),
-                                    padx=26, pady=12)
+        self.btn_card = ColorButton(b, t("Wgraj na kartę"), "primary", self.write_card, font=_font(12, "bold"),
+                                    padx=24, pady=11)
         self.btn_card.pack(side="right", fill="x", expand=True, padx=(8, 0))
-        self.btn_img = ColorButton(b, t("Zapisz jako plik .img…"), "slate", self.save_image, font=_font(12, "bold"),
-                                   padx=18, pady=12)
+        self.btn_img = ColorButton(b, t("Zapisz jako plik .img…"), "secondary", self.save_image, font=_font(11),
+                                   padx=16, pady=11)
         self.btn_img.pack(side="right")
         # The settings' copies (DATA), at the very bottom: of the card in the reader, of each system
         # on it, and an own copy for the new card
@@ -554,7 +605,7 @@ class App:
                    (t("Własna kopia DATA dla nowej karty…"), "blue", self.choose_copy,
                     t("wskaż kopię (plik .zip albo folder), która trafi na nowo zapisywaną kartę")))
         for k, (text, colour, cmd, hint) in enumerate(buttons):
-            btn = ColorButton(cop, text, colour, cmd, font=_font(11, "bold"), padx=10, pady=11)
+            btn = ColorButton(cop, text, "secondary", cmd, font=_font(11), padx=10, pady=9)
             btn.grid(row=1, column=k, sticky="we", padx=(8 if k == 0 else 4, 8 if k == 1 else 4), pady=(6, 2))
             ttk.Label(cop, text=hint, foreground=HINT, wraplength=300, justify="left").grid(
                 row=2, column=k, sticky="nw", padx=(10 if k == 0 else 6, 8), pady=(0, 8))
@@ -568,15 +619,11 @@ class App:
 
 
     def _section(self, top, number, title, expand=False):
-        """A titled card: a round number badge, the title, the card the section's widgets go in"""
+        """A section: its title small and quiet in capitals, the widgets under it on the page itself"""
         row = ttk.Frame(top)
-        row.pack(fill="x", pady=(8, 3))
-        c = tk.Canvas(row, width=24, height=24, highlightthickness=0, bg=PAGE_BG)
-        c.create_oval(1, 1, 23, 23, fill=ACCENT, outline="")
-        c.create_text(12, 12, text=str(number), fill=BADGE_FG, font=_font(11, "bold"))
-        c.pack(side="left", padx=(2, 8))
-        ttk.Label(row, text=title, font=_font(13, "bold")).pack(side="left")
-        card = ttk.Frame(top, style="Card.TFrame", padding=(10, 6))
+        row.pack(fill="x", pady=(14, 4))
+        ttk.Label(row, text=title.upper(), font=_font(9, "bold"), foreground=HINT).pack(side="left", padx=(2, 0))
+        card = ttk.Frame(top, padding=(0, 2))
         card.pack(fill="both" if expand else "x", expand=expand)
         return card
 
@@ -647,13 +694,18 @@ class App:
             self.q.put(("tile", key, {"name": e["name"], "logo": None}))
 
     def _screen_resized(self, ev):
-        """The radio's 5:3 screen as large as the room allows, centred"""
-        w, h = max(ev.width, 200), max(ev.height, 120)
-        sw = min(w, h * 5 // 3)
+        """The radio's 5:3 screen as wide as the room, up to 760 px (larger it only gets blurry), as
+        high as that asks (the canvas follows), centred"""
+        w = max(ev.width, 200)
+        sw = min(w, 760)
         sh = sw * 3 // 5
+        if abs(int(self.screen["height"]) - (sh + 3)) > 1:
+            self.screen.configure(height=sh + 3)
         if (sw, sh) != (self.sw, self.sh) or (self.sox, self.soy) != ((w - sw) // 2, 0):
             self.sw, self.sh, self.sox, self.soy = sw, sh, (w - sw) // 2, 0
-            self.info.configure(wraplength=max(300, w - 10))
+            # the line under the screen no wider than the screen: a wider one would widen the column
+            # and keep the window from going to two columns
+            self.info.configure(wraplength=max(300, sw - 10))
             self._render()
 
     def _render(self):
@@ -663,7 +715,7 @@ class App:
         SCREEN_W, SCREEN_H = self.sw, self.sh
         sx, sy = SCREEN_W / menu_gfx.W, SCREEN_H / menu_gfx.H
         c.create_rectangle(self.sox - 2, self.soy, self.sox + SCREEN_W + 1, self.soy + SCREEN_H + 2,
-                           fill="#000000", outline="#3a3a3a", width=2)
+                           fill="#000000", outline=LINE, width=1)
         if menu_gfx.HAVE_PIL:
             from PIL import Image
             img = menu_gfx.render_menu([self._tile(e) for e in self.entries],
@@ -759,21 +811,18 @@ class App:
 
     def _build_extras(self, col):
         """Extras: Doom, the easter egg (a tile of its own, not among the systems to fetch)"""
-        ttk.Separator(col).pack(fill="x", pady=(10, 6))
-        ttk.Label(col, text="★  Extras", font=_font(11, "bold")).pack(anchor="w", pady=(0, 4))
+        ttk.Label(col, text="EXTRAS", font=_font(9, "bold"), foreground=HINT).pack(anchor="w", pady=(14, 4))
         self._doom_img = None
         try:
             from . import menu_gfx
             if menu_gfx.HAVE_PIL:
-                c = BTN["doom"][0]
+                c = PAGE_BG
                 self._doom_img = self._photo(menu_gfx.load_logo(
-                    DOOM_LOGO, size=40, bg=tuple(int(c[k:k + 2], 16) for k in (1, 3, 5))))
+                    DOOM_LOGO, size=28, bg=tuple(int(c[k:k + 2], 16) for k in (1, 3, 5))))
         except Exception:
             self._doom_img = None
-        ColorButton(col, "+ Doom", "doom", self.add_doom, image=self._doom_img, font=_font(13, "bold"),
-                    pady=6).pack(fill="x")
-        ColorButton(col, "⚠  " + t("Przeczytaj najpierw"), "red", self.doom_readme,
-                    font=_font(12, "bold")).pack(fill="x", pady=(8, 0))
+        ColorButton(col, "+ Doom", "secondary", self.add_doom, image=self._doom_img, pady=5).pack(fill="x")
+        ColorButton(col, t("Przeczytaj najpierw"), "danger", self.doom_readme).pack(fill="x", pady=(6, 0))
 
     def add_doom(self):
         if any(e["kind"] == "doom" for e in self.entries):
@@ -1572,10 +1621,9 @@ class CopyPicker:
         ttk.Label(f, text=note, foreground=HINT, wraplength=600, justify="left").pack(anchor="w", pady=(4, 10))
         row = ttk.Frame(f)
         row.pack(fill="x")
-        ColorButton(row, t("Wybierz plik .zip…"), "blue", lambda: self.pick("zip"), font=_font(11, "bold"),
-                    padx=14, pady=9).pack(side="left")
-        ColorButton(row, t("Wybierz folder z plikami…"), "teal", lambda: self.pick("dir"), font=_font(11, "bold"),
-                    padx=14, pady=9).pack(side="left", padx=(8, 0))
+        ColorButton(row, t("Wybierz plik .zip…"), "secondary", lambda: self.pick("zip"), padx=14, pady=8).pack(side="left")
+        ColorButton(row, t("Wybierz folder z plikami…"), "secondary", lambda: self.pick("dir"), padx=14,
+                    pady=8).pack(side="left", padx=(8, 0))
         box = ttk.Frame(f, style="Card.TFrame", padding=(12, 10))
         box.pack(fill="x", pady=(12, 12))
         ttk.Label(box, text=t("Wybrana kopia:"), foreground=HINT).pack(anchor="w")
@@ -1755,6 +1803,7 @@ def _theme(root):
     st.configure("Big.Accent.TButton", font=_font(12, "bold"), padding=(22, 8))
     st.configure("Big.TButton", padding=(16, 8))
     st.configure("TLabelframe.Label", font=_font(11, "bold"))
+    st.configure("Card.TFrame", background=PAGE_BG, borderwidth=0, relief="flat")
     root.configure(bg=PAGE_BG)
 
 
@@ -1778,8 +1827,9 @@ def _fit_screen(root, app=None):
     if app is None:
         w, h = min(max(root.winfo_reqwidth(), 1120), sw - 40), min(1040, sh - 110)
     else:
-        pad = 44                                   # the margins and the scrollbar
-        wide, narrow = app._wide_width() + pad, max(app.colA.winfo_reqwidth(), app.colB.winfo_reqwidth()) + pad
+        pad = 64                                   # the margins and the scrollbar
+        wide = app._wide_width() + pad
+        narrow = max(app._left_min() + app._btns.winfo_reqwidth() + 16, app.colB.winfo_reqwidth()) + pad
         is_wide = wide <= sw - 60
         w = min(wide if is_wide else narrow, sw - 40)
         root.geometry("%dx%d" % (w, min(700, sh - 110)))        # the width first: it decides the columns
