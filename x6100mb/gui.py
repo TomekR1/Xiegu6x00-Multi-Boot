@@ -650,15 +650,22 @@ class App:
         if hasattr(self, "btn_card"):
             self._actions()
 
+    def _donor(self):
+        """The entry whose kernel Doom and the NES emulator start with (the first system from an image
+        with its kernel on BOOT; not IU1WXY 0.2.2+, whose kernel is in its A/B slots), or None"""
+        from .compose import kernel_donor
+        s = kernel_donor(self.entries)
+        return next((x for x in self.entries if x.get("sys") is s), None) if s is not None else None
+
     def _entry_info(self, e):
         if e["kind"] == "xiegu":
             return t("system Xiegu z pamięci wewnętrznej radia (nic tam nie jest zmieniane)")
         if e["kind"] == "doom":
-            donor = next((x for x in self.entries if x["kind"] == "sd"), None)
+            donor = self._donor()
             return (t("klasyczny Doom (Freedoom); jądro i parowania Bluetooth z: {name}", name=donor["name"])
                     if donor else t("klasyczny Doom (Freedoom), z jądrem pierwszego systemu z obrazu na liście"))
         if e["kind"] == "nes":
-            donor = next((x for x in self.entries if x["kind"] == "sd"), None)
+            donor = self._donor()
             games = len(e.get("games", []))
             text = (t("emulator NES; jądro i Bluetooth z: {name}", name=donor["name"]) if donor
                     else t("emulator NES, z jądrem pierwszego systemu z obrazu na liście"))
@@ -842,7 +849,7 @@ class App:
         if len(self.entries) >= MAX_ENTRIES:
             messagebox.showwarning(APP, t("Menu ma najwyżej {n} pozycji (F1–F{n}).", n=MAX_ENTRIES))
             return
-        if not any(e["kind"] == "sd" for e in self.entries):
+        if self._donor() is None:
             messagebox.showinfo(APP, t("Emulator NES uruchamia się z jądrem systemu z obrazu (np. OpenX6X00). "
                                        "Dodaj najpierw taki system, potem emulator."))
             return
@@ -869,7 +876,7 @@ class App:
         if len(self.entries) >= MAX_ENTRIES:
             messagebox.showwarning(APP, t("Menu ma najwyżej {n} pozycji (F1–F{n}).", n=MAX_ENTRIES))
             return
-        if not any(e["kind"] == "sd" for e in self.entries):
+        if self._donor() is None:
             messagebox.showinfo(APP, t("Doom uruchamia się z jądrem systemu z obrazu (np. OpenX6X00). "
                                        "Dodaj najpierw taki system, potem Dooma."))
             return

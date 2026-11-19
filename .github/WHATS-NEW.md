@@ -1,7 +1,7 @@
+- IU1WXY 0.2.2+ działa na każdym miejscu w menu (wcześniej, poza F1, startował zamiast niego pierwszy system).
+- Doom i emulator NES biorą jądro z pierwszego systemu, który je ma (np. OpenX6X00), więc IU1WXY może być pod F1.
 - Własne repozytorium GitHub jako źródło systemów: **+ Z internetu…** → na dole „Zaawansowane”.
-- Nowe obrazy IU1WXY 0.2.2+ (partycje A/B) działają w menu. Dziękuję, Leo de Blaauw!
-- macOS: naprawiony błąd „main thread is not in main loop” przy zapisie karty.
 ---
+- IU1WXY 0.2.2+ works in any place in the menu (before, unless it was F1, the first system started instead).
+- Doom and the NES emulator take the kernel of the first system that has one (e.g. OpenX6X00), so IU1WXY can be F1.
 - Your own GitHub repository as a source of systems: **+ From the internet…** → "Advanced" at the bottom.
-- The new IU1WXY 0.2.2+ images (A/B partitions) work in the menu. Thank you, Leo de Blaauw!
-- macOS: fixed the "main thread is not in main loop" error when writing a card.

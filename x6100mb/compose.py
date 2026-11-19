@@ -71,6 +71,17 @@ NES_GAMES = (".nes", ".fds", ".unf", ".unif", ".nsf")
 NES_ROOM_MB = 64          # room on BOOT for the games added later and the saves
 
 
+def kernel_donor(entries, key="sys"):
+    """The system the extras start with: the first from an image whose kernel is on its BOOT
+    partition (IU1WXY 0.2.2+ keeps its kernel inside its A/B slots: issue #8), or None"""
+    for e in entries:
+        s = e.get(key)
+        if e.get("kind") == "sd" and s is not None and not getattr(s, "is_ab", False) \
+                and "kernel" in (getattr(s, "files", None) or {}):
+            return s
+    return None
+
+
 def resolve_extras(entries, rootfs_xz=None):
     """The app's extras (Doom, the NES emulator) as systems of their own: their root filesystem,
     booted with the kernel and device tree of the first system from an image on the list.
@@ -81,7 +92,7 @@ def resolve_extras(entries, rootfs_xz=None):
         rootfs_xz = {"doom": rootfs_xz}
     rootfs_xz = rootfs_xz or {}
     from .image import ExtraSystem, cache_dir, extra_rootfs
-    donor = next((e["sys"] for e in entries if e["kind"] == "sd"), None)
+    donor = kernel_donor(entries)
     out = []
     for e in entries:
         if e["kind"] in EXTRAS:
@@ -554,25 +565,29 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     normal_mbr = make_mbr(primary(active), disk_id)
     plan.add(0, Data(normal_mbr))
 
-    for e in sd:
-        if not getattr(e["sys"], "is_ab", False):
-            e["mbr"] = e["dir"] + "/MBR.BIN"
-            e["mbr_data"] = normal_mbr
-            continue
+    def ab_table(e, data_at):
+        """IU1WXY A/B's own table: its slots A and B as p2 and p4 (its boot script loads from
+        there), wherever they lie on the card, and its DATA as p3"""
         a = e["ab_physical"]["a"]
         b = e["ab_physical"]["b"]
-        e["mbr"] = e["dir"] + "/MBR.BIN"
-        e["mbr_data"] = make_mbr([
+        return make_mbr([
             (0x0C, boot_lba, boot_size // SECTOR, True),
             (a["type"], a["start"], a["sectors"], False),
-            (0x0C, active, data_sectors, False),
+            (0x0C, data_at, data_sectors, False),
             (b["type"], b["start"], b["sectors"], False),
         ], disk_id)
+
+    for e in sd:
+        e["mbr"] = e["dir"] + "/MBR.BIN"
+        e["mbr_data"] = ab_table(e, active) if getattr(e["sys"], "is_ab", False) else normal_mbr
 
     if n_data > 1:
         for k, e in enumerate(owners):
             e["mbr"] = e["dir"] + "/MBR.BIN"
-            e["mbr_data"] = make_mbr(primary(data_areas[k]), disk_id)
+            # each system its own DATA; IU1WXY A/B keeps its own table with its slots (issue #8:
+            # the plain one put the first system's root on p2, and IU1WXY started that system)
+            e["mbr_data"] = (ab_table(e, data_areas[k]) if getattr(e["sys"], "is_ab", False)
+                             else make_mbr(primary(data_areas[k]), disk_id))
         for e in sd:
             if e not in owners:
                 e["mbr"] = owner(e)["mbr"]      # the donor's table: its DATA

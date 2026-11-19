@@ -359,6 +359,69 @@ fi
             self.assertIn("root=/dev/mmcblk0p6", boot2)
             self.assertIn("SYS2/ZIMAGE", boot2)
 
+    def _ab_system(self, name="iu1wxy.img"):
+        """A fake IU1WXY 0.2.2+ image: A/B root slots, its own boot script, no kernel on BOOT"""
+        a = os.path.join(self.tmp, name)
+        fake_card(a)
+        sa = SourceSystem(a, a)
+        sa.is_ab = True
+        sa.ab_slots = {k: {"number": n, "type": sa.root_type, "offset": sa.root_offset, "size": sa.root_size}
+                       for k, n in (("a", 2), ("b", 4))}
+        sa.ab_env = sa.ab_bak = b"slot=a\n"
+        sa.ab_script = make_script_image("setenv rootp 2\nif ext4load mmc 0:${rootp} 0x46000000 /boot/zImage; "
+                                         "then bootz 0x46000000 - 0x49000000; fi\n", "IU1WXY A/B test")
+        sa.files = {}
+        return sa
+
+    def test_iu1wxy_ab_not_first(self):
+        """Issue #8: IU1WXY A/B anywhere in the menu, with DATA shared or one per system: its table
+        shows its own A and B slots as p2 and p4 (else its script starts the first system's kernel)"""
+        import io
+        for mode in ("separate", "shared"):
+            b = os.path.join(self.tmp, "first-%s.img" % mode)
+            fake_card(b)
+            sa = self._ab_system("iu-%s.img" % mode)
+            entries = [{"kind": "sd", "name": "OpenX6X00 test", "sys": SourceSystem(b, b)},
+                       {"kind": "sd", "name": "IU1WXY test", "sys": sa}]
+            plan = compose(entries, data_mb=40, data_mode=mode)
+            out = os.path.join(self.tmp, "ab-second-%s.img" % mode)
+            write_image_file(plan, out)
+            with open(out, "rb") as f:
+                parts = {p[0]: p for p in read_mbr(f)}
+                boot = FatReader(f, parts[1][2] * SECTOR)
+                ab = {p[0]: p for p in read_mbr(io.BytesIO(boot.read_file("SYS2/MBR.BIN")))}
+                first = {p[0]: p for p in read_mbr(io.BytesIO(boot.read_file("SYS1/MBR.BIN")))}
+            # the card: OpenX6X00 on p2, IU1WXY's A on p5 and B on p6
+            self.assertEqual(ab[2][2], parts[5][2], mode)          # p2 = IU1WXY's slot A
+            self.assertEqual(ab[4][2], parts[6][2], mode)          # p4 = IU1WXY's slot B
+            self.assertNotEqual(ab[2][2], parts[2][2], mode)       # not OpenX6X00's root
+            self.assertEqual(first[2][2], parts[2][2], mode)       # OpenX6X00 back on p2 for itself
+            if mode == "separate":                                 # each its own DATA
+                self.assertNotEqual(ab[3][2], first[3][2])
+            else:
+                self.assertEqual(ab[3][2], first[3][2])
+
+    def test_extras_take_a_kernel_from_a_system_that_has_one(self):
+        """Issue #8: IU1WXY A/B first (its kernel is inside its slots), OpenX6X00 second: Doom and
+        the NES emulator start with OpenX6X00's kernel"""
+        from x6100mb.compose import resolve_extras
+        b = os.path.join(self.tmp, "normal.img")
+        fake_card(b)
+        sb = SourceSystem(b, b)
+        rootfs = os.path.join(self.tmp, "extra.ext4.xz")
+        import lzma
+        with lzma.open(rootfs, "wb") as f:
+            f.write(b"\0" * (2 << 20))
+        entries = resolve_extras([{"kind": "sd", "name": "IU1WXY test", "sys": self._ab_system()},
+                                  {"kind": "sd", "name": "OpenX6X00 test", "sys": sb},
+                                  {"kind": "doom", "name": "DOOM"}], {"doom": rootfs})
+        self.assertIs(entries[2]["sys"].donor, sb)
+        plan = compose(entries, data_mb=40)
+        script = plan.script
+        doom = next(l for l in script.splitlines() if l.startswith("setenv bm_boot3 "))
+        self.assertIn("SYS3/ZIMAGE", doom)
+        self.assertIn("doom_modules=/dev/mmcblk0p6", doom)            # OpenX6X00's root (after A/B)
+
     def test_long_timeout_and_wait(self):
         a = os.path.join(self.tmp, "a.img")
         fake_card(a)
