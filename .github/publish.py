@@ -26,6 +26,8 @@ KNOWN = {"Xiegu-Multi-Patcher-Windows.zip", "Xiegu-Multi-Patcher-macOS.zip", "Xi
 
 # A former test version kept as a page with a link to the release (links to it went round): pruning leaves it
 MOVED = "<!-- moved-to-main -->"
+# Test versions kept while final releases come out (alphas tested on the radio for longer)
+KEEP_TESTS = ("talk-alpha",)
 
 
 def gh(*args, check=True):
@@ -38,6 +40,23 @@ def gh(*args, check=True):
 def tag_commit(tag):
     r = gh("api", "repos/%s/commits/%s" % (REPO, tag), "--jq", ".sha", check=False)
     return r.stdout.strip() if r.returncode == 0 else None
+
+
+TALK_NOTES = """**Wersja alfa: menu mówione dla niewidomych operatorów.** Do testów na radiu; zwykłe wydanie: [Releases](https://github.com/{repo}/releases/latest).
+**Alpha: a talking boot menu for blind operators.** For testing on the radio; the regular release: [Releases](https://github.com/{repo}/releases/latest).
+
+Windows {w} · macOS {m} · Linux {l}. Pliki jak w zwykłym wydaniu: `.zip` dla swojego komputera, w środku instrukcja. / The files as in the regular release: the `.zip` for your computer, with the guide inside.
+
+### Menu mówione / Talking menu
+- W aplikacji: **Extras → + Menu mówione (alfa)**, czas na ekranie najlepiej 3 s. / In the app: **Extras → + Talking menu (alpha)**, the screen's time best 3 s.
+- Gdy przy włączaniu radia nikt nie wciśnie klawisza, menu czyta wybór na głos: „Boot menu. Press F1 for …”. / When nobody presses a key at power-on, the menu says the choices aloud.
+- F1–F5: radio się wyłącza i prosi o POWER; po włączeniu startuje wybrany system. Bez wyboru po 30 s startuje system z ★. / F1–F5: the radio switches off and asks for POWER; at power-on the chosen system starts. Without a choice, the ★ system starts after 30 s.
+- Każde menu (także bez menu mówionego) uruchamia raz system zaznaczony w sektorze 2 karty („BM” i cyfra). / Every menu starts a system marked in the card's sector 2 ("BM" and a digit) once.
+
+Program menu: **talkmenu** z [X6100 Talking MultiBoot](https://github.com/Jimr9/X6100-Talking-MultiBoot), Jim Ruiz (GPL-2.0-or-later). Głos / voice: **RHVoice Lyubov** (Artem Plaksin, Sergey Parshakov, Beka Gozalishvili, Lyubov Sablina; CC BY-NC-ND 4.0, non-commercial).
+
+Uwagi i błędy / Feedback: [Issues](https://github.com/{repo}/issues).
+"""
 
 
 def whats_new():
@@ -53,6 +72,8 @@ def whats_new():
 
 
 def notes(v):
+    if TEST and (os.environ.get("GIVEN") or "").startswith("talk-alpha"):
+        return TALK_NOTES.format(w=v["windows"], m=v["macos"], l=v["linux"], repo=REPO)
     if TEST:
         return ("**Wersja testowa (pre-release), nie do zwykłego użytku.**\n\n"
                 "**A test version (pre-release), not for everyday use.**\n\n"
@@ -153,6 +174,8 @@ def prune_tests(keep):
     for rel in json.loads(r.stdout or "[]") if r.returncode == 0 else []:
         if MOVED in (rel.get("body") or ""):
             continue                      # a page that only points to the release (its link was shared)
+        if (rel.get("tag_name") or "").startswith(KEEP_TESTS):
+            continue                      # a long-lived alpha (the talking menu): testers keep its link
         if rel.get("prerelease") and rel.get("tag_name") != keep:
             gh("api", "-X", "DELETE", "repos/%s/releases/%d" % (REPO, rel["id"]), check=False)
             tags.add(rel["tag_name"])
