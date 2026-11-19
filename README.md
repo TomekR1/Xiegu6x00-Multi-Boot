@@ -203,31 +203,12 @@ Systemy aktualizowane z poziomu radia (np. OpenX6X00: Settings → Info → Upda
 tylko swoje pliki, więc menu zostaje. Nową wersję, która wymaga nowego obrazu karty,
 dodajesz w aplikacji i wgrywasz kartę od nowa.
 
-## Wersja testowa: co sprawdzić
-
-Wersje testowe wychodzą jako **Pre-release** (nie zastępują najnowszego wydania). Lista do przejścia,
-najlepiej na Windows, macOS i Linuksie:
-
-1. Okno mieści się na ekranie; na szerokim ekranie widać wszystko naraz, na wąskim da się przewinąć.
-2. **+ Z internetu…** pobiera system; na dole okna widać etap, pasek i pozostały czas.
-3. Karta jest na liście **Karta SD** po włożeniu i **Odśwież** (także we wbudowanym czytniku Maca).
-4. **Wgraj na kartę** z kilkoma systemami i DATA osobną dla każdego; radio startuje z menu.
-5. Menu na radiu: szklane kafelki, ruchomy pasek, odliczanie, klawisze F i POWER.
-   (Ruch wyłącza `bm_anim=0` w `bootmenu.env` na partycji BOOT.)
-6. Po kilku uruchomieniach każdego systemu: **Kopie DATA karty w czytniku…** pokazuje osobny wiersz
-   dla każdego systemu; kopia i przywracanie działają dla każdego z osobna.
-7. Zapis nowej karty z innym układem systemów: ustawienia trafiają do tych samych systemów.
-8. Kopia z pliku `.zip` i z folderu; kopia w „folderze w folderze”; folder bez plików DATA (ostrzeżenie).
-9. **Pomiń sprawdzanie karty** w trakcie sprawdzania.
-10. Każde okno otwiera się tylko raz.
-
-Błędy: plik `Dokumenty/Xiegu Multi Patcher/log.txt` i zrzut okna.
-
 ## Problemy i uwagi
 
 Zgłaszaj je w zakładce **[Issues](../../issues)**. Pomaga:
 
 - system komputera (Windows / macOS / Linux) i zrzut ekranu z błędem;
+- plik `Dokumenty/Xiegu Multi Patcher/log.txt` z komputera;
 - zdjęcie ekranu radia, jeśli coś dzieje się przy starcie;
 - które systemy były na karcie i który klawisz został wciśnięty.
 

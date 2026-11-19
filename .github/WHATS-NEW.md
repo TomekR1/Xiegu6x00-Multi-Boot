@@ -1,0 +1,7 @@
+- Własne repozytorium GitHub jako źródło systemów: **+ Z internetu…** → na dole „Zaawansowane”.
+- Nowe obrazy IU1WXY 0.2.2+ (partycje A/B) działają w menu. Dziękuję, Leo de Blaauw!
+- macOS: naprawiony błąd „main thread is not in main loop” przy zapisie karty.
+---
+- Your own GitHub repository as a source of systems: **+ From the internet…** → "Advanced" at the bottom.
+- The new IU1WXY 0.2.2+ images (A/B partitions) work in the menu. Thank you, Leo de Blaauw!
+- macOS: fixed the "main thread is not in main loop" error when writing a card.

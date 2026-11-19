@@ -40,38 +40,64 @@ def tag_commit(tag):
     return r.stdout.strip() if r.returncode == 0 else None
 
 
+def whats_new():
+    """The release's own short list of news (.github/WHATS-NEW.md: Polish, a line of ---, English);
+    ("", "") without it"""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "WHATS-NEW.md"), encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return "", ""
+    pl, _, en = text.partition("\n---\n")
+    return pl.strip(), en.strip()
+
+
 def notes(v):
-    msg = (os.environ.get("MSG") or "").strip().split("\n")[0]
     if TEST:
-        return ("**Wersja testowa (pre-release): do sprawdzenia przed wydaniem, nie do zwykłego użytku.**\n\n"
-                "**A test version (pre-release): for checking before the release, not for everyday use.**\n\n"
-                "**Emulator NES to wczesna alfa: mogą być problemy, także z dźwiękiem (przerwy, trzaski).**\n\n"
-                "**The NES emulator is an early alpha: expect problems, with the sound too (gaps, crackle).**\n\n"
-                f"Windows {v['windows']} · macOS {v['macos']} · Linux {v['linux']}\n\n"
-                "Do sprawdzenia: lista w README na gałęzi `test-data`, rozdział „Wersja testowa: co sprawdzić”.\n")
-    return f"""Kilka systemów na jednej karcie SD dla Xiegu X6100, z menu na ekranie radia (F1–F5).
+        return ("**Wersja testowa (pre-release), nie do zwykłego użytku.**\n\n"
+                "**A test version (pre-release), not for everyday use.**\n\n"
+                f"Windows {v['windows']} · macOS {v['macos']} · Linux {v['linux']}\n")
+    pl_new, en_new = whats_new()
+    pl_news = f"\n### Co nowego\n{pl_new}\n" if pl_new else ""
+    en_news = f"\n### What's new\n{en_new}\n" if en_new else ""
+    return f"""Kilka systemów na jednej karcie SD do **Xiegu X6100**. Przy włączaniu radia wybierasz system klawiszem **F1–F5**.
 
-**Pobierz aplikację dla swojego komputera** (każda ma swój numer wersji):
-- Windows {v['windows']}: `Xiegu-Multi-Patcher-Windows.zip` (rozpakuj i uruchom `Xiegu Multi Patcher.exe` z folderu)
-- macOS {v['macos']}: `Xiegu-Multi-Patcher-macOS.zip` (rozpakuj; za pierwszym razem: Ustawienia systemowe → Prywatność i ochrona → Otwórz mimo to)
-- Linux {v['linux']}: `Xiegu-Multi-Patcher-Linux.zip` (rozpakuj i uruchom `Xiegu Multi Patcher` z folderu; do zapisu karty potrzebny pkexec)
+### Pobierz
+Na dole strony, w części **Assets**, pobierz plik dla swojego komputera:
+- **Windows** ({v['windows']}): `Xiegu-Multi-Patcher-Windows.zip`. Rozpakuj (prawy przycisk → Wyodrębnij wszystkie) i uruchom `Xiegu Multi Patcher.exe`.
+- **macOS** ({v['macos']}): `Xiegu-Multi-Patcher-macOS.zip`. Rozpakuj i przenieś do Programów. Jeśli macOS zablokuje aplikację: Ustawienia systemowe → Prywatność i ochrona → Otwórz mimo to.
+- **Linux** ({v['linux']}): `Xiegu-Multi-Patcher-Linux.zip`. Rozpakuj i uruchom `Xiegu Multi Patcher`.
 
-**Instrukcja krok po kroku** jest w każdej paczce: `INSTRUKCJA.html` (polski) i `INSTRUCTIONS.html` (English); otwórz ją w przeglądarce.
-**A step-by-step guide** is in every package: `INSTRUCTIONS.html` (English) and `INSTRUKCJA.html` (Polish); open it in a browser.
+W każdej paczce jest **instrukcja krok po kroku**: `INSTRUKCJA.html` (otwórz w przeglądarce).
 
-Systemy radia (OpenX6X00, OpenX6100, CX8ANM, 1KO125, IU1WXY, R1CBU) pobierasz w aplikacji
-przyciskiem **+ Z internetu…**, prosto z wydań ich autorów.
+### Co potrafi
+- Pobiera systemy radia (OpenX6X00, OpenX6100, CX8ANM, 1KO125, IU1WXY, R1CBU) prosto od ich autorów, także z Twojego własnego repozytorium GitHub.
+- W menu może być też oryginalny system Xiegu z pamięci radia.
+- Przenosi ustawienia, logi i parowania ze starej karty na nową.
+- Dodatki: **Doom** i **emulator NES** (Twoje gry, pady USB i Bluetooth, gry wgrywane przez WiFi).
+{pl_news}
+---
 
-W sekcji **Extras** aplikacji: klasyczny Doom na radiu (Freedoom), z dźwiękiem i muzyką na głośniku radia,
-myszą i klawiaturą USB albo Bluetooth.
-Także **emulator NES** (FCEUmm): Twoje własne gry (aplikacja nie zawiera żadnych), pady USB i Bluetooth
-dla dwóch graczy, klawiatura, mysz jako pistolet Zapper, zapisy gier.
+Several systems on one SD card for the **Xiegu X6100**. At power-on you choose one with the **F1–F5** keys.
 
-Ostatnia zmiana: {msg or 'zobacz historię zmian'}
+### Download
+At the bottom of this page, under **Assets**, get the file for your computer:
+- **Windows** ({v['windows']}): `Xiegu-Multi-Patcher-Windows.zip`. Unpack it (right-click → Extract All) and run `Xiegu Multi Patcher.exe`.
+- **macOS** ({v['macos']}): `Xiegu-Multi-Patcher-macOS.zip`. Unpack it and move it to Applications. If macOS blocks it: System Settings → Privacy & Security → Open Anyway.
+- **Linux** ({v['linux']}): `Xiegu-Multi-Patcher-Linux.zip`. Unpack it and run `Xiegu Multi Patcher`.
 
-`u-boot-x6100-menu.bin`: U-Boot menu z obsługą ekranu X6100 (aplikacja ma go w sobie).
+Every package has a **step-by-step guide**: `INSTRUCTIONS.html` (open it in a browser).
 
-Problemy zgłaszaj w Issues. Aplikacja: SQ6RT, https://www.qrz.com/db/SQ6RT
+### What it does
+- Fetches the radio's systems (OpenX6X00, OpenX6100, CX8ANM, 1KO125, IU1WXY, R1CBU) straight from their authors, or from your own GitHub repository.
+- The menu can also start the original Xiegu system from the radio's memory.
+- Carries your settings, logs and pairings over from the old card to the new one.
+- Extras: **Doom** and a **NES emulator** (your own games, USB and Bluetooth pads, games uploaded over WiFi).
+{en_news}
+---
+
+The other files (`u-boot-…`, `nes-…`) are used by the app and the emulator's update; you don't need to download them.
+Problems / Problemy: [Issues](https://github.com/{REPO}/issues) · SQ6RT, https://www.qrz.com/db/SQ6RT
 """
 
 
@@ -135,7 +161,21 @@ def prune_tests(keep):
         gh("api", "-X", "DELETE", "repos/%s/git/refs/tags/%s" % (REPO, tg), check=False)
 
 
+def renote(tag):
+    """The description of the release on tag written anew from notes() (Build workflow, input notes_tag)"""
+    with open("x6100mb/assets/versions.json") as f:
+        v = json.load(f)
+    nf = os.path.join(tempfile.mkdtemp(), "notes.md")
+    with open(nf, "w", encoding="utf-8") as f:
+        f.write(notes(v))
+    gh("release", "edit", tag, "-R", REPO, "--notes-file", nf)
+    print(tag, ": description written anew")
+
+
 def main():
+    if MINE[:1] == ["--notes"]:
+        renote(MINE[1])
+        return
     with open("x6100mb/assets/versions.json") as f:
         v = json.load(f)
     tag = os.environ.get("GIVEN") or "win%s-mac%s-linux%s" % (v["windows"], v["macos"], v["linux"])
