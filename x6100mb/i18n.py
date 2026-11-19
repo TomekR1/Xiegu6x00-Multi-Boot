@@ -448,6 +448,9 @@ EN = {
         "This copy of the app has no menu U-Boot in it (x6100mb/data/u-boot-x6100-menu.bin), so the menu on the "
         "radio would have no picture and no F1–F5 keys. Download the app from the Releases tab on GitHub (the .zip "
         "for your computer) and run it from there.",
+    "Na karcie może być tylko jedna wersja IU1WXY 0.2.2 lub nowsza (z partycjami A/B): obie trzymają stan w tym samym pliku ab.env.":
+        "Only one IU1WXY 0.2.2 or newer (with A/B partitions) can be on a card: both keep their state in the same "
+        "ab.env file.",
     # the NES emulator
     "+ Emulator NES": "+ NES emulator",
     "Gry NES…": "NES games…",

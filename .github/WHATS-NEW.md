@@ -1,7 +1,7 @@
-- Aplikacja nie zapisze karty bez U-Boota menu (wtedy na radiu był ciemny ekran i nie działały F1–F5); powie, skąd wziąć właściwą wersję.
-- IU1WXY 0.2.2+ działa na każdym miejscu w menu; Doom i emulator NES biorą jądro z pierwszego systemu, który je ma.
-- Wyjście z Dooma opisane zgodnie z prawdą: wyłącza radio (X6100 nie umie zrestartować się z Linuksa).
+- Naprawione: przy osobnej DATA dla każdego systemu i Doomie albo emulatorze NES stojącym w menu przed systemem, z którego bierze jądro, ten system mógł startować z DATA innego systemu (ustawienia, log, parowania). Karty z takim układem warto zapisać jeszcze raz.
+- Karta nie może już mieć dwóch plików o tej samej nazwie na partycji BOOT; dwie wersje IU1WXY 0.2.2+ na jednej karcie są odrzucane z wyjaśnieniem.
+- Aplikacja nie zapisze karty bez U-Boota menu (ciemny ekran i nieaktywne F1–F5 na radiu); powie, skąd wziąć właściwą wersję.
 ---
-- The app will not write a card without the menu's U-Boot (that gave a dark screen and dead F1–F5 on the radio); it says where to get the right version.
-- IU1WXY 0.2.2+ works in any place in the menu; Doom and the NES emulator take the kernel of the first system that has one.
-- Leaving Doom described as it is: it switches the radio off (the X6100 cannot restart itself from Linux).
+- Fixed: with one DATA per system and Doom or the NES emulator placed in the menu before the system it takes its kernel from, that system could start with another system's DATA (settings, log, pairings). Cards with such a layout are worth writing again.
+- A card can no longer get two files of one name on its BOOT partition; two IU1WXY 0.2.2+ on one card are refused with an explanation.
+- The app will not write a card without the menu's U-Boot (dark screen and dead F1–F5 on the radio); it says where to get the right version.
