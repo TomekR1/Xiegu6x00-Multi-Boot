@@ -260,11 +260,18 @@ def label(source, rel):
     return "%s %s" % (source["name"], rel["tag"] if rel["tag"].startswith("v") else "v" + rel["tag"])
 
 
+def _safe_name(name):
+    """A tag's or a file's name from a release as one plain name in a folder (a repository of the
+    user's own can name them anyhow: no slashes, no .. )"""
+    s = re.sub(r"[^\w.-]", "_", os.path.basename(str(name))).lstrip(".")
+    return s or "file"
+
+
 def download(source, rel, cache_dir, progress=None):
     """The release's image in cache_dir/downloads (kept: a second use does not fetch it again)"""
-    d = os.path.join(cache_dir, "downloads", source["id"], re.sub(r"[^\w.-]", "_", rel["tag"]))
+    d = os.path.join(cache_dir, "downloads", source["id"], _safe_name(rel["tag"]))
     os.makedirs(d, exist_ok=True)
-    path = os.path.join(d, rel["asset"])
+    path = os.path.join(d, _safe_name(rel["asset"]))
     if os.path.exists(path) and (not rel["size"] or os.path.getsize(path) == rel["size"]):
         return path
     tmp = path + ".part"

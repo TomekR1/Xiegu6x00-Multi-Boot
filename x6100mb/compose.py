@@ -463,6 +463,10 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         raise ComposeError(f"at most {MAX_ENTRIES} entries (keys F1..F{MAX_ENTRIES})")
     if not 0 <= default < len(entries):
         raise ComposeError("the default entry is not in the list")
+    if sum(1 for e in sd if getattr(e["sys"], "is_ab", False)) > 1:
+        # IU1WXY 0.2.2+ keeps its A/B state in ab.env at the top of BOOT: two would share it
+        raise ComposeError(t("Na karcie może być tylko jedna wersja IU1WXY 0.2.2 lub nowsza (z partycjami A/B): "
+                             "obie trzymają stan w tym samym pliku ab.env."))
     # The talking menu (alpha): the screen menu starts it when no key is pressed; it says the choices
     # and starts the default chosen in the app when none is pressed there either
     talk_i = next((i for i, e in enumerate(entries) if extra_of(e) == "talk"), None)
@@ -627,6 +631,9 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         for e in sd:
             if e not in owners:
                 e["mbr"] = owner(e)["mbr"]      # the donor's table: its DATA
+                # its file is the donor's: written once, by the donor (a second SYSn/MBR.BIN broke the
+                # folder, and when the extra came first in the menu the donor read the extra's table)
+                e.pop("mbr_data", None)
     plan.add(SECTOR, Zero(UBOOT_OFFSET - SECTOR))
     plan.add(UBOOT_OFFSET, Data(ub.uboot))
 

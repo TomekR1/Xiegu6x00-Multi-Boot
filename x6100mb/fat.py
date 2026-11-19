@@ -289,6 +289,9 @@ class Fat32Builder:
     def add_file(self, path, data=None, src=None):
         parts = [p for p in path.split("/") if p]
         d = self._dir(parts[:-1])
+        # FAT names are one per folder, whatever their case: a second one would be a broken folder
+        if any(e[1].lower() == parts[-1].lower() for e in d["entries"]):
+            raise FatError("%s is on the partition twice" % path)
         size = len(data) if data is not None else src[2]
         f = {"name": parts[-1], "data": data, "src": src, "size": size}
         d["entries"].append(("file", parts[-1], f))

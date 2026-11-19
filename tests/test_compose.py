@@ -401,6 +401,51 @@ fi
             else:
                 self.assertEqual(ab[3][2], first[3][2])
 
+    def test_extra_before_its_donor_with_separate_data(self):
+        """NES before OpenX6X00, R1CBU the default, one DATA per system: one SYS2/MBR.BIN, OpenX6X00's own
+        (before: a second copy with the default's table, so OpenX6X00 started with R1CBU's DATA)"""
+        import io
+        import lzma
+        from x6100mb.compose import resolve_extras
+        b, c = os.path.join(self.tmp, "donor.img"), os.path.join(self.tmp, "other.img")
+        fake_card(b)
+        fake_card(c)
+        rootfs = os.path.join(self.tmp, "nes.ext4.xz")
+        with lzma.open(rootfs, "wb") as f:
+            f.write(b"\0" * (2 << 20))
+        ents = resolve_extras([{"kind": "nes", "name": "NES", "games": []},
+                               {"kind": "sd", "name": "OpenX6X00 test", "sys": SourceSystem(b, b)},
+                               {"kind": "sd", "name": "R1CBU test", "sys": SourceSystem(c, c)}],
+                              {"nes": rootfs})
+        plan = compose(ents, default=2, data_mb=40, data_mode="separate")
+        out = os.path.join(self.tmp, "nes-first.img")
+        write_image_file(plan, out)
+        with open(out, "rb") as f:
+            parts = {p[0]: p for p in read_mbr(f)}
+            boot = FatReader(f, parts[1][2] * SECTOR)
+            names = [n for n, *_ in boot.listdir()]
+            sys2 = [n for n, *_ in boot.listdir(boot.find("SYS2")[2])]
+            table = {p[0]: p for p in read_mbr(io.BytesIO(boot.read_file("SYS2/MBR.BIN")))}
+            other = {p[0]: p for p in read_mbr(io.BytesIO(boot.read_file("SYS3/MBR.BIN")))}
+        self.assertEqual(len(names), len({n.lower() for n in names}))
+        self.assertEqual(sum(n.upper() == "MBR.BIN" for n in sys2), 1)
+        self.assertNotEqual(table[3][2], other[3][2])             # OpenX6X00's own DATA, not R1CBU's
+
+    def test_one_iu1wxy_ab_per_card(self):
+        """Two IU1WXY A/B would share BOOT's ab.env (and made two files of one name): refused"""
+        from x6100mb.compose import ComposeError
+        with self.assertRaises(ComposeError):
+            compose([{"kind": "sd", "name": "IU1WXY v0.2.2", "sys": self._ab_system("a1.img")},
+                     {"kind": "sd", "name": "IU1WXY v0.2.3", "sys": self._ab_system("a2.img")}], data_mb=40)
+
+    def test_fat_refuses_a_name_twice(self):
+        from x6100mb.fat import FatError
+        fat = Fat32Builder(40 * MIB, 2048, label="BOOT")
+        fat.add_file("SYS1/ZIMAGE", b"k")
+        fat.add_file("SYS2/ZIMAGE", b"k")                    # another folder: fine
+        with self.assertRaises(FatError):
+            fat.add_file("sys1/zImage", b"k")                 # FAT names know no case
+
     def test_extras_take_a_kernel_from_a_system_that_has_one(self):
         """Issue #8: IU1WXY A/B first (its kernel is inside its slots), OpenX6X00 second: Doom and
         the NES emulator start with OpenX6X00's kernel"""

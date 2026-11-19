@@ -146,3 +146,14 @@ class OwnRepoTest(unittest.TestCase):
         self.assertEqual(catalog.source_for("me/x6100_gui v2.0")["id"], "gh-me--x6100_gui")
         self.assertEqual(catalog.source_for("R1CBU v0.29")["id"], "r1cbu")
         self.assertEqual(catalog.source_for("OpenX6X00 v0.3.9")["id"], "openx6x00")
+
+
+class SafeNameTest(unittest.TestCase):
+    def test_release_names_stay_in_their_folder(self):
+        for bad in ("..", "../x", "a/../../b.img", "/etc/passwd", ".hidden"):
+            n = catalog._safe_name(bad)
+            self.assertNotIn("/", n)
+            self.assertFalse(n.startswith("."), n)
+        self.assertEqual(catalog._safe_name("OpenX6X00-x6100-v0.3.9-sdcard.img.zip"),
+                         "OpenX6X00-x6100-v0.3.9-sdcard.img.zip")
+        self.assertEqual(catalog._safe_name("v1.2 beta"), "v1.2_beta")

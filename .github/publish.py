@@ -191,7 +191,10 @@ def renote(tag):
     nf = os.path.join(tempfile.mkdtemp(), "notes.md")
     with open(nf, "w", encoding="utf-8") as f:
         f.write(notes(v))
-    gh("release", "edit", tag, "-R", REPO, "--notes-file", nf)
+    title = "Xiegu Multi Patcher · Windows %s · macOS %s · Linux %s" % (v["windows"], v["macos"], v["linux"])
+    if TEST:
+        title = "TEST (pre-release) " + tag + " · " + title
+    gh("release", "edit", tag, "-R", REPO, "--notes-file", nf, "--title", title)
     print(tag, ": description written anew")
 
 
