@@ -236,7 +236,20 @@ class SourceSystem:
             self.script = script
             if "x6100-multiboot" in script or "X6100 multiboot menu" in script:
                 raise ImageError(t("to już karta multiboot (z tej aplikacji); dodaj obrazy pojedynczych systemów"))
-            self._parse_script(fat)
+            self.is_ab = (
+                fat.find("ab.env") is not None
+                and fat.find("ab.bak") is not None
+                and "${rootp}" in script
+                and "/boot/zImage" in script
+                and "bootz 0x46000000 - 0x49000000" in script
+            )
+            if self.is_ab:
+                self.ab_env = fat.read_file("ab.env")
+                self.ab_bak = fat.read_file("ab.bak")
+                self.ab_script = make_script_image(self.script, "IU1WXY A/B boot")
+                self._parse_ab_script()
+            else:
+                self._parse_script(fat)
 
         root_parts = [p for p in self.parts if p[0] == self.root_number]
         if not root_parts:
@@ -254,6 +267,56 @@ class SourceSystem:
         if not self.root_is_ext:
             self.warnings.append("root partition is not ext2/3/4")
         self.os_release = None
+
+    def _parse_ab_script(self):
+        """Parse the IU1WXY 0.2.2+ A/B boot layout."""
+        parts = {p[0]: p for p in self.parts}
+        if 2 not in parts or 4 not in parts:
+            raise ImageError("IU1WXY A/B image requires partitions p2 and p4")
+
+        self.ab_slots = {}
+        for slot, number in (("a", 2), ("b", 4)):
+            part = parts[number]
+            self.ab_slots[slot] = {
+                "number": number,
+                "type": part[1],
+                "offset": part[2] * SECTOR,
+                "size": part[3] * SECTOR,
+            }
+
+        kernel = re.search(
+            r"ext4load\s+mmc\s+0:\$\{rootp\}\s+(\S+)\s+([^;\s]*zImage)",
+            self.script,
+        )
+        fdt = re.search(
+            r"ext4load\s+mmc\s+0:\$\{rootp\}\s+(\S+)\s+([^;\s]+\.dtb)",
+            self.script,
+        )
+        bootargs = re.search(
+            r"setenv\s+bootargs\s+([^\n]+)",
+            self.script,
+        )
+
+        if not kernel:
+            raise ImageError("IU1WXY A/B kernel load not found")
+        if not fdt:
+            raise ImageError("IU1WXY A/B device-tree load not found")
+        if not bootargs:
+            raise ImageError("IU1WXY A/B bootargs not found")
+
+        self.boot_cmd = "bootz"
+        self.kernel_addr = kernel.group(1)
+        self.kernel_file = kernel.group(2)
+        self.initrd_addr = None
+        self.initrd_file = None
+        self.fdt_addr = fdt.group(1)
+        self.fdt_file = fdt.group(2)
+        self.files = {}
+
+        # p2 is metadata compatibility only.
+        # The original IU1WXY boot script dynamically selects p2 or p4.
+        self.root_number = 2
+        self.bootargs = bootargs.group(1).strip().strip('"').strip("'")
 
     def _parse_script(self, fat):
         text = self.script
@@ -273,7 +336,7 @@ class SourceSystem:
             m = re.match(r"setenv\s+(\w+)\s+(\S+)$", l)
             if m:
                 env[m.group(1)] = m.group(2).strip('"')
-            m = re.match(r"(?:fat|ext[24])?load\s+mmc\s+\S+\s+(\S+)\s+(\S+)", l)
+            m = re.search(r"(?:fat|ext[24])?load\s+mmc\s+\S+\s+(\S+)\s+([^;\s]+)", l)
             if m:
                 loads[m.group(1)] = m.group(2)
                 continue
@@ -322,6 +385,12 @@ class SourceSystem:
 
     def summary(self):
         mb = 1024 * 1024
+        if getattr(self, "is_ab", False):
+            a = self.ab_slots["a"]["size"] // mb
+            b = self.ab_slots["b"]["size"] // mb
+            return (f"IU1WXY A/B, kernel {self.kernel_file}, dtb {self.fdt_file}, "
+                    f"slot A {a} MB, slot B {b} MB, "
+                    f"U-Boot {self.uboot_version or ('yes' if self.has_uboot else 'none')}")
         return (f"kernel {self.kernel_file} ({len(self.files['kernel']) // 1024} KB), "
                 f"dtb {self.fdt_file}, rootfs {self.root_size // mb} MB, "
                 f"U-Boot {self.uboot_version or ('yes' if self.has_uboot else 'none')}")

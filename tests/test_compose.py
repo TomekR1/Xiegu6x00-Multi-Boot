@@ -263,6 +263,102 @@ class ComposeTest(unittest.TestCase):
         import zipfile
         self.assertEqual(sorted(zipfile.ZipFile(z).namelist()), ["app_logs/x6100_log_2026-11-13_10-00.txt", "params.db"])
 
+    def test_iu1wxy_ab_with_second_system(self):
+        """IU1WXY A/B keeps both slots and moves the next system to p6."""
+        import io
+
+        a = os.path.join(self.tmp, "iu1wxy.img")
+        b = os.path.join(self.tmp, "normal.img")
+        fake_card(a)
+        fake_card(b)
+
+        sa = SourceSystem(a, a)
+        sb = SourceSystem(b, b)
+
+        sa.is_ab = True
+        sa.ab_slots = {
+            "a": {
+                "number": 2,
+                "type": sa.root_type,
+                "offset": sa.root_offset,
+                "size": sa.root_size,
+            },
+            "b": {
+                "number": 4,
+                "type": sa.root_type,
+                "offset": sa.root_offset,
+                "size": sa.root_size,
+            },
+        }
+        sa.ab_env = b"slot=a\n"
+        sa.ab_bak = b"slot=a\n"
+        sa.ab_script = make_script_image(
+            """setenv rootp 2
+if ext4load mmc 0:${rootp} 0x46000000 /boot/zImage; then
+if ext4load mmc 0:${rootp} 0x49000000 /boot/sun8i-r16-x6100.dtb; then
+bootz 0x46000000 - 0x49000000
+fi
+fi
+""",
+            "IU1WXY A/B test",
+        )
+        sa.files = {}
+
+        entries = [
+            {"kind": "sd", "name": "IU1WXY test", "sys": sa},
+            {"kind": "sd", "name": "Normal test", "sys": sb},
+        ]
+
+        plan = compose(entries, data_mb=40)
+
+        self.assertEqual(plan.info["entries"][0]["partition"], 2)
+        self.assertEqual(plan.info["entries"][1]["partition"], 6)
+
+        out = os.path.join(self.tmp, "iu1wxy-ab.img")
+        write_image_file(plan, out)
+
+        with open(out, "rb") as f:
+            parts = {p[0]: p for p in read_mbr(f)}
+
+            self.assertIn(2, parts)
+            self.assertIn(5, parts)
+            self.assertIn(6, parts)
+
+            boot = FatReader(f, parts[1][2] * SECTOR)
+
+            self.assertEqual(boot.read_file("ab.env"), b"slot=a\n")
+            self.assertEqual(boot.read_file("ab.bak"), b"slot=a\n")
+            self.assertTrue(boot.read_file("SYS1/IU1WXY.SCR"))
+
+            ab_mbr = boot.read_file("SYS1/MBR.BIN")
+            ab_parts = {p[0]: p for p in read_mbr(io.BytesIO(ab_mbr))}
+
+            self.assertIn(2, ab_parts)
+            self.assertIn(4, ab_parts)
+            self.assertEqual(ab_parts[2][2], parts[2][2])
+            self.assertEqual(ab_parts[4][2], parts[5][2])
+
+            script = parse_script_image(boot.read_file("boot.scr"))
+
+            boot1 = next(
+                line for line in script.splitlines()
+                if line.startswith("setenv bm_boot1 ")
+            )
+            boot2 = next(
+                line for line in script.splitlines()
+                if line.startswith("setenv bm_boot2 ")
+            )
+
+            self.assertIn("SYS1/MBR.BIN", boot1)
+            self.assertIn("mmc rescan", boot1)
+            self.assertIn("SYS1/IU1WXY.SCR", boot1)
+            self.assertIn("source ${scriptaddr}", boot1)
+
+            self.assertIn("SYS2/MBR.BIN", boot2)
+            self.assertIn("mmc rescan", boot2)
+            self.assertIn("root=/dev/mmcblk0p6", boot2)
+            self.assertIn("SYS2/ZIMAGE", boot2)
+
     def test_long_timeout_and_wait(self):
         a = os.path.join(self.tmp, "a.img")
         fake_card(a)
