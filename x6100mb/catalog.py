@@ -49,6 +49,63 @@ class CatalogError(Exception):
     pass
 
 
+# A user's own GitHub repository (an advanced setting): any card image in its releases, the X6100's
+# before any other (an X6200 image is never taken; the app also tells an installer image apart)
+ANY_IMAGE = r"\.img(\.zip|\.xz)?$"
+MAX_OWN = 10
+_REPO = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$")
+
+
+def _rank(name):
+    n = name.lower()
+    return (0 if "x6100" in n else 1, 0 if "sdcard" in n else 1)
+
+
+def parse_repo(text):
+    """"owner/repo" from what the user typed (owner/repo, or a github.com address of it or of a page
+    in it); None when it is not one"""
+    s = (text or "").strip()
+    s = re.sub(r"^(?:https?://)?(?:www\.)?github\.com/", "", s, flags=re.I)
+    parts = [p for p in s.split("/") if p]
+    if len(parts) < 2:
+        return None
+    repo = "%s/%s" % (parts[0], re.sub(r"\.git$", "", parts[1]))
+    return repo if _REPO.match(repo) and parts[1].strip(".") else None
+
+
+def own_repos():
+    from .i18n import setting
+    v = setting("own_repos") or []
+    return [r for r in v if isinstance(r, str) and parse_repo(r) == r][:MAX_OWN]
+
+
+def add_own_repo(text):
+    """Kept in the settings; returns "owner/repo", or None when the text is not a repository"""
+    from .i18n import set_setting
+    repo = parse_repo(text)
+    if repo is None:
+        return None
+    have = own_repos()
+    if repo.lower() not in [r.lower() for r in have]:
+        set_setting("own_repos", (have + [repo])[-MAX_OWN:])
+    return repo
+
+
+def remove_own_repo(repo):
+    from .i18n import set_setting
+    set_setting("own_repos", [r for r in own_repos() if r.lower() != repo.lower()])
+
+
+def own_source(repo):
+    # named owner/repo: a fork called like a known project (x6100_gui...) is not taken for that project
+    return {"id": "gh-" + re.sub(r"[^\w.-]", "_", repo.lower().replace("/", "--")), "name": repo,
+            "feeds": [(repo, None)], "about": "github.com/" + repo, "own": True, "repo": repo}
+
+
+def own_sources():
+    return [own_source(r) for r in own_repos()]
+
+
 _ctx = None
 
 
@@ -172,11 +229,15 @@ def releases(source, n=15, fetch=_get):
         data = fetch(API.format(repo=repo, n=n))
         if not isinstance(data, list):
             raise CatalogError(t("nieoczekiwana odpowiedź GitHuba"))
-        pat = re.compile(asset, re.I)
+        pat = re.compile(asset or ANY_IMAGE, re.I)
         for r in data:
             if r.get("draft"):
                 continue
-            for a in r.get("assets", []):
+            assets = r.get("assets", [])
+            if asset is None:           # a repository of the user's: its X6100 card image, whatever its name
+                assets = sorted((a for a in assets if "x6200" not in a.get("name", "").lower()),
+                                key=lambda a: _rank(a.get("name", "")))
+            for a in assets:
                 if not pat.search(a.get("name", "")):
                     continue
                 digest = a.get("digest") or ""
@@ -242,6 +303,9 @@ RAW = "https://raw.githubusercontent.com/"
 def source_for(name):
     """The catalog source a system's name belongs to (CX8ANM before OpenX6X00: its 1.1.x is named
     OpenX6X00-CX8ANM; 1KO125 and IU1WXY before the trees they come from), or None"""
+    for src in own_sources():
+        if name.lower() == src["name"].lower() or name.lower().startswith(src["name"].lower() + " "):
+            return src
     n = name.lower().replace(" ", "").replace("_", "").replace("-", "")
     for sid in ("1ko125", "iu1wxy", "cx8anm", "openx6100", "openx6x00", "r1cbu"):
         if sid in n:

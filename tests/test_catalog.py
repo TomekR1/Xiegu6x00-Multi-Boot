@@ -88,3 +88,61 @@ class CatalogTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OwnRepoTest(unittest.TestCase):
+    """A GitHub repository of the user's own (an advanced setting)"""
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self._env = {k: os.environ.get(k) for k in ("HOME", "APPDATA", "XDG_CONFIG_HOME")}
+        for k in self._env:
+            os.environ[k] = self.home
+
+    def tearDown(self):
+        for k, v in self._env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def test_parse_repo(self):
+        ok = {"Guru-RF/OpenX6X00": "Guru-RF/OpenX6X00",
+              " https://github.com/gdyuldin/x6100_gui ": "gdyuldin/x6100_gui",
+              "github.com/a-b/c.d/releases/tag/v1": "a-b/c.d",
+              "https://www.github.com/owner/repo.git": "owner/repo"}
+        for text, want in ok.items():
+            self.assertEqual(catalog.parse_repo(text), want, text)
+        for bad in ("", "justaname", "https://gitlab.com/x/y", "owner/../etc", "-bad/repo", "a b/c"):
+            self.assertIsNone(catalog.parse_repo(bad), bad)
+
+    def test_kept_in_settings(self):
+        self.assertEqual(catalog.own_repos(), [])
+        self.assertEqual(catalog.add_own_repo("https://github.com/me/my_x6100"), "me/my_x6100")
+        catalog.add_own_repo("ME/my_x6100")                       # the same one again: once
+        catalog.add_own_repo("other/fw")
+        self.assertEqual(catalog.own_repos(), ["me/my_x6100", "other/fw"])
+        self.assertEqual([s["name"] for s in catalog.own_sources()], ["me/my_x6100", "other/fw"])
+        catalog.remove_own_repo("me/my_x6100")
+        self.assertEqual(catalog.own_repos(), ["other/fw"])
+
+    def test_own_repo_picks_the_x6100_card_image(self):
+        src = catalog.own_source("me/x6100_gui")
+        answer = [{"tag_name": "2.0", "published_at": "2026-11-10T00:00:00Z", "assets": [
+                      {"name": "update.tar.gz", "size": 1, "browser_download_url": "upd"},
+                      {"name": "fw-x6200-sdcard.img.zip", "size": 1, "browser_download_url": "x6200"},
+                      {"name": "build.img", "size": 1, "browser_download_url": "plain"},
+                      {"name": "fw-x6100-sdcard.img.xz", "size": 1, "browser_download_url": "x6100"}]},
+                  {"tag_name": "1.0", "published_at": "2026-10-10T00:00:00Z", "assets": [
+                      {"name": "fw-x6200.img", "size": 1, "browser_download_url": "only-x6200"}]},
+                  {"tag_name": "0.9", "published_at": "2026-09-10T00:00:00Z", "assets": [
+                      {"name": "card.img", "size": 2, "browser_download_url": "card"}]}]
+        rels = catalog.releases(src, fetch=lambda url: answer)
+        self.assertEqual([(r["tag"], r["url"]) for r in rels], [("2.0", "x6100"), ("0.9", "card")])
+        self.assertEqual(catalog.label(src, rels[0]), "me/x6100_gui v2.0")
+
+    def test_a_fork_is_not_taken_for_the_project(self):
+        catalog.add_own_repo("me/x6100_gui")
+        self.assertEqual(catalog.source_for("me/x6100_gui v2.0")["id"], "gh-me--x6100_gui")
+        self.assertEqual(catalog.source_for("R1CBU v0.29")["id"], "r1cbu")
+        self.assertEqual(catalog.source_for("OpenX6X00 v0.3.9")["id"], "openx6x00")

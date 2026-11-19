@@ -1404,17 +1404,37 @@ class OnlineDialog:
         ttk.Label(f, text=t("Wybierz system i wersję. Najnowsza jest na górze listy."),
                   font=_font(12, "bold")).grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 8))
         self.vars, self.boxes = {}, {}
-        for i, src in enumerate(catalog.SOURCES):
+        own = catalog.own_sources()
+        for i, src in enumerate(catalog.SOURCES + own):
             r = i + 1
             ttk.Label(f, text=src["name"], font=_font(11, "bold")).grid(row=2 * r - 1, column=0, sticky="w")
-            ttk.Label(f, text=t(src["about"]), foreground=HINT).grid(row=2 * r, column=0, columnspan=3, sticky="w", pady=(0, 8))
+            about = t("Twoje repozytorium: {repo}", repo=src["about"]) if src.get("own") else t(src["about"])
+            ttk.Label(f, text=about, foreground=HINT).grid(row=2 * r, column=0, columnspan=3, sticky="w", pady=(0, 8))
             v = tk.StringVar(value=t("sprawdzam…"))
             box = ttk.Combobox(f, textvariable=v, state="disabled", width=38)
             box.grid(row=2 * r - 1, column=1, sticky="w", padx=8)
             btn = ttk.Button(f, text=t("Dodaj"), state="disabled", command=lambda s=src: self.add(s))
             btn.grid(row=2 * r - 1, column=2, sticky="w")
+            if src.get("own"):
+                ttk.Button(f, text=t("Usuń z listy"), command=lambda s=src: self.forget(s)).grid(
+                    row=2 * r - 1, column=3, sticky="w", padx=(8, 0))
             self.vars[src["id"]], self.boxes[src["id"]] = v, (box, btn)
             threading.Thread(target=self._load, args=(src,), daemon=True).start()
+        # Advanced: a GitHub repository of the user's choice, its releases listed like the projects above
+        adv = ttk.Frame(f)
+        adv.grid(row=90, column=0, columnspan=4, sticky="we", pady=(10, 0))
+        ttk.Label(adv, text=t("Zaawansowane: własne repozytorium GitHub"), font=_font(11, "bold")).grid(
+            row=0, column=0, columnspan=3, sticky="w")
+        self.repo = tk.StringVar()
+        ent = ttk.Entry(adv, textvariable=self.repo, width=40)
+        ent.grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ent.bind("<Return>", lambda e: self.add_repo())
+        ttk.Button(adv, text=t("Dodaj repozytorium"), command=self.add_repo).grid(row=1, column=1, sticky="w",
+                                                                             padx=8, pady=(4, 0))
+        ttk.Label(adv, text=t("np. właściciel/repozytorium albo adres github.com. Aplikacja pokaże obrazy kart X6100 "
+                              "(.img, .img.zip, .img.xz) z wydań tego repozytorium. Dodawaj tylko repozytoria, "
+                              "którym ufasz."), foreground=HINT, wraplength=560, justify="left").grid(
+            row=2, column=0, columnspan=3, sticky="w", pady=(4, 0))
         ttk.Label(f, text=t("Obrazy pobierane są z wydań projektów na GitHubie. Lista wersji jest odświeżana "
                             "co 30 minut."), foreground=HINT, wraplength=560).grid(row=99, column=0, columnspan=4,
                                                                                   sticky="w", pady=(8, 0))
@@ -1427,6 +1447,31 @@ class OnlineDialog:
         ttk.Button(tk_row, text=t("Zapisz"), command=self._save_token).pack(side="left")
         ttk.Label(tk_row, text=t("podnosi limit GitHuba z 60 do 5000 zapytań na godzinę"),
                   foreground=HINT).pack(side="left", padx=(8, 0))
+
+    def _reopen(self):
+        app = self.app
+        self.win.destroy()
+        app.root.after(10, lambda: app._single("online", lambda: OnlineDialog(app)))
+
+    def add_repo(self):
+        text = self.repo.get().strip()
+        if not text:
+            return
+        if len(self.cat.own_repos()) >= self.cat.MAX_OWN and self.cat.parse_repo(text) not in self.cat.own_repos():
+            messagebox.showwarning(APP, t("Najwyżej {n} własnych repozytoriów: usuń któreś z listy.",
+                                          n=self.cat.MAX_OWN), parent=self.win)
+            return
+        if self.cat.add_own_repo(text) is None:
+            messagebox.showwarning(APP, t("To nie wygląda na repozytorium GitHub. Wpisz właściciel/repozytorium, "
+                                          "np. Guru-RF/OpenX6X00, albo jego adres z github.com."), parent=self.win)
+            return
+        self._reopen()
+
+    def forget(self, src):
+        if messagebox.askyesno(APP, t("Usunąć {repo} z listy? Dodane już systemy i karty zostają bez zmian.",
+                                      repo=src["repo"]), parent=self.win):
+            self.cat.remove_own_repo(src["repo"])
+            self._reopen()
 
     def _save_token(self):
         i18n.set_setting("github_token", self.token.get().strip())

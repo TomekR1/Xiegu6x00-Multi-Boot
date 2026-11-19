@@ -431,6 +431,19 @@ EN = {
     # the Read first window
     "Doom: przeczytaj najpierw": "Doom: read first",
     "Doom i emulator NES: przeczytaj najpierw": "Doom and the NES emulator: read first",
+    # the user's own GitHub repositories
+    "Twoje repozytorium: {repo}": "Your repository: {repo}",
+    "Usuń z listy": "Remove from the list",
+    "Zaawansowane: własne repozytorium GitHub": "Advanced: your own GitHub repository",
+    "Dodaj repozytorium": "Add the repository",
+    "np. właściciel/repozytorium albo adres github.com. Aplikacja pokaże obrazy kart X6100 (.img, .img.zip, .img.xz) z wydań tego repozytorium. Dodawaj tylko repozytoria, którym ufasz.":
+        "e.g. owner/repo, or its github.com address. The app lists the X6100 card images (.img, .img.zip, "
+        ".img.xz) in that repository's releases. Add only repositories you trust.",
+    "Najwyżej {n} własnych repozytoriów: usuń któreś z listy.": "At most {n} repositories of your own: remove one from the list.",
+    "To nie wygląda na repozytorium GitHub. Wpisz właściciel/repozytorium, np. Guru-RF/OpenX6X00, albo jego adres z github.com.":
+        "That does not look like a GitHub repository. Type owner/repo, e.g. Guru-RF/OpenX6X00, or its github.com address.",
+    "Usunąć {repo} z listy? Dodane już systemy i karty zostają bez zmian.":
+        "Remove {repo} from the list? Systems already added and cards already written stay as they are.",
     # the NES emulator
     "+ Emulator NES": "+ NES emulator",
     "Gry NES…": "NES games…",

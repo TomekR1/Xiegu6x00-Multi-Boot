@@ -31,6 +31,11 @@ w aplikacji, prosto z wydań ich autorów.
 1. **+ Z internetu…**: wybierz system i wersję (najnowsza jest zaznaczona) i kliknij **Dodaj**.
    Aplikacja pobierze obraz i sprawdzi go. Możesz dodać do 5 pozycji.
    Obraz z dysku dodasz przyciskiem **+ Obraz karty…** (`.img`, `.img.zip`, `.img.xz`).
+   **Zaawansowane:** na dole tego okna możesz dopisać **własne repozytorium GitHub** (np. fork albo
+   system spoza listy): wpisz `właściciel/repozytorium` albo adres z github.com. Aplikacja pokaże obrazy kart
+   X6100 z jego wydań (`.img`, `.img.zip`, `.img.xz`; obrazy dla X6200 pomija) i pobierze je jak pozostałe
+   systemy, ze sprawdzeniem rozmiaru i sumy SHA-256. Lista zostaje zapisana na komputerze; **Usuń z listy**
+   ją skraca. Dodawaj tylko repozytoria, którym ufasz.
 2. **+ Xiegu z eMMC**: pozycja w menu, która uruchamia oryginalny system radia.
 3. Aplikacja od razu pokazuje menu dokładnie tak, jak wyświetli je radio. Kliknij kafelek, żeby go
    zaznaczyć: strzałkami **← →** zmienisz kolejność, **★ Domyślny** ustawia system startujący sam,
@@ -250,6 +255,8 @@ speaks English and Polish: pick the language at the top right of its window.
 
 1. **+ From the internet…** fetches a system's image straight from its authors' GitHub releases
    (OpenX6X00, OpenX6100, CX8ANM, 1KO125, IU1WXY, R1CBU); **+ Card image…** adds one from disk.
+   Advanced: at the bottom of that window you can add **your own GitHub repository** (owner/repo or its
+   github.com address); the X6100 card images in its releases are listed and fetched like the others.
 2. **+ Xiegu from eMMC** adds the radio's own system.
 3. The app shows the menu just as the radio will: click a tile, then move it (**← →**), make it
    the default (★), rename it (double-click) or give it a logo of your own.
