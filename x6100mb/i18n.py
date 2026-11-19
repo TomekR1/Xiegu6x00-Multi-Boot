@@ -511,7 +511,8 @@ Sterowanie radiem
   Gałka VFO: obrót    Gałka VOL: przód/tył, w menu góra/dół    Gałka MFK: broń
   BAND ▲/▼: przód/tył    F1 lub PTT: strzał    F2: drzwi i przełączniki    F3: Enter
   F4/F5: krok w bok    GEN: menu gry    APP: mapa    KEY/MSG: tak/nie    AM: bieg
-  POWER: wyłączenie radia. Wyjście z gry wraca do menu startowego.
+  POWER: wyłączenie radia. Wyjście z gry też wyłącza radio (X6100 nie umie zrestartować się
+  z Linuksa); inny system wybierzesz po włączeniu radia klawiszem POWER.
 
 Mysz i klawiatura USB
   Podłącz do gniazda HOST radia (tego co klawiaturę w OpenX6X00). Obie naraz: przez mały hub
@@ -564,9 +565,9 @@ Klawiatura, mysz, pady (USB i Bluetooth)
 
 Gra
   Wyjście z gry zapamiętuje miejsce: przy następnym uruchomieniu „Kontynuuj od miejsca wyjścia”.
-  Menu w grze (GEN): zapis i odczyt stanu, reset, „Sterowanie” (ściąga klawiszy), przyciski pada,
-  Bluetooth, lista gier, restart do menu startowego, wyłączenie radia. Lista gier zaczyna od
-  ostatnio granej.
+  Menu w grze (GEN): graj dalej, od nowa, rozmiar obrazu, zapis i odczyt stanu, wyjście do listy
+  gier, wyłączenie radia. Lista gier zaczyna od ostatnio granej. Inny system wybierzesz po
+  wyłączeniu i włączeniu radia (X6100 nie umie zrestartować się z Linuksa).
   Pady, klawiatury i myszy sparowane wcześniej w pierwszym systemie też się łączą.
 
 Ustawienia
@@ -584,7 +585,8 @@ The radio's controls
   VFO knob: turn    VOL knob: forward/back, up/down in the menus    MFK knob: weapon
   BAND ▲/▼: forward/back    F1 or PTT: fire    F2: doors and switches    F3: Enter
   F4/F5: strafe    GEN: the game's menu    APP: map    KEY/MSG: yes/no    AM: run
-  POWER: switches the radio off. Leaving the game goes back to the boot menu.
+  POWER: switches the radio off. Leaving the game switches it off too (the X6100 cannot restart
+  itself from Linux); choose another system after switching the radio on with POWER.
 
 USB mouse and keyboard
   Plug them into the radio's HOST port (where a keyboard goes in OpenX6X00). Both at once: through
@@ -637,8 +639,9 @@ Keyboard, mouse, pads (USB and Bluetooth)
 
 Playing
   Leaving a game keeps its place: "Continue where you left" the next time. The in-game menu
-  (GEN): save and load state, reset, "Controls" (a key sheet), pad buttons, Bluetooth, the game
-  list, restart to the boot menu, radio off. The game list starts at the game played last.
+  (GEN): play on, restart the game, picture size, save and load state, back to the game list,
+  radio off. The game list starts at the game played last. To choose another system, switch the
+  radio off and on (the X6100 cannot restart itself from Linux).
   Pads, keyboards and mice paired earlier in the first system connect too.
 
 Settings

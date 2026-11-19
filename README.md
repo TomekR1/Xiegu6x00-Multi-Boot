@@ -115,7 +115,8 @@ domyślnie 45), `headphone=` poziom wyjścia dźwięku do płyty radia (0–63; 
 `rxmute=1` przycisza odbiornik radia na czas gry (bez szumu w tle). Doom zapisuje też na tej
 partycji dziennik `doom-log.txt`: co znalazł (dźwięk, USB, Bluetooth), przydatny przy zgłaszaniu problemu.
 
-Wyjście z gry wraca do menu startowego.
+Wyjście z gry **wyłącza radio**: X6100 nie umie zrestartować się z Linuksa, więc nie wraca samo do menu
+startowego. Inny system wybierzesz po włączeniu radia klawiszem POWER.
 
 ## Extras: emulator NES
 
@@ -131,7 +132,7 @@ na partycji `BOOT` karty (widać ją na każdym komputerze). Podfoldery działaj
 **Sterowanie radiem (gracz 1):** BAND ▲/▼, DFN i DFL to krzyżak, F1 lub PTT to A, F2 to B,
 F3 Select, F4 Start, F5 A turbo. Gałka VFO lewo/prawo, gałka VOL to głośnik radia.
 Wciśnięty MFK albo GEN otwiera w grze menu (po menu chodzi się gałką MFK): powrót do gry, gra od nowa,
-głośność, zapis i odczyt stanu, Bluetooth, wyjście z gry, wyłączenie radia. Menu główne emulatora to kafelki: lista gier
+rozmiar obrazu, zapis i odczyt stanu, wyjście do listy gier, wyłączenie radia. Menu główne emulatora to kafelki: lista gier
 (obok obrazek gry, jeśli jest plik `.png`/`.jpg`/`.bmp` o nazwie gry obok niej albo w `NES/IMG`), sterowanie
 (klawisze i własny układ przycisków pada), Bluetooth, wyłączenie radia. W długiej liście gier przytrzymany
 kierunek przewija coraz szybciej, lewo/prawo skacze do następnej litery, gałka VFO o stronę.
