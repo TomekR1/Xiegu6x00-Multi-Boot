@@ -444,6 +444,10 @@ EN = {
         "That does not look like a GitHub repository. Type owner/repo, e.g. Guru-RF/OpenX6X00, or its github.com address.",
     "Usunąć {repo} z listy? Dodane już systemy i karty zostają bez zmian.":
         "Remove {repo} from the list? Systems already added and cards already written stay as they are.",
+    "Ta kopia aplikacji nie ma w sobie U-Boota menu (x6100mb/data/u-boot-x6100-menu.bin), więc menu na radiu nie miałoby obrazu ani klawiszy F1–F5. Pobierz aplikację z zakładki Releases na GitHubie (plik .zip dla swojego komputera) i uruchom ją stamtąd.":
+        "This copy of the app has no menu U-Boot in it (x6100mb/data/u-boot-x6100-menu.bin), so the menu on the "
+        "radio would have no picture and no F1–F5 keys. Download the app from the Releases tab on GitHub (the .zip "
+        "for your computer) and run it from there.",
     # the NES emulator
     "+ Emulator NES": "+ NES emulator",
     "Gry NES…": "NES games…",

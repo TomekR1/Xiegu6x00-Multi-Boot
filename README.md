@@ -213,6 +213,12 @@ Zgłaszaj je w zakładce **[Issues](../../issues)**. Pomaga:
 - zdjęcie ekranu radia, jeśli coś dzieje się przy starcie;
 - które systemy były na karcie i który klawisz został wciśnięty.
 
+**Ciemny ekran przy starcie, F1–F5 nie działają, po chwili sam startuje pierwszy system.** Karta dostała
+U-Boota z obrazu systemu zamiast U-Boota menu: tak się dzieje, gdy aplikacja jest uruchomiona ze źródeł
+(np. z ZIP-a „Code → Download ZIP” i `uruchom-*.sh`/`.bat`), bez pliku `x6100mb/data/u-boot-x6100-menu.bin`.
+Pobierz aplikację z **[Releases](../../releases/latest)** i zapisz kartę jeszcze raz. Nowe wersje aplikacji
+w takiej sytuacji odmawiają zapisu i mówią, co zrobić.
+
 Jeśli system Xiegu z eMMC się nie uruchomi, menu pokaże na ekranie zawartość eMMC:
 zrób zdjęcie i dołącz je do zgłoszenia.
 

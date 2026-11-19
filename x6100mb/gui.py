@@ -1174,6 +1174,13 @@ class App:
 
     def _plan(self, card_bytes=None, data_files=None, settings=None):
         """The card; settings (taken on Tk's thread) let a job build it in its own thread"""
+        from .image import bundled_uboot_path
+        if bundled_uboot_path() is None:
+            # Without the menu's own U-Boot the card would take the first image's: no picture on the
+            # screen and no F keys, only the default system after the countdown (issue #6)
+            raise ValueError(t("Ta kopia aplikacji nie ma w sobie U-Boota menu (x6100mb/data/u-boot-x6100-menu.bin), "
+                               "więc menu na radiu nie miałoby obrazu ani klawiszy F1–F5. Pobierz aplikację z "
+                               "zakładki Releases na GitHubie (plik .zip dla swojego komputera) i uruchom ją stamtąd."))
         timeout, data_mb, xiegu, data_mode, wait = settings or self._all_settings()
         ents = resolve_extras([dict(e) for e in self.entries])
         return compose(ents, default=self.default, timeout_s=timeout, data_mb=data_mb, card_bytes=card_bytes,
