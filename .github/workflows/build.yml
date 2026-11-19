@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - env: {GH_TOKEN: "${{ github.token }}", NOTES_TAG: "${{ inputs.notes_tag }}"}
+      - env: {GH_TOKEN: "${{ github.token }}", NOTES_TAG: "${{ inputs.notes_tag }}", GIVEN: "${{ inputs.notes_tag }}"}
         run: python3 .github/publish.py --notes "$NOTES_TAG"
 
   # An old release gone, with its tag (never the newest one, nor a page pointing to it)

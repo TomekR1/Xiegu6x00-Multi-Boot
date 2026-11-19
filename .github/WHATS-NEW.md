@@ -1,7 +1,7 @@
-- IU1WXY 0.2.2+ działa na każdym miejscu w menu (wcześniej, poza F1, startował zamiast niego pierwszy system).
-- Doom i emulator NES biorą jądro z pierwszego systemu, który je ma (np. OpenX6X00), więc IU1WXY może być pod F1.
-- Własne repozytorium GitHub jako źródło systemów: **+ Z internetu…** → na dole „Zaawansowane”.
+- Aplikacja nie zapisze karty bez U-Boota menu (wtedy na radiu był ciemny ekran i nie działały F1–F5); powie, skąd wziąć właściwą wersję.
+- IU1WXY 0.2.2+ działa na każdym miejscu w menu; Doom i emulator NES biorą jądro z pierwszego systemu, który je ma.
+- Wyjście z Dooma opisane zgodnie z prawdą: wyłącza radio (X6100 nie umie zrestartować się z Linuksa).
 ---
-- IU1WXY 0.2.2+ works in any place in the menu (before, unless it was F1, the first system started instead).
-- Doom and the NES emulator take the kernel of the first system that has one (e.g. OpenX6X00), so IU1WXY can be F1.
-- Your own GitHub repository as a source of systems: **+ From the internet…** → "Advanced" at the bottom.
+- The app will not write a card without the menu's U-Boot (that gave a dark screen and dead F1–F5 on the radio); it says where to get the right version.
+- IU1WXY 0.2.2+ works in any place in the menu; Doom and the NES emulator take the kernel of the first system that has one.
+- Leaving Doom described as it is: it switches the radio off (the X6100 cannot restart itself from Linux).

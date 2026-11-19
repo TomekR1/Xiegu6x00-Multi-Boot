@@ -462,6 +462,10 @@ EN = {
         "and plays its sound with that system's programs",
     "ta wersja aplikacji nie ma w sobie menu mówionego": "this build of the app has no talking menu in it",
     "ta wersja aplikacji nie ma w sobie głosu menu mówionego": "this build of the app has no voice for the talking menu",
+    "Ta kopia aplikacji nie ma w sobie U-Boota menu (x6100mb/data/u-boot-x6100-menu.bin), więc menu na radiu nie miałoby obrazu ani klawiszy F1–F5. Pobierz aplikację z zakładki Releases na GitHubie (plik .zip dla swojego komputera) i uruchom ją stamtąd.":
+        "This copy of the app has no menu U-Boot in it (x6100mb/data/u-boot-x6100-menu.bin), so the menu on the "
+        "radio would have no picture and no F1–F5 keys. Download the app from the Releases tab on GitHub (the .zip "
+        "for your computer) and run it from there.",
     # the NES emulator
     "+ Emulator NES": "+ NES emulator",
     "Gry NES…": "NES games…",
