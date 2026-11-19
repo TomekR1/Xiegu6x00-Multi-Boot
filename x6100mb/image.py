@@ -396,6 +396,15 @@ class SourceSystem:
                 f"U-Boot {self.uboot_version or ('yes' if self.has_uboot else 'none')}")
 
 
+def data_path(name):
+    """A file the app carries in x6100mb/data (in a packed app: its own copy), or None"""
+    import sys
+    bases = [os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")]
+    if hasattr(sys, "_MEIPASS"):
+        bases.insert(0, os.path.join(sys._MEIPASS, "x6100mb", "data"))
+    return next((os.path.join(b, name) for b in bases if os.path.isfile(os.path.join(b, name))), None)
+
+
 def bundled_uboot_path():
     """The menu's own U-Boot (uboot/build.sh: sets up the X6100 screen), if this build carries it"""
     import sys
@@ -445,6 +454,9 @@ class ExtraSystem:
 
     def __init__(self, name, rootfs_path, donor, extra="doom"):
         if donor is None or not getattr(donor, "files", None) or "kernel" not in donor.files:
+            if extra == "talk":
+                raise ImageError(t("Menu mówione potrzebuje na karcie także systemu z obrazu (np. OpenX6X00): "
+                                   "uruchamia się z jego jądrem i odtwarza dźwięk jego programami"))
             if extra == "doom":
                 raise ImageError(t("Doom potrzebuje na karcie także systemu z obrazu (np. OpenX6X00): "
                                    "uruchamia się z jego jądrem"))
@@ -492,6 +504,8 @@ def extra_rootfs(cache, xz_path=None, progress=None, name="doom-x6100-rootfs.ext
             bases.insert(0, os.path.join(sys._MEIPASS, "x6100mb", "data"))
         xz_path = next((os.path.join(b, name) for b in bases if os.path.isfile(os.path.join(b, name))), None)
         if xz_path is None:
+            if name.startswith("talk"):
+                raise ImageError(t("ta wersja aplikacji nie ma w sobie menu mówionego"))
             raise ImageError(t("ta wersja aplikacji nie ma w sobie Dooma") if name.startswith("doom")
                              else t("ta wersja aplikacji nie ma w sobie emulatora NES"))
     st = os.stat(xz_path)

@@ -444,6 +444,24 @@ EN = {
         "That does not look like a GitHub repository. Type owner/repo, e.g. Guru-RF/OpenX6X00, or its github.com address.",
     "Usunąć {repo} z listy? Dodane już systemy i karty zostają bez zmian.":
         "Remove {repo} from the list? Systems already added and cards already written stay as they are.",
+    # the talking boot menu (alpha)
+    "+ Menu mówione (alfa)": "+ Talking menu (alpha)",
+    "menu mówione dla niewidomych (alfa, głos: RHVoice Lyubov, program: Jim Ruiz); startuje, gdy na ekranie nikt nie wciśnie klawisza, czyta wybór i startuje system z ★":
+        "talking menu for blind operators (alpha, voice: RHVoice Lyubov, program: Jim Ruiz); starts when nobody "
+        "presses a key on the screen, says the choices and starts the ★ system",
+    "dźwięk i jądro z: {name}": "sound and kernel from: {name}",
+    "Menu mówione uruchamia się z jądrem systemu z obrazu (np. OpenX6X00) i odtwarza dźwięk jego programami. Dodaj najpierw taki system.":
+        "The talking menu starts with the kernel of a system from an image (e.g. OpenX6X00) and plays its sound "
+        "with that system's programs. Add such a system first.",
+    "Menu mówione (alfa): gdy przy włączaniu radia nikt nie wciśnie klawisza, menu czyta na głos wybór. Po wciśnięciu F1–F5 radio wyłącza się i prosi o klawisz POWER; po włączeniu startuje wybrany system. Bez wyboru po 30 s startuje system z ★. Czas na ekranie warto ustawić na 3 s.":
+        "Talking menu (alpha): when nobody presses a key at power-on, the menu says the choices aloud. After F1–F5 "
+        "the radio switches off and asks for the POWER key; at power-on the chosen system starts. Without a choice, "
+        "the ★ system starts after 30 s. Setting the screen's time to 3 s is a good idea.",
+    "Menu mówione potrzebuje na karcie także systemu z obrazu (np. OpenX6X00): uruchamia się z jego jądrem i odtwarza dźwięk jego programami":
+        "The talking menu needs a system from an image on the card too (e.g. OpenX6X00): it starts with its kernel "
+        "and plays its sound with that system's programs",
+    "ta wersja aplikacji nie ma w sobie menu mówionego": "this build of the app has no talking menu in it",
+    "ta wersja aplikacji nie ma w sobie głosu menu mówionego": "this build of the app has no voice for the talking menu",
     # the NES emulator
     "+ Emulator NES": "+ NES emulator",
     "Gry NES…": "NES games…",

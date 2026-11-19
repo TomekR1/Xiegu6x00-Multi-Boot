@@ -65,7 +65,10 @@ DOOM_LOGO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "
 NES_NAME = "NES"
 NES_LOGO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "nes.png")
 # The app's extras: their root filesystem (bundled in the app) and their tile's icon
-EXTRAS = {"doom": ("doom-x6100-rootfs.ext4.xz", DOOM_LOGO), "nes": ("nes-x6100-rootfs.ext4.xz", NES_LOGO)}
+TALK_NAME = "Talking menu"
+TALK_LOGO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "talk.png")
+EXTRAS = {"doom": ("doom-x6100-rootfs.ext4.xz", DOOM_LOGO), "nes": ("nes-x6100-rootfs.ext4.xz", NES_LOGO),
+          "talk": ("talk-x6100-rootfs.ext4.xz", TALK_LOGO)}
 # The NES emulator's games: what it plays, in the NES folder of the card's BOOT partition
 NES_GAMES = (".nes", ".fds", ".unf", ".unif", ".nsf")
 NES_ROOM_MB = 64          # room on BOOT for the games added later and the saves
@@ -304,6 +307,19 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
     a("setenv bm_choice")
     a("setenv i 0")
     a("pek clear")                          # the press that switched the radio on (menu's U-Boot only)
+    # A one-time start: the card's sector 2 holds "BM" and a key's digit (the talking menu writes it,
+    # Jim Ruiz's X6100 Talking MultiBoot; the radio cannot restart itself, so it is read at the next
+    # power-on): that system starts at once and the mark is cleared
+    a("setenv bm_once")
+    a("mmc dev 0")
+    a("if mmc read 0x45200000 2 1; then")
+    a("    if itest.b *0x45200000 == 0x42; then if itest.b *0x45200001 == 0x4d; then")
+    for k in range(1, len(entries) + 1):
+        a("        if itest.b *0x45200002 == 0x%x; then setenv bm_once %d; fi" % (0x30 + k, k))
+    a("        mw.b 0x45200000 0 200; mmc write 0x45200000 2 1")
+    a("    fi; fi")
+    a("fi")
+    a('if test -n "${bm_once}"; then setenv bm_choice ${bm_once}; fi')
     a('while test -z "${bm_choice}"; do')
     a("    if itest ${bm_anim} -eq 1; then setexpr bm_f ${i} %% %x; run bm_fr_${bm_f}; fi" % ANIM_FRAMES)
     a("    setexpr bm_r ${i} % a")
@@ -427,7 +443,8 @@ def env_file(default, timeout_s, xiegu=None, wait=False):
 
 
 def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboot_from=None,
-            xiegu=None, boot_extra_mb=32, data_mode="shared", graphics=True, wait=False, data_files=None):
+            xiegu=None, boot_extra_mb=32, data_mode="shared", graphics=True, wait=False, data_files=None,
+            talk_voice=None):
     """A Plan for the card. entries as for menu_script, without "dir"/"part" (filled in here);
     an entry may name a "logo" picture for the graphic menu.
 
@@ -446,6 +463,24 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         raise ComposeError(f"at most {MAX_ENTRIES} entries (keys F1..F{MAX_ENTRIES})")
     if not 0 <= default < len(entries):
         raise ComposeError("the default entry is not in the list")
+    # The talking menu (alpha): the screen menu starts it when no key is pressed; it says the choices
+    # and starts the default chosen in the app when none is pressed there either
+    talk_i = next((i for i, e in enumerate(entries) if extra_of(e) == "talk"), None)
+    talk_files = {}
+    if talk_i is not None:
+        from .image import data_path
+        from .talk import XIEGU, Voice, prompts, settings
+        others = [i for i in range(len(entries)) if i != talk_i]
+        if not others:
+            raise ComposeError("the talking menu needs a system to start")
+        spoken = default if default != talk_i else others[0]
+        voice_zip = talk_voice or data_path("talk-voice.zip")
+        if voice_zip is None:
+            raise ComposeError(t("ta wersja aplikacji nie ma w sobie głosu menu mówionego"))
+        choices = {i + 1: (XIEGU if entries[i]["kind"] == "xiegu" else entries[i]["name"]) for i in others}
+        talk_files = {"TALK/" + n: b for n, b in prompts(Voice(voice_zip), choices).items()}
+        talk_files["talkmenu.txt"] = settings(spoken + 1, talk_i + 1)
+        default, wait = talk_i, False
     if uboot_from is None:
         from .image import UBoot, bundled_uboot_path
         p = bundled_uboot_path()
@@ -481,6 +516,7 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     if nes:
         kernels += sum(len(g) if isinstance(g, bytes) else os.path.getsize(g) for _n, g in games + pics)
         kernels += NES_ROOM_MB * MIB
+    kernels += sum(len(b) for b in talk_files.values())
     pictures = (len(entries) + 1) * 400 * 1024 if gfx else 0
     boot_size = _up(max(64 * MIB, kernels + pictures + boot_extra_mb * MIB + 4 * MIB) // SECTOR) * SECTOR
 
@@ -665,6 +701,8 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         where = (f"{e['dir']}, root /dev/mmcblk0p{e['part']}" if e["kind"] == "sd" else "eMMC")
         readme.append(f"F{i + 1}  {e['name']}  ({where})")
     fat.add_file("menu.txt", ("\r\n".join(readme) + "\r\n").encode())
+    for name, data in talk_files.items():          # the talking menu's prompts and settings
+        fat.add_file(name, data)
     if nes:
         # The emulator's settings, read at its start (extras/nes/nes_x6100.c), and the games
         fat.add_file("nes.txt", (

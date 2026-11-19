@@ -122,8 +122,26 @@ jobs:
             extras/nes/out/nes-x6100-rootfs.ext4.xz.sha256
             extras/nes/out/nes-version.txt
 
+  # The talking boot menu (alpha): Jim Ruiz's talkmenu (GPL) and its voice, RHVoice Lyubov (CC BY-NC-ND 4.0)
+  talk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and voice
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q gcc-arm-linux-gnueabihf e2fsprogs xz-utils rhvoice rhvoice-english
+      - name: The talking menu for the X6100 (Extras)
+        run: ./extras/talk/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: talk-x6100
+          path: |
+            extras/talk/out/talk-x6100-rootfs.ext4.xz
+            extras/talk/out/talk-voice.zip
+
   apps:
-    needs: [test, uboot, doom, nes]
+    needs: [test, uboot, doom, nes, talk]
     strategy:
       fail-fast: false
       matrix:
@@ -152,6 +170,8 @@ jobs:
         with: {name: doom-x6100-rootfs, path: x6100mb/data}
       - uses: actions/download-artifact@v4
         with: {name: nes-x6100-rootfs, path: x6100mb/data}
+      - uses: actions/download-artifact@v4
+        with: {name: talk-x6100, path: x6100mb/data}
       - run: pip install pillow==11.0.0 certifi sv-ttk==2.6.0
       # PyInstaller's own ready-made Windows starter is in a great many programs, bad ones too, and
       # virus scanners flag it; one built here from its source is this app's own
@@ -234,7 +254,7 @@ jobs:
   # The app fetches the newest systems itself and builds a card from them: a check only, nothing
   # of it is published (the release carries the app; users fetch the systems they want in it)
   live-check:
-    needs: [test, uboot, doom, nes]
+    needs: [test, uboot, doom, nes, talk]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -244,6 +264,8 @@ jobs:
         with: {name: doom-x6100-rootfs, path: x6100mb/data}
       - uses: actions/download-artifact@v4
         with: {name: nes-x6100-rootfs, path: x6100mb/data}
+      - uses: actions/download-artifact@v4
+        with: {name: talk-x6100, path: x6100mb/data}
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - name: Catalog (live, newest releases on GitHub)

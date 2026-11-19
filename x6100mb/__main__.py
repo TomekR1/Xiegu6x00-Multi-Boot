@@ -64,6 +64,10 @@ def cli(argv):
     b.add_argument("--xiegu", action="store_true", help="an entry for Xiegu's system on the eMMC (last)")
     b.add_argument("--doom", action="store_true", help="the Doom easter egg (with the first system's kernel)")
     b.add_argument("--doom-rootfs", help="its root filesystem (.ext4.xz; default: the one in the app)")
+    b.add_argument("--talk", action="store_true",
+                   help="the talking boot menu for blind operators (alpha; Jim Ruiz's talkmenu, voice RHVoice Lyubov)")
+    b.add_argument("--talk-rootfs", help="its root filesystem (.ext4.xz; default: the one in the app)")
+    b.add_argument("--talk-voice", help="its voice (talk-voice.zip; default: the one in the app)")
     b.add_argument("--nes", action="store_true", help="the NES emulator (with the first system's kernel)")
     b.add_argument("--nes-rootfs", help="its root filesystem (.ext4.xz; default: the one in the app)")
     b.add_argument("--nes-game", action="append", default=[], metavar="FILE",
@@ -121,6 +125,9 @@ def cli(argv):
             entries.append({"kind": "nes", "name": NES_NAME, "games": a.nes_game})
         if a.xiegu:
             entries.append({"kind": "xiegu", "name": "Xiegu (eMMC)"})
+        if a.talk:
+            from .compose import TALK_NAME
+            entries.append({"kind": "talk", "name": TALK_NAME})
         for spec in a.logo:
             n, _, path = spec.partition("=")
             if not n.isdigit() or not 1 <= int(n) <= len(entries) or not path:
@@ -133,9 +140,10 @@ def cli(argv):
             from .image import UBoot
             ub = UBoot(a.uboot)
         from .compose import resolve_extras
-        entries = resolve_extras(entries, {"doom": a.doom_rootfs, "nes": a.nes_rootfs})
+        entries = resolve_extras(entries, {"doom": a.doom_rootfs, "nes": a.nes_rootfs, "talk": a.talk_rootfs})
         plan = compose(entries, default=a.default - 1, timeout_s=a.timeout, data_mb=a.data_mb, uboot_from=ub,
-                       data_mode=a.data, graphics=not a.no_graphics, wait=a.wait)
+                       data_mode=a.data, graphics=not a.no_graphics, wait=a.wait,
+                       talk_voice=a.talk_voice)
         if a.script_only:
             print(plan.script)
             return 0

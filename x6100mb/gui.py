@@ -11,7 +11,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import backup, devices, i18n
-from .compose import DOOM_LOGO, DOOM_NAME, NES_LOGO, NES_NAME, MAX_ENTRIES, MAX_SECS, XIEGU_DEFAULTS, compose, resolve_extras
+from .compose import DOOM_LOGO, DOOM_NAME, NES_LOGO, NES_NAME, TALK_LOGO, TALK_NAME, MAX_ENTRIES, MAX_SECS, XIEGU_DEFAULTS, compose, resolve_extras
 from .i18n import t
 from .image import SourceSystem, cache_dir, open_source
 from .writer import Progress, write_device, write_image_file
@@ -664,6 +664,11 @@ class App:
             donor = self._donor()
             return (t("klasyczny Doom (Freedoom); jądro i parowania Bluetooth z: {name}", name=donor["name"])
                     if donor else t("klasyczny Doom (Freedoom), z jądrem pierwszego systemu z obrazu na liście"))
+        if e["kind"] == "talk":
+            donor = self._donor()
+            return (t("menu mówione dla niewidomych (alfa, głos: RHVoice Lyubov, program: Jim Ruiz); startuje, gdy na "
+                      "ekranie nikt nie wciśnie klawisza, czyta wybór i startuje system z ★") +
+                    ("  ·  " + t("dźwięk i jądro z: {name}", name=donor["name"]) if donor else ""))
         if e["kind"] == "nes":
             donor = self._donor()
             games = len(e.get("games", []))
@@ -698,7 +703,7 @@ class App:
         if key not in self._tile_jobs:
             self._tile_jobs.add(key)
             threading.Thread(target=self._tile_job, args=(dict(e), key), daemon=True).start()
-        own = {"doom": DOOM_LOGO, "nes": NES_LOGO}.get(e["kind"])
+        own = {"doom": DOOM_LOGO, "nes": NES_LOGO, "talk": TALK_LOGO}.get(e["kind"])
         return {"name": e["name"], "logo": e.get("logo") or own}
 
     def _tile_job(self, e, key):
@@ -731,10 +736,14 @@ class App:
         sx, sy = SCREEN_W / menu_gfx.W, SCREEN_H / menu_gfx.H
         c.create_rectangle(self.sox - 2, self.soy, self.sox + SCREEN_W + 1, self.soy + SCREEN_H + 2,
                            fill="#000000", outline=LINE, width=1)
+        # with the talking menu, the screen starts it (it says the choices and starts the ★ system)
+        talk = next((i for i, e in enumerate(self.entries) if e["kind"] == "talk"), None)
+        screen_default = self.default if talk is None else talk
+        waits = self.wait.get() and talk is None
         if menu_gfx.HAVE_PIL:
             from PIL import Image
             img = menu_gfx.render_menu([self._tile(e) for e in self.entries],
-                                       None if self.wait.get() else min(self.default, max(len(self.entries) - 1, 0)))
+                                       None if waits else min(screen_default, max(len(self.entries) - 1, 0)))
             self._screen_img = self._photo(img.resize((SCREEN_W, SCREEN_H), Image.LANCZOS))
             c.create_image(self.sox, self.soy + 1, image=self._screen_img, anchor="nw")
         else:                               # no Pillow (running from source): names in boxes
@@ -751,10 +760,10 @@ class App:
             except (ValueError, AttributeError):
                 secs = 5
             from .compose import COUNTDOWN, WAITING
-            if self.wait.get():
+            if waits:
                 text = t(WAITING).format(n=len(self.entries))
             else:
-                text = t(COUNTDOWN).replace("${bm_default}", str(self.default + 1)).replace("${bm_left}", str(secs))
+                text = t(COUNTDOWN).replace("${bm_default}", str(screen_default + 1)).replace("${bm_left}", str(secs))
             c.create_text(16 * sx, 48 * sy, text=text, anchor="w", fill="#d0d0d0", tags="over",
                           font=("Courier", max(9, int(19 * sy)), "bold"))
         if not self.entries:
@@ -841,6 +850,7 @@ class App:
         ColorButton(col, t("+ Emulator NES"), "secondary", self.add_nes, image=self._nes_img,
                     pady=5).pack(fill="x", pady=(6, 0))
         ColorButton(col, t("Gry NES…"), "secondary", self.nes_games).pack(fill="x", pady=(6, 0))
+        ColorButton(col, t("+ Menu mówione (alfa)"), "secondary", self.add_talk).pack(fill="x", pady=(6, 0))
         ColorButton(col, t("Przeczytaj najpierw"), "danger", self.doom_readme).pack(fill="x", pady=(6, 0))
 
     def add_nes(self):
@@ -869,6 +879,24 @@ class App:
             win.win.lift()
             return
         self._nes_win = NesGamesDialog(self, nes)
+
+    def add_talk(self):
+        """The talking boot menu for blind operators (Jim Ruiz's talkmenu; alpha)"""
+        if any(e["kind"] == "talk" for e in self.entries):
+            return
+        if len(self.entries) >= MAX_ENTRIES:
+            messagebox.showwarning(APP, t("Menu ma najwyżej {n} pozycji (F1–F{n}).", n=MAX_ENTRIES))
+            return
+        if self._donor() is None:
+            messagebox.showinfo(APP, t("Menu mówione uruchamia się z jądrem systemu z obrazu (np. OpenX6X00) i "
+                                       "odtwarza dźwięk jego programami. Dodaj najpierw taki system."))
+            return
+        self.entries.append({"kind": "talk", "name": TALK_NAME})
+        self._redraw(len(self.entries) - 1)
+        messagebox.showinfo(APP, t("Menu mówione (alfa): gdy przy włączaniu radia nikt nie wciśnie klawisza, menu "
+                                   "czyta na głos wybór. Po wciśnięciu F1–F5 radio wyłącza się i prosi o klawisz "
+                                   "POWER; po włączeniu startuje wybrany system. Bez wyboru po 30 s startuje system "
+                                   "z ★. Czas na ekranie warto ustawić na 3 s."))
 
     def add_doom(self):
         if any(e["kind"] == "doom" for e in self.entries):
