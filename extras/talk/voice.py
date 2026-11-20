@@ -22,7 +22,7 @@ from x6100mb.talk import FRAGMENTS, _trim  # noqa: E402
 import array  # noqa: E402
 
 VOICE = os.environ.get("TALK_VOICE", "lyubov")
-RATE = os.environ.get("TALK_RATE", "120")      # % of the voice's own pace: a little faster (Jim Ruby's test, 2026-11-20)
+RATE = os.environ.get("TALK_RATE", "125")      # % of the voice's own pace: 20 % shorter, as Jim Ruby's prompts (1e01011)
 
 
 def say(text, tmp):
