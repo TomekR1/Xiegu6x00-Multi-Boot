@@ -59,6 +59,16 @@ Uwagi i błędy / Feedback: [Issues](https://github.com/{repo}/issues).
 """
 
 
+def notice():
+    """A notice for this release, centred in the middle of its description (.github/NOTICE.md; ""
+    without it: take the file away once it no longer applies)"""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "NOTICE.md"), encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
 def whats_new():
     """The release's own short list of news (.github/WHATS-NEW.md: Polish, a line of ---, English);
     ("", "") without it"""
@@ -81,6 +91,7 @@ def notes(v):
     pl_new, en_new = whats_new()
     pl_news = f"\n### Co nowego\n{pl_new}\n" if pl_new else ""
     en_news = f"\n### What's new\n{en_new}\n" if en_new else ""
+    middle = f"\n---\n\n{notice()}\n\n---\n" if notice() else "\n---\n"
     return f"""Kilka systemów na jednej karcie SD do **Xiegu X6100**. Przy włączaniu radia wybierasz system klawiszem **F1–F5**.
 
 ### Pobierz
@@ -96,9 +107,7 @@ W każdej paczce jest **instrukcja krok po kroku**: `INSTRUKCJA.html` (otwórz w
 - W menu może być też oryginalny system Xiegu z pamięci radia.
 - Przenosi ustawienia, logi i parowania ze starej karty na nową.
 - Dodatki: **Doom** i **emulator NES** (Twoje gry, pady USB i Bluetooth, gry wgrywane przez WiFi).
-{pl_news}
----
-
+{pl_news}{middle}
 Several systems on one SD card for the **Xiegu X6100**. At power-on you choose one with the **F1–F5** keys.
 
 ### Download
