@@ -50,7 +50,7 @@ Windows {w} · macOS {m} · Linux {l}. Pliki jak w zwykłym wydaniu: `.zip` dla 
 ### Menu mówione / Talking menu
 - W aplikacji: **Extras → + Menu mówione (alfa)**, czas na ekranie najlepiej 3 s. / In the app: **Extras → + Talking menu (alpha)**, the screen's time best 3 s.
 - Gdy przy włączaniu radia nikt nie wciśnie klawisza, menu czyta wybór na głos: „Boot menu. Press F1 for …”. / When nobody presses a key at power-on, the menu says the choices aloud.
-- F1–F5: radio się wyłącza i prosi o POWER; po włączeniu startuje wybrany system. Bez wyboru po 30 s startuje system z ★. / F1–F5: the radio switches off and asks for POWER; at power-on the chosen system starts. Without a choice, the ★ system starts after 30 s.
+- F1–F5: radio się wyłącza; gdy po kilku sekundach słychać kliknięcie, wciśnij POWER i startuje wybrany system. Bez wyboru po 30 s startuje system z ★. / F1–F5: the radio switches off; when it clicks a few seconds later, press POWER and the chosen system starts. Without a choice, the ★ system starts after 30 s.
 - Każde menu (także bez menu mówionego) uruchamia raz system zaznaczony w sektorze 2 karty („BM” i cyfra). / Every menu starts a system marked in the card's sector 2 ("BM" and a digit) once.
 
 Program menu: **talkmenu** z [X6100 Talking MultiBoot](https://github.com/Jimr9/X6100-Talking-MultiBoot), Jim Ruby (GPL-2.0-or-later). Głos / voice: **RHVoice Lyubov** (Artem Plaksin, Sergey Parshakov, Beka Gozalishvili, Lyubov Sablina; CC BY-NC-ND 4.0, non-commercial).

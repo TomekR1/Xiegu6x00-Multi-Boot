@@ -65,7 +65,7 @@ def cli(argv):
     b.add_argument("--doom", action="store_true", help="the Doom easter egg (with the first system's kernel)")
     b.add_argument("--doom-rootfs", help="its root filesystem (.ext4.xz; default: the one in the app)")
     b.add_argument("--talk", action="store_true",
-                   help="the talking boot menu for blind operators (alpha; Jim Ruiz's talkmenu, voice RHVoice Lyubov)")
+                   help="the talking boot menu for blind operators (alpha; Jim Ruby's talkmenu, voice RHVoice Lyubov)")
     b.add_argument("--talk-rootfs", help="its root filesystem (.ext4.xz; default: the one in the app)")
     b.add_argument("--talk-voice", help="its voice (talk-voice.zip; default: the one in the app)")
     b.add_argument("--nes", action="store_true", help="the NES emulator (with the first system's kernel)")

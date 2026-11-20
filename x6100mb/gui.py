@@ -666,7 +666,7 @@ class App:
                     if donor else t("klasyczny Doom (Freedoom), z jądrem pierwszego systemu z obrazu na liście"))
         if e["kind"] == "talk":
             donor = self._donor()
-            return (t("menu mówione dla niewidomych (alfa, głos: RHVoice Lyubov, program: Jim Ruiz); startuje, gdy na "
+            return (t("menu mówione dla niewidomych (alfa, głos: RHVoice Lyubov, program: Jim Ruby); startuje, gdy na "
                       "ekranie nikt nie wciśnie klawisza, czyta wybór i startuje system z ★") +
                     ("  ·  " + t("dźwięk i jądro z: {name}", name=donor["name"]) if donor else ""))
         if e["kind"] == "nes":
@@ -881,7 +881,7 @@ class App:
         self._nes_win = NesGamesDialog(self, nes)
 
     def add_talk(self):
-        """The talking boot menu for blind operators (Jim Ruiz's talkmenu; alpha)"""
+        """The talking boot menu for blind operators (Jim Ruby's talkmenu; alpha)"""
         if any(e["kind"] == "talk" for e in self.entries):
             return
         if len(self.entries) >= MAX_ENTRIES:
@@ -894,8 +894,8 @@ class App:
         self.entries.append({"kind": "talk", "name": TALK_NAME})
         self._redraw(len(self.entries) - 1)
         messagebox.showinfo(APP, t("Menu mówione (alfa): gdy przy włączaniu radia nikt nie wciśnie klawisza, menu "
-                                   "czyta na głos wybór. Po wciśnięciu F1–F5 radio wyłącza się i prosi o klawisz "
-                                   "POWER; po włączeniu startuje wybrany system. Bez wyboru po 30 s startuje system "
+                                   "czyta na głos wybór. Po wciśnięciu F1–F5 radio się wyłącza; gdy po kilku sekundach słychać "
+                                   "kliknięcie, wciśnij POWER i startuje wybrany system. Bez wyboru po 30 s startuje system "
                                    "z ★. Czas na ekranie warto ustawić na 3 s."))
 
     def add_doom(self):

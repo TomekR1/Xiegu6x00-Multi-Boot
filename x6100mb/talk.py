@@ -1,6 +1,6 @@
 """The talking boot menu's prompts (Extras, alpha), for blind operators.
 
-The menu itself is Jim Ruiz's talkmenu (X6100 Talking MultiBoot, GPL-2.0-or-later): it plays
+The menu itself is Jim Ruby's talkmenu (X6100 Talking MultiBoot, GPL-2.0-or-later): it plays
 BOOT/TALK/MENU.WAV ("Boot menu. Press F1 for ..."), STARTn.WAV for the key pressed, WAITn.WAV and
 OFF.WAV, reads BOOT/talkmenu.txt, marks the choice in the card's sector 2 ("BM" and the key's digit)
 and switches the radio off; at the next power-on the screen menu starts that system once.
@@ -31,7 +31,8 @@ WORDS = ["version", "point", "test", "beta", "alpha", "original", "speech", "acc
          "menu", "system", "talking", "games", "emulator", "classic", "and", "no"]
 FRAGMENTS = {
     "boot_menu": "Boot menu.",
-    "press_power": "Press the power button to begin booting.",
+    # the base board cuts the power some 5-7 s after the menu ends (a relay's click): a press before it is lost
+    "press_power": "The radio switches off. When you hear it click, press the power button to start it.",
     "power_off": "Power off.",
     **{"press_%d" % k: "Press F%d for" % k for k in KEYS},
     **{"pressed_%d" % k: "You pressed F%d," % k for k in KEYS},
@@ -185,7 +186,7 @@ def prompts(voice, choices):
     return files
 
 
-def settings(default_key, self_key, wait=30, volume=20, headphone=47):
+def settings(default_key, self_key, wait=30, volume=40, headphone=47):
     """BOOT/talkmenu.txt (read by the talking menu)"""
     return ("# The talking menu: the key started when no key is pressed (1-5), seconds of talking before\r\n"
             "# it starts (0: waits for a key), the radio's volume while it talks (0-55), the codec's level\r\n"

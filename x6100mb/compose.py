@@ -308,7 +308,7 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
     a("setenv i 0")
     a("pek clear")                          # the press that switched the radio on (menu's U-Boot only)
     # A one-time start: the card's sector 2 holds "BM" and a key's digit (the talking menu writes it,
-    # Jim Ruiz's X6100 Talking MultiBoot; the radio cannot restart itself, so it is read at the next
+    # Jim Ruby's X6100 Talking MultiBoot; the radio cannot restart itself, so it is read at the next
     # power-on): that system starts at once and the mark is cleared
     a("setenv bm_once")
     a("mmc dev 0")

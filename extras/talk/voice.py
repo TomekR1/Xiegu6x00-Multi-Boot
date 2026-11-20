@@ -1,4 +1,4 @@
-"""The talking menu's voice: short recordings made with RHVoice (voice Lyubov, as Jim Ruiz's
+"""The talking menu's voice: short recordings made with RHVoice (voice Lyubov, as Jim Ruby's
 X6100 Talking MultiBoot uses), from which the app puts together each card's own prompts
 (x6100mb/talk.py: the systems' names, the keys, the sentences).
 
@@ -22,13 +22,14 @@ from x6100mb.talk import FRAGMENTS, _trim  # noqa: E402
 import array  # noqa: E402
 
 VOICE = os.environ.get("TALK_VOICE", "lyubov")
+RATE = os.environ.get("TALK_RATE", "120")      # % of the voice's own pace: a little faster (Jim Ruby's test, 2026-11-20)
 
 
 def say(text, tmp):
     src, out = os.path.join(tmp, "in.txt"), os.path.join(tmp, "out.wav")
     with open(src, "w") as f:
         f.write(text + "\n")
-    subprocess.run(["RHVoice-test", "-p", VOICE, "-i", src, "-o", out], check=True,
+    subprocess.run(["RHVoice-test", "-p", VOICE, "-r", RATE, "-i", src, "-o", out], check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     with wave.open(out) as w:
         assert w.getsampwidth() == 2 and w.getnchannels() == 1, text
@@ -51,7 +52,7 @@ def main(out):
                 w.writeframes(pcm)
             z.writestr(name, buf.getvalue())
             index[key] = name
-        z.writestr("index.json", json.dumps({"voice": VOICE, "files": index}, indent=1))
+        z.writestr("index.json", json.dumps({"voice": VOICE, "rate": RATE, "files": index}, indent=1))
     print(out, len(index), "recordings")
 
 

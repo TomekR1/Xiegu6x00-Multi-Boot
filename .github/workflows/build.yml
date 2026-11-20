@@ -122,7 +122,7 @@ jobs:
             extras/nes/out/nes-x6100-rootfs.ext4.xz.sha256
             extras/nes/out/nes-version.txt
 
-  # The talking boot menu (alpha): Jim Ruiz's talkmenu (GPL) and its voice, RHVoice Lyubov (CC BY-NC-ND 4.0)
+  # The talking boot menu (alpha): Jim Ruby's talkmenu (GPL) and its voice, RHVoice Lyubov (CC BY-NC-ND 4.0)
   talk:
     runs-on: ubuntu-24.04
     steps:

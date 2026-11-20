@@ -165,12 +165,13 @@ Ustawienia: plik `nes.txt` na partycji `BOOT` (`volume=`, `rxvol=`, `aspect=2x` 
 
 Dla niewidomych operatorów: **+ Menu mówione (alfa)** dodaje do menu radia pozycję, która czyta wybór na
 głos przez głośnik radia. Gdy przy włączaniu nikt nie wciśnie klawisza na ekranie (czas warto ustawić na 3 s),
-menu mówi: „Boot menu. Press F1 for …”. Po wciśnięciu F1–F5 radio się wyłącza i prosi o klawisz POWER
-(X6100 nie umie zrestartować się z Linuksa), a po włączeniu od razu startuje wybrany system. Bez wyboru po
+menu mówi: „Boot menu. Press F1 for …”. Po wciśnięciu F1–F5 radio się wyłącza (X6100 nie umie zrestartować się
+z Linuksa); płyta radia odcina zasilanie po 5–7 s, co słychać jako kliknięcie. Dopiero po nim wciśnij POWER:
+od razu startuje wybrany system. Klawisz wciśnięty w trakcie komunikatu przerywa go. Bez wyboru po
 30 s startuje system z ★. Ustawienia: `talkmenu.txt` na partycji BOOT.
 
 Program menu to **talkmenu** z projektu [X6100 Talking MultiBoot](https://github.com/Jimr9/X6100-Talking-MultiBoot)
-Jima Ruiza (GPL-2.0-or-later), a głos to **RHVoice Lyubov** (Artem Plaksin, Sergey Parshakov, Beka Gozalishvili,
+Jima Rubya (GPL-2.0-or-later), a głos to **RHVoice Lyubov** (Artem Plaksin, Sergey Parshakov, Beka Gozalishvili,
 Lyubov Sablina; CC BY-NC-ND 4.0, użycie niekomercyjne). Aplikacja składa nagrania dla każdej karty z krótkich
 fragmentów tego głosu: nazwy systemów, numery wersji, klawisze. Uruchamia się jak Doom, z jądrem pierwszego
 systemu z obrazu (np. OpenX6X00), i odtwarza dźwięk jego programami (`aplay`, `amixer`).
