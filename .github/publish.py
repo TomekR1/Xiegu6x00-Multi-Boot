@@ -53,10 +53,20 @@ Windows {w} · macOS {m} · Linux {l}. Pliki jak w zwykłym wydaniu: `.zip` dla 
 - F1–F5: radio się wyłącza i prosi o POWER; po włączeniu startuje wybrany system. Bez wyboru po 30 s startuje system z ★. / F1–F5: the radio switches off and asks for POWER; at power-on the chosen system starts. Without a choice, the ★ system starts after 30 s.
 - Każde menu (także bez menu mówionego) uruchamia raz system zaznaczony w sektorze 2 karty („BM” i cyfra). / Every menu starts a system marked in the card's sector 2 ("BM" and a digit) once.
 
-Program menu: **talkmenu** z [X6100 Talking MultiBoot](https://github.com/Jimr9/X6100-Talking-MultiBoot), Jim Ruiz (GPL-2.0-or-later). Głos / voice: **RHVoice Lyubov** (Artem Plaksin, Sergey Parshakov, Beka Gozalishvili, Lyubov Sablina; CC BY-NC-ND 4.0, non-commercial).
+Program menu: **talkmenu** z [X6100 Talking MultiBoot](https://github.com/Jimr9/X6100-Talking-MultiBoot), Jim Ruby (GPL-2.0-or-later). Głos / voice: **RHVoice Lyubov** (Artem Plaksin, Sergey Parshakov, Beka Gozalishvili, Lyubov Sablina; CC BY-NC-ND 4.0, non-commercial).
 
 Uwagi i błędy / Feedback: [Issues](https://github.com/{repo}/issues).
 """
+
+
+def notice():
+    """A notice for this release, centred in the middle of its description (.github/NOTICE.md; ""
+    without it: take the file away once it no longer applies)"""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "NOTICE.md"), encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
 
 
 def whats_new():
@@ -81,6 +91,7 @@ def notes(v):
     pl_new, en_new = whats_new()
     pl_news = f"\n### Co nowego\n{pl_new}\n" if pl_new else ""
     en_news = f"\n### What's new\n{en_new}\n" if en_new else ""
+    middle = f"\n---\n\n{notice()}\n\n---\n" if notice() else "\n---\n"
     return f"""Kilka systemów na jednej karcie SD do **Xiegu X6100**. Przy włączaniu radia wybierasz system klawiszem **F1–F5**.
 
 ### Pobierz
@@ -96,9 +107,7 @@ W każdej paczce jest **instrukcja krok po kroku**: `INSTRUKCJA.html` (otwórz w
 - W menu może być też oryginalny system Xiegu z pamięci radia.
 - Przenosi ustawienia, logi i parowania ze starej karty na nową.
 - Dodatki: **Doom** i **emulator NES** (Twoje gry, pady USB i Bluetooth, gry wgrywane przez WiFi).
-{pl_news}
----
-
+{pl_news}{middle}
 Several systems on one SD card for the **Xiegu X6100**. At power-on you choose one with the **F1–F5** keys.
 
 ### Download
