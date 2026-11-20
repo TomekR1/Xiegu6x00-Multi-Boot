@@ -53,7 +53,7 @@ Windows {w} · macOS {m} · Linux {l}. Pliki jak w zwykłym wydaniu: `.zip` dla 
 - F1–F5: radio się wyłącza i prosi o POWER; po włączeniu startuje wybrany system. Bez wyboru po 30 s startuje system z ★. / F1–F5: the radio switches off and asks for POWER; at power-on the chosen system starts. Without a choice, the ★ system starts after 30 s.
 - Każde menu (także bez menu mówionego) uruchamia raz system zaznaczony w sektorze 2 karty („BM” i cyfra). / Every menu starts a system marked in the card's sector 2 ("BM" and a digit) once.
 
-Program menu: **talkmenu** z [X6100 Talking MultiBoot](https://github.com/Jimr9/X6100-Talking-MultiBoot), Jim Ruiz (GPL-2.0-or-later). Głos / voice: **RHVoice Lyubov** (Artem Plaksin, Sergey Parshakov, Beka Gozalishvili, Lyubov Sablina; CC BY-NC-ND 4.0, non-commercial).
+Program menu: **talkmenu** z [X6100 Talking MultiBoot](https://github.com/Jimr9/X6100-Talking-MultiBoot), Jim Ruby (GPL-2.0-or-later). Głos / voice: **RHVoice Lyubov** (Artem Plaksin, Sergey Parshakov, Beka Gozalishvili, Lyubov Sablina; CC BY-NC-ND 4.0, non-commercial).
 
 Uwagi i błędy / Feedback: [Issues](https://github.com/{repo}/issues).
 """
