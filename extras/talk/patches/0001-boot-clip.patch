@@ -1,0 +1,37 @@
+Subject: talkmenu: the default started by itself says BOOTn.WAV ("Booting F1, ...") when the card has it
+
+Suggested by Jim Ruby (#7): a shorter start prompt, "F2, <name>" for a key, "Booting F1, <name>" for the
+default started by itself. Without BOOTn.WAV on the card, START n.WAV as before. Offered upstream.
+
+--- a/talkmenu.c
++++ b/talkmenu.c
+@@ -351,12 +351,14 @@
+ 	snprintf(wait_clip, sizeof wait_clip, "WAIT%d.WAV", cfg_default);
+ 	uint32_t deadline = cfg_wait > 0 ? now_ms() + (uint32_t)cfg_wait * 1000 : 0;
+ 	int key = 0;
++	bool by_default = false;               /* nobody chose: the default started by itself */
+ 	for (;;) {
+ 		key = play("MENU.WAV", 0, true);
+ 		if (!key && cfg_wait > 0) key = play(wait_clip, 0, true);
+ 		if (!key) key = play(NULL, 3000, true);
+ 		if (!key && deadline && now_ms() >= deadline) {
+ 			key = cfg_default;
++			by_default = true;
+ 			logmsg("no key: the default");
+ 		}
+ 		if (key == POWER_KEY) {
+@@ -373,6 +375,14 @@
+ 	screen("\n  F%d chosen. The radio switches off:\n  press POWER to start it.\n", key);
+ 	char start_clip[16];
+ 	snprintf(start_clip, sizeof start_clip, "START%d.WAV", key);
++	/* The default started by itself says so ("Booting F1, ..."), when the card has that clip */
++	if (by_default) {
++		char boot_clip[16], path[64];
++		snprintf(boot_clip, sizeof boot_clip, "BOOT%d.WAV", key);
++		snprintf(path, sizeof path, "/boot/TALK/%s", boot_clip);
++		if (access(path, R_OK) == 0)
++			snprintf(start_clip, sizeof start_clip, "%s", boot_clip);
++	}
+ 	/* Any key during it (POWER, most likely) cuts the clip short: the choice is made, the switching off starts at once */
+ 	int k = play(start_clip, 0, true);
+ 	if (k) logmsg("key %d during the start clip: switching off now", k);

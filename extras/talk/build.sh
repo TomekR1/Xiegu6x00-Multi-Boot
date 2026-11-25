@@ -13,12 +13,14 @@ TALK_COMMIT=b6c7046      # "Talking menu: a key during the start clip switches o
 rm -rf "$W" && mkdir -p "$W" "$OUT"
 git clone -q "$TALK_REPO" "$W/src"
 git -C "$W/src" checkout -q "$TALK_COMMIT"
+for p in "$HERE"/patches/*.patch; do git -C "$W/src" apply "$p"; echo "applied $(basename "$p")"; done
 arm-linux-gnueabihf-gcc -O2 -Wall -Wno-unused-result -static -s -o "$W/talkmenu" "$W/src/talkmenu.c"
 R=$W/root
 mkdir -p "$R/sbin" "$R/dev" "$R/proc" "$R/sys" "$R/boot" "$R/tmp" "$R/donor" "$R/usr/share/doc/talkmenu"
 cp "$W/talkmenu" "$R/sbin/init"
 cp "$W/src/LICENSE" "$R/usr/share/doc/talkmenu/LICENSE"
-printf 'talkmenu: Jim Ruby, X6100 Talking MultiBoot, %s (commit %s), GPL-2.0-or-later\n' "$TALK_REPO" "$TALK_COMMIT" \
+printf 'talkmenu: Jim Ruby, X6100 Talking MultiBoot, %s (commit %s, with %s), GPL-2.0-or-later\n' "$TALK_REPO" "$TALK_COMMIT" \
+    "$(cd "$HERE/patches" && ls *.patch | paste -sd, -)" \
     > "$R/usr/share/doc/talkmenu/SOURCE"
 rm -f "$OUT/talk-x6100-rootfs.ext4"
 mke2fs -q -t ext4 -L TALK -O ^metadata_csum_seed -E root_owner=0:0 -d "$R" "$OUT/talk-x6100-rootfs.ext4" 8M

@@ -35,7 +35,9 @@ FRAGMENTS = {
     "press_power": "The radio switches off. When you hear it click, press the power button to start it.",
     "power_off": "Power off.",
     **{"press_%d" % k: "Press F%d for" % k for k in KEYS},
-    **{"pressed_%d" % k: "You pressed F%d," % k for k in KEYS},
+    # the start prompts, short (Jim Ruby, #7): "F2, <name>" for a key, "Booting F1, <name>" for the default
+    **{"key_%d" % k: "F%d," % k for k in KEYS},
+    **{"booting_%d" % k: "Booting F%d," % k for k in KEYS},
     **{"wait_%d" % k: "If no key is pressed, F%d starts by itself." % k for k in KEYS},
     **{"name_" + k: v for k, v in NAMES.items()},
     **{"word_" + w: w for w in WORDS},
@@ -178,7 +180,9 @@ def prompts(voice, choices):
         said = (["word_the", "word_original", "name_xiegu", "word_system", None, "name_emmc"]
                 if name is XIEGU else speak(name))
         menu += ["press_%d" % k] + said + [None]
-        files["START%d.WAV" % k] = _wav(voice.join(["pressed_%d" % k] + said + [None, "press_power"]))
+        files["START%d.WAV" % k] = _wav(voice.join(["key_%d" % k] + said + [None, "press_power"]))
+        # the default started by itself (talkmenu with extras/talk/patches/0001-boot-clip.patch)
+        files["BOOT%d.WAV" % k] = _wav(voice.join(["booting_%d" % k] + said + [None, "press_power"]))
     files["MENU.WAV"] = _wav(voice.join(menu))
     for k in KEYS:
         files["WAIT%d.WAV" % k] = _wav(voice.join(["wait_%d" % k]))

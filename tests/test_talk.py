@@ -58,7 +58,7 @@ class TalkTest(unittest.TestCase):
         vz = os.path.join(self.tmp, "voice.zip")
         fake_voice(vz)
         files = talk.prompts(talk.Voice(vz), {1: "OpenX6X00 v0.3.12", 3: talk.XIEGU})
-        self.assertEqual(sorted(files), ["MENU.WAV", "OFF.WAV", "START1.WAV", "START3.WAV"] +
+        self.assertEqual(sorted(files), ["BOOT1.WAV", "BOOT3.WAV", "MENU.WAV", "OFF.WAV", "START1.WAV", "START3.WAV"] +
                          ["WAIT%d.WAV" % k for k in talk.KEYS])
         for name, data in files.items():
             with wave.open(io.BytesIO(data)) as w:
