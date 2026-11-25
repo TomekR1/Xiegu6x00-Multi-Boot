@@ -161,6 +161,15 @@ lista gier zaczyna od ostatnio granej, a menu w grze ma ekran „Sterowanie” z
 Ustawienia: plik `nes.txt` na partycji `BOOT` (`volume=`, `rxvol=`, `aspect=2x` albo `4:3`,
 `mouse=` szybkość Zappera, `bluetooth=`, `lang=`). Dziennik: `nes-log.txt`.
 
+## Tryb dostępny dla czytników ekranu (alfa)
+
+Okno aplikacji jest rysowane w sposób, którego czytniki ekranu prawie nie widzą. Dla niewidomych operatorów
+aplikacja ma **tryb dostępny**: te same funkcje (systemy z internetu, kolejność, dodatki z menu mówionym,
+ustawienia, zapis karty) jako zwykła strona z opisanymi polami i przyciskami, w osobnym oknie (Windows: silnik
+WebView2) albo w przeglądarce. Postęp i wynik są ogłaszane czytnikowi ekranu. Uruchamia się **sam, gdy
+działa czytnik ekranu** (Windows: NVDA, JAWS, Narrator; macOS: VoiceOver), z przycisku **Tryb dostępny** w oknie
+aplikacji albo poleceniem `access` (np. `"Xiegu Multi Patcher.exe" access`).
+
 ## Extras: menu mówione (alfa)
 
 Dla niewidomych operatorów: **+ Menu mówione (alfa)** dodaje do menu radia pozycję, która czyta wybór na

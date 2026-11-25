@@ -2,8 +2,6 @@
 import json
 import os
 import queue
-import shutil
-import tempfile
 import threading
 import time
 import tkinter as tk
@@ -11,10 +9,9 @@ import webbrowser
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import backup, devices, i18n
-from .compose import name_entries, DOOM_LOGO, DOOM_NAME, NES_LOGO, NES_NAME, TALK_LOGO, TALK_NAME, MAX_ENTRIES, MAX_SECS, XIEGU_DEFAULTS, compose, resolve_extras
+from .compose import name_entries, DOOM_LOGO, DOOM_NAME, NES_LOGO, NES_NAME, TALK_LOGO, TALK_NAME, MAX_ENTRIES, MAX_SECS, XIEGU_DEFAULTS
 from .i18n import t
 from .image import SourceSystem, cache_dir, open_source
-from .writer import Progress, write_device, write_image_file
 
 APP = "Xiegu Multi Patcher"
 
@@ -307,7 +304,6 @@ class App:
         self.tiles = {}                   # key -> what the radio's screen shows for an entry
         self._tile_jobs = set()
         self.data_src = None              # the user's own copy of DATA (.zip or folder) for the new card
-        self._skip, self._skip_file = threading.Event(), None
         self._build_all()
         self.refresh_cards()
         self.root.after(100, self._poll)
@@ -413,6 +409,15 @@ class App:
             step = -1 if ev.delta > 0 else 1
         self._scroll.yview_scroll(step * 3, "units")
 
+    def open_access(self):
+        """The accessible mode in a process of its own (its window, or the web browser)"""
+        import subprocess
+        try:
+            subprocess.Popen(devices.helper_command(["access"]), cwd=os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))))
+        except Exception as e:
+            messagebox.showerror(APP, str(e))
+
     def switch_theme(self, name):
         if name == _theme_name() or self.busy:
             self.theme_var.set(t(THEME_NAMES[_theme_name()]))
@@ -474,6 +479,9 @@ class App:
             next(k for k, v in THEME_NAMES.items() if t(v) == self.theme_var.get())))
         author = tk.Label(side, text=t("aplikacja: SQ6RT"), bg=PAGE_BG, fg=HINT, cursor="hand2", font=_font(10))
         author.pack(side="bottom", anchor="e", pady=(6, 0))
+        # the accessible mode, for a blind operator (a sighted helper may open it from here)
+        ttk.Button(side, text=t("Tryb dostępny (czytnik ekranu)"), command=self.open_access).pack(
+            side="bottom", anchor="e", pady=(6, 0))
         author.bind("<Button-1>", lambda e: webbrowser.open(AUTHOR_URL))
         author.bind("<Enter>", lambda e: author.configure(fg=ACCENT))
         author.bind("<Leave>", lambda e: author.configure(fg=HINT))
@@ -1116,82 +1124,19 @@ class App:
         self._single("card_data", lambda: CardDataDialog(self, card))
 
     def _card_request(self, req, progress=None):
-        """A cardata request: here when the app may read the card itself, else through the helper
-        with administrator rights"""
-        from . import cardata
-        if devices.is_admin() or devices.MAC or os.path.isfile(req["dev"]):
-            return cardata.run(req, progress)
-        tmp = tempfile.mkdtemp(prefix="x6100mb-")
-        try:
-            os.chmod(tmp, 0o777)
-            rq, rs = os.path.join(tmp, "request.json"), os.path.join(tmp, "result.json")
-            with open(rq, "w") as f:
-                json.dump(req, f)
-            os.chmod(rq, 0o666)
-            proc = devices.run_elevated(["card-data", rq, rs])
-            started = time.time()
-            while not os.path.exists(rs):
-                time.sleep(0.3)
-                if proc is not None and proc.poll() is not None:
-                    time.sleep(0.5)
-                    if not os.path.exists(rs):
-                        raise RuntimeError(t("Odczyt karty przerwany (odmowa uprawnień administratora?)"))
-                if proc is None and time.time() - started > 600:
-                    raise RuntimeError(t("Odczyt karty przerwany (odmowa uprawnień administratora?)"))
-            with open(rs) as f:
-                out = json.load(f)
-            if "error" in out:
-                raise RuntimeError(out["error"])
-            return out["ok"]
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        from .jobs import card_request
+        return card_request(req, progress)
+
+    def _maker(self):
+        m = getattr(self, "_card_maker", None)
+        if m is None:
+            from .jobs import CardMaker
+            m = self._card_maker = CardMaker(self._progress_cb)
+        return m
 
     def _take_data(self, tmp, card=None, keep=False):
-        """Before the card is erased: its settings copied aside and kept as .zip files on the computer.
-        Returns (what compose takes as data_files, a line for the user about it), or (None, None).
-
-        A card made here with a DATA per system: every system's DATA, each to the system of the same
-        name (else of the same project) on the new card, wherever it now stands in the menu. Any other
-        card: the DATA the computer shows, to the default system.
-
-        Runs in a job's thread: keep (the "carry the settings over" box) is read on Tk's thread before,
-        since macOS's Tk refuses any call from another thread ("main thread is not in main loop")."""
-        if not keep:
-            return None, None
-        if self.data_src:                         # the user's own copy goes before the old card's
-            files = backup.from_copy(self.data_src, os.path.join(tmp, "DATA"))
-            return files, t("Ustawienia: {n} plików wgranych na kartę; kopia: {zip}", n=len(files), zip=self.data_src)
-        from . import cardata
-        if card is not None:
-            try:
-                os.makedirs(backup.backups_dir(), exist_ok=True)
-                areas = self._card_request({"op": "dump_all", "dev": card["path"], "dir": backup.backups_dir()},
-                                           self._progress_cb)["areas"]
-            except Exception:
-                backup.log_error("settings of each system")
-                areas = []
-            areas = [a for a in areas if a.get("zip") and a.get("files")]
-            if areas:
-                new = [(i, e["name"]) for i, e in enumerate(self.entries) if e["kind"] == "sd"]
-                hit = cardata.match(areas, [n for _i, n in new])
-                data, lines = {}, []
-                for k, a in hit.items():
-                    i, name = new[k]
-                    data[i] = backup.from_copy(a["zip"], os.path.join(tmp, "DATA%d" % i))
-                    lines.append("  %s  ←  %s (%d)" % (name, " + ".join(a["names"]), len(data[i])))
-                left = [a for a in areas if all(a is not h for h in hit.values())]
-                text = t("Ustawienia przeniesione (nowy system ← stara karta, liczba plików):") + "\n" + "\n".join(lines) \
-                    if lines else t("Żaden system ze starej karty nie ma odpowiednika na nowej: ustawień nie przeniesiono.")
-                if left:
-                    text += "\n" + t("Bez odpowiednika na nowej karcie (kopia została na komputerze): {names}",
-                                     names=", ".join(" + ".join(a["names"]) for a in left))
-                text += "\n" + t("Kopie: {dir}", dir=backup.backups_dir())
-                return (data or None), text
-        if not (self.data_vol and os.path.isdir(self.data_vol)):
-            return None, None
-        files = backup.snapshot(self.data_vol, os.path.join(tmp, "DATA"), self._progress_cb)
-        zip_path = backup.save_zip(os.path.join(tmp, "DATA"))
-        return files, t("Ustawienia: {n} plików wgranych na kartę; kopia: {zip}", n=len(files), zip=zip_path)
+        """(runs in a job's thread: keep is read on Tk's thread before; macOS's Tk refuses other threads)"""
+        return self._maker().take_data(self.entries, tmp, card, keep, self.data_src, self.data_vol)
 
     # ---------------------------------------------------------------- building
     def _settings(self):
@@ -1205,17 +1150,7 @@ class App:
 
     def _plan(self, card_bytes=None, data_files=None, settings=None):
         """The card; settings (taken on Tk's thread) let a job build it in its own thread"""
-        from .image import bundled_uboot_path
-        if bundled_uboot_path() is None:
-            # Without the menu's own U-Boot the card would take the first image's: no picture on the
-            # screen and no F keys, only the default system after the countdown (issue #6)
-            raise ValueError(t("Ta kopia aplikacji nie ma w sobie U-Boota menu (x6100mb/data/u-boot-x6100-menu.bin), "
-                               "więc menu na radiu nie miałoby obrazu ani klawiszy F1–F5. Pobierz aplikację z "
-                               "zakładki Releases na GitHubie (plik .zip dla swojego komputera) i uruchom ją stamtąd."))
-        timeout, data_mb, xiegu, data_mode, wait = settings or self._all_settings()
-        ents = resolve_extras([dict(e) for e in self.entries])
-        return compose(ents, default=self.default, timeout_s=timeout, data_mb=data_mb, card_bytes=card_bytes,
-                       xiegu=xiegu, data_mode=data_mode, wait=wait, data_files=data_files)
+        return self._maker().plan(self.entries, self.default, settings or self._all_settings(), card_bytes, data_files)
 
     def _all_settings(self):
         return self._settings() + (self.data_mode.get(), self.wait.get())
@@ -1237,18 +1172,8 @@ class App:
                   self.keep_data.get(), steps=(["backup"] if self.keep_data.get() else []) + ["write", "verify"])
 
     def _save_job(self, plan, path, settings, card=None, keep=False):
-        tmp = tempfile.mkdtemp(prefix="x6100mb-data-")
-        try:
-            files, note = self._take_data(tmp, card, keep)
-            if files is not None:
-                plan = self._plan(data_files=files, settings=settings)
-            write_image_file(plan, path, Progress(self._progress_cb))
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-        msg = t("Zapisano {path} ({mb} MB). Można go wgrać balenaEtcherem.", path=path, mb=plan.size // 2**20)
-        if note:
-            msg += "\n\n" + note
-        return ("msg", msg)
+        return self._maker().save_job(self.entries, self.default, plan, path, settings, card, keep,
+                                      self.data_src, self.data_vol)
 
     def write_card(self):
         if self.busy:
@@ -1275,8 +1200,6 @@ class App:
         if not messagebox.askyesno(APP, text, icon="warning"):
             return
         inproc = devices.is_admin() or devices.MAC   # macOS: the app writes itself, through authopen
-        self._skip.clear()
-        self._skip_file = None
         self._job(t("Zapis na kartę") if inproc else t("Zapis na kartę (uprawnienia administratora)"),
                   self._card_job, plan, card, inproc, self._all_settings(), self.check_card.get(), self.keep_data.get(),
                   steps=(["backup"] if self.keep_data.get() else []) + ["prepare", "write", "sync"] +
@@ -1285,82 +1208,11 @@ class App:
 
     def _skip_check(self):
         """The read-back of the card left off where it is (the button in the progress window)"""
-        self._skip.set()
-        if self._skip_file:
-            try:
-                open(self._skip_file, "w").close()
-            except OSError:
-                pass
+        self._maker().skip_check()
 
     def _card_job(self, plan, card, inproc, settings, check=True, keep=False):
-        tmp = tempfile.mkdtemp(prefix="x6100mb-data-")
-        os.chmod(tmp, 0o755)
-        try:
-            files, note = self._take_data(tmp, card, keep)
-            if files is not None:
-                plan = self._plan(card_bytes=card["size"], data_files=files, settings=settings)
-            for dirpath, _dirs, names in os.walk(tmp):       # the writer may run with other rights
-                os.chmod(dirpath, 0o755)
-                for f in names:
-                    os.chmod(os.path.join(dirpath, f), 0o644)
-            result = (self._card_job_inproc if inproc else self._card_job_elevated)(plan, card["path"], check)
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
-        if note:
-            result = (result[0], result[1] + "\n\n" + note)
-        return result
-
-    def _ready(self, check):
-        return t("Karta gotowa i sprawdzona. Wyjmij ją i włóż do radia.") if check else \
-            t("Karta zapisana (bez sprawdzenia). Wyjmij ją i włóż do radia.")
-
-    def _card_job_inproc(self, plan, dev, check=True):
-        checked = write_device(plan, dev, Progress(self._progress_cb), check=check, skip=self._skip.is_set)
-        return ("msg", self._ready(checked))
-
-    def _card_job_elevated(self, plan, dev, check=True):
-        tmp = tempfile.mkdtemp(prefix="x6100mb-")
-        try:
-            plan_file = os.path.join(tmp, "plan.json")
-            prog = os.path.join(tmp, "progress.json")
-            plan.save(plan_file, os.path.join(tmp, "blobs"))
-            # The elevated helper (another user on macOS/Linux) must read the plan and write progress
-            for dirpath, _dirs, files in os.walk(tmp):
-                os.chmod(dirpath, 0o777)
-                for f in files:
-                    os.chmod(os.path.join(dirpath, f), 0o666)
-            self._skip_file = prog + ".skip"          # made when the read-back is to be skipped
-            proc = devices.run_elevated(["write-plan", plan_file, dev, prog] + ([] if check else ["--no-verify"]))
-            started = time.time()
-            while True:
-                time.sleep(0.3)
-                st = None
-                if os.path.exists(prog):
-                    try:
-                        with open(prog) as f:
-                            st = json.load(f)
-                    except (OSError, ValueError):
-                        st = None
-                if st:
-                    if st["phase"] == "error":
-                        raise RuntimeError(st["msg"])
-                    if st["phase"] == "done":
-                        return ("msg", self._ready(st.get("msg") != "unchecked"))
-                    self.q.put(("progress", st["phase"], st["done"], st["total"], st.get("msg", "")))
-                if proc is not None and proc.poll() is not None and not (st and st["phase"] == "done"):
-                    time.sleep(0.5)
-                    if os.path.exists(prog):
-                        with open(prog) as f:
-                            st = json.load(f)
-                        if st["phase"] == "done":
-                            return ("msg", self._ready(st.get("msg") != "unchecked"))
-                        if st["phase"] == "error":
-                            raise RuntimeError(st["msg"])
-                    raise RuntimeError(t("Zapis przerwany (odmowa uprawnień administratora?)"))
-                if proc is None and st is None and time.time() - started > 120:
-                    raise RuntimeError(t("Program zapisujący nie wystartował (odmowa uprawnień?)"))
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+        return self._maker().card_job(self.entries, self.default, plan, card, inproc, settings, check, keep,
+                                      self.data_src, self.data_vol)
 
     # ---------------------------------------------------------------- background jobs
     def _progress_cb(self, phase, done, total, msg=""):

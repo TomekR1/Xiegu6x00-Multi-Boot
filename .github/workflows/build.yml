@@ -195,13 +195,20 @@ jobs:
         shell: bash
         env: {PYINSTALLER_COMPILE_BOOTLOADER: "1"}
         run: pip install --no-binary pyinstaller pyinstaller==6.11.1
+      # The accessible mode's window on Windows: the system's web view (WebView2), which NVDA, JAWS
+      # and Narrator read well; without it the mode opens in the web browser
+      - name: pywebview (Windows)
+        if: runner.os == 'Windows'
+        run: pip install pywebview==5.3.2
       - name: PyInstaller
         if: runner.os != 'Windows'
         run: pip install pyinstaller==6.11.1
       - name: Build
         shell: bash
         run: |
-          pyinstaller --noconfirm --name "Xiegu Multi Patcher" ${{ matrix.extra }} --paths . --collect-data sv_ttk \
+          WEBVIEW=""
+          if [ "$RUNNER_OS" = Windows ]; then WEBVIEW="--collect-all webview --hidden-import clr"; fi
+          pyinstaller --noconfirm --name "Xiegu Multi Patcher" ${{ matrix.extra }} --paths . --collect-data sv_ttk $WEBVIEW \
             --add-data "x6100mb/data:x6100mb/data" --add-data "x6100mb/assets:x6100mb/assets" x6100_multiboot.py
       - name: Smoke test
         shell: bash

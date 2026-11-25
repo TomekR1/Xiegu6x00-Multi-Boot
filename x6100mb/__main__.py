@@ -51,6 +51,10 @@ def cli(argv):
     if argv and argv[0] == "card-data":
         from .cardata import main_card_data
         return main_card_data(argv[1:])
+    if argv and argv[0] in ("access", "--access"):
+        # the accessible mode (screen readers): a page of plain controls in a window of its own
+        from .access import main as access_main
+        return access_main()
     if argv and argv[0] == "write-plan":
         from .writer import main_write_plan
         return main_write_plan(argv[1:])
@@ -88,6 +92,7 @@ def cli(argv):
     b.add_argument("images", nargs="+")
     sub.add_parser("list")
     sub.add_parser("catalog", help="the systems the app can fetch, with their newest releases")
+    sub.add_parser("access", help="the accessible mode for screen readers (NVDA, JAWS, Narrator, VoiceOver)")
     a = ap.parse_args(argv)
 
     if a.cmd == "info":
@@ -161,6 +166,12 @@ def cli(argv):
         write_image_file(plan, a.output, Progress(show))
         print(f"\n{a.output}: {plan.size // 2**20} MB, {plan.info}")
         return 0
+    # A screen reader on (Windows: NVDA, JAWS, Narrator; macOS: VoiceOver): the accessible mode at once,
+    # the drawn window being next to silent for it
+    from .access import screen_reader_running
+    if not argv and screen_reader_running():
+        from .access import main as access_main
+        return access_main()
     from .gui import main
     return main()
 
