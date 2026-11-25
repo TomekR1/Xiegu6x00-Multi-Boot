@@ -11,7 +11,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import backup, devices, i18n
-from .compose import DOOM_LOGO, DOOM_NAME, NES_LOGO, NES_NAME, MAX_ENTRIES, MAX_SECS, XIEGU_DEFAULTS, compose, resolve_extras
+from .compose import name_entries, DOOM_LOGO, DOOM_NAME, NES_LOGO, NES_NAME, MAX_ENTRIES, MAX_SECS, XIEGU_DEFAULTS, compose, resolve_extras
 from .i18n import t
 from .image import SourceSystem, cache_dir, open_source
 from .writer import Progress, write_device, write_image_file
@@ -671,7 +671,7 @@ class App:
                     else t("emulator NES, z jądrem pierwszego systemu z obrazu na liście"))
             return text + "  ·  " + (t("gier do wgrania: {n}", n=games) if games
                                      else t("bez gier: dodaj je przyciskiem „Gry NES…” albo później do folderu NES"))
-        info = e["sys"].summary()
+        info = ((e["version"] + "  ·  ") if e.get("version") else "") + e["sys"].summary()
         if e["sys"].warnings:
             info += "  ⚠ " + "; ".join(e["sys"].warnings)
         return info
@@ -822,7 +822,9 @@ class App:
         def prog(done, total):
             self.q.put(("progress", "download", done, total, rel["asset"]))
         path = catalog.download(source, rel, cache_dir(), prog)
-        return self._analyse(path, catalog.label(source, rel))
+        kind, s = self._analyse(path, source["name"])
+        s.version = catalog.version_of(rel)                 # said in the app, not in the menu's name
+        return kind, s
 
     def _build_extras(self, col):
         """Extras: Doom and the NES emulator (tiles of their own, not among the systems to fetch)"""
@@ -956,6 +958,7 @@ class App:
         if i is None:
             return
         del self.entries[i]
+        name_entries(self.entries)          # a twin left alone loses its version number
         if self.default >= len(self.entries) or self.default == i:
             self.default = 0
         elif self.default > i:
@@ -1393,7 +1396,10 @@ class App:
                     messagebox.showerror(APP, m[1])
                 elif m[1][0] == "added":
                     sy = m[1][1]
-                    self.entries.append({"kind": "sd", "name": sy.name[:28], "sys": sy})
+                    ver = getattr(sy, "version", None)
+                    self.entries.append({"kind": "sd", "name": sy.name[:28], "sys": sy, "version": ver,
+                                         "base": sy.name[:28] if ver else None})
+                    name_entries(self.entries)
                     self._redraw(len(self.entries) - 1)
                     self.panel.rest("✓  " + t("Dodano {name}", name=sy.name), GREEN)
                     self.status.set(sy.summary() + "   ·   " + t("Dodaj kolejny system albo przejdź do „Zapis karty”."))

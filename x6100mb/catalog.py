@@ -256,6 +256,11 @@ def releases(source, n=15, fetch=_get):
     return out
 
 
+def version_of(rel):
+    """A release's version as said in the app: v0.3.12"""
+    return rel["tag"] if rel["tag"].startswith("v") else "v" + rel["tag"]
+
+
 def label(source, rel):
     return "%s %s" % (source["name"], rel["tag"] if rel["tag"].startswith("v") else "v" + rel["tag"])
 

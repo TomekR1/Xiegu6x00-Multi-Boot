@@ -71,6 +71,24 @@ NES_GAMES = (".nes", ".fds", ".unf", ".unif", ".nsf")
 NES_ROOM_MB = 64          # room on BOOT for the games added later and the saves
 
 
+def name_entries(entries):
+    """The menu's names without version numbers (a system updates itself from the radio, and the menu
+    would keep saying the old one): an entry fetched from a project is called by the project; when two
+    of them would share a name, both get their version. Names the user typed stay as they are."""
+    def auto(e):
+        base, ver = e.get("base"), e.get("version")
+        return base and e.get("name") in (base, "%s %s" % (base, ver) if ver else base)
+    groups = {}
+    for e in entries:
+        if auto(e):
+            groups.setdefault(e["base"].lower(), []).append(e)
+    for same in groups.values():
+        for e in same:
+            twin = len(same) > 1 and e.get("version")
+            e["name"] = ("%s %s" % (e["base"], e["version"]) if twin else e["base"])[:28]
+    return entries
+
+
 def kernel_donor(entries, key="sys"):
     """The system the extras start with: the first from an image whose kernel is on its BOOT
     partition (IU1WXY 0.2.2+ keeps its kernel inside its A/B slots: issue #8), or None"""

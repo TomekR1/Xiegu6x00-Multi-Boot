@@ -431,6 +431,22 @@ fi
         self.assertEqual(sum(n.upper() == "MBR.BIN" for n in sys2), 1)
         self.assertNotEqual(table[3][2], other[3][2])             # OpenX6X00's own DATA, not R1CBU's
 
+    def test_names_without_versions(self):
+        """Menu names without version numbers (systems update themselves); two of one project keep
+        theirs; a name the user typed is kept"""
+        from x6100mb.compose import name_entries
+        es = [{"kind": "sd", "name": "OpenX6X00", "base": "OpenX6X00", "version": "v0.3.12"},
+              {"kind": "sd", "name": "R1CBU", "base": "R1CBU", "version": "v0.29"},
+              {"kind": "sd", "name": "OpenX6X00", "base": "OpenX6X00", "version": "v0.3.13-rc1"},
+              {"kind": "sd", "name": "My card", "base": "OpenX6100", "version": "v1.2.0"},
+              {"kind": "doom", "name": "DOOM"}]
+        name_entries(es)
+        self.assertEqual([e["name"] for e in es],
+                         ["OpenX6X00 v0.3.12", "R1CBU", "OpenX6X00 v0.3.13-rc1", "My card", "DOOM"])
+        del es[2]
+        name_entries(es)
+        self.assertEqual(es[0]["name"], "OpenX6X00")
+
     def test_one_iu1wxy_ab_per_card(self):
         """Two IU1WXY A/B would share BOOT's ab.env (and made two files of one name): refused"""
         from x6100mb.compose import ComposeError
