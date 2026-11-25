@@ -1,7 +1,5 @@
-- Naprawione: przy osobnej DATA dla każdego systemu i Doomie albo emulatorze NES stojącym w menu przed systemem, z którego bierze jądro, ten system mógł startować z DATA innego systemu (ustawienia, log, parowania). Karty z takim układem warto zapisać jeszcze raz.
-- Karta nie może już mieć dwóch plików o tej samej nazwie na partycji BOOT; dwie wersje IU1WXY 0.2.2+ na jednej karcie są odrzucane z wyjaśnieniem.
-- Aplikacja nie zapisze karty bez U-Boota menu (ciemny ekran i nieaktywne F1–F5 na radiu); powie, skąd wziąć właściwą wersję.
+- Nazwy w menu radia bez numerów wersji: system aktualizuje się sam z radia, a menu pokazywało stary numer. Wersja jest widoczna w aplikacji pod podglądem menu; dwie wersje tego samego systemu na jednej karcie dalej mają numery.
+- Naprawione wcześniej (0.3.8): przy osobnej DATA i Doomie lub NES stojącym w menu przed systemem, z którego bierze jądro, ten system mógł startować z cudzą DATA. Patrz ostrzeżenie poniżej.
 ---
-- Fixed: with one DATA per system and Doom or the NES emulator placed in the menu before the system it takes its kernel from, that system could start with another system's DATA (settings, log, pairings). Cards with such a layout are worth writing again.
-- A card can no longer get two files of one name on its BOOT partition; two IU1WXY 0.2.2+ on one card are refused with an explanation.
-- The app will not write a card without the menu's U-Boot (dark screen and dead F1–F5 on the radio); it says where to get the right version.
+- Menu names without version numbers: a system updates itself from the radio, and the menu kept showing the old number. The version is shown in the app under the menu preview; two versions of one system on a card still carry their numbers.
+- Fixed earlier (0.3.8): with one DATA per system and Doom or NES placed before the system it takes its kernel from, that system could start with another system's DATA. See the notice below.

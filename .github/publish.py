@@ -55,6 +55,9 @@ Windows {w} · macOS {m} · Linux {l}. Pliki jak w zwykłym wydaniu: `.zip` dla 
 
 Program menu: **talkmenu** z [X6100 Talking MultiBoot](https://github.com/Jimr9/X6100-Talking-MultiBoot), Jim Ruby (GPL-2.0-or-later). Głos / voice: **RHVoice Lyubov** (Artem Plaksin, Sergey Parshakov, Beka Gozalishvili, Lyubov Sablina; CC BY-NC-ND 4.0, non-commercial).
 
+### Tryb dostępny / Accessible mode
+- Dla czytników ekranu (NVDA, JAWS, Narrator, VoiceOver): te same funkcje jako strona z opisanymi polami i przyciskami, postęp ogłaszany głosem. Uruchamia się sam, gdy działa czytnik ekranu, albo przyciskiem **Tryb dostępny** w oknie aplikacji. / For screen readers (NVDA, JAWS, Narrator, VoiceOver): the same as a page of labelled fields and buttons, the progress announced. It opens by itself when a screen reader runs, or with the **Accessible mode** button in the app's window.
+
 Uwagi i błędy / Feedback: [Issues](https://github.com/{repo}/issues).
 """
 
