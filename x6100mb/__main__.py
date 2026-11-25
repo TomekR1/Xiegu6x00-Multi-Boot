@@ -29,20 +29,20 @@ def _fetch(spec):
     if rel is None:
         raise SystemExit(f"{spec}: no such release with an X6100 image")
     print(f"fetching {catalog.label(src, rel)}: {rel['url']}", file=sys.stderr)
-    return catalog.download(src, rel, cache_dir()), catalog.label(src, rel)
+    return catalog.download(src, rel, cache_dir()), (src["name"], catalog.version_of(rel))
 
 
 def _load(paths):
     from .image import SourceSystem, cache_dir, open_source
     out = []
     for p in paths:
-        name = None
+        name = ver = None
         if "@" in p and not os.path.exists(p):
-            p, name = _fetch(p)
+            p, (name, ver) = _fetch(p)
         raw = open_source(p, cache_dir())
         s = SourceSystem(p, raw)
         if name:
-            s.name = name
+            s.name, s.version = name, ver
         out.append(s)
     return out
 
@@ -116,7 +116,10 @@ def cli(argv):
         from .writer import Progress, write_image_file
         systems = _load(a.images)
         names = a.names.split(",") if a.names else [s.name for s in systems]
-        entries = [{"kind": "sd", "name": n, "sys": s} for n, s in zip(names, systems)]
+        entries = [{"kind": "sd", "name": n, "sys": s, "version": getattr(s, "version", None),
+                    "base": s.name if getattr(s, "version", None) else None} for n, s in zip(names, systems)]
+        from .compose import name_entries
+        name_entries(entries)                     # no version numbers, unless two would share a name
         if a.doom:
             from .compose import DOOM_NAME
             entries.append({"kind": "doom", "name": DOOM_NAME})
