@@ -6,3 +6,7 @@ build/
 dist/
 *.spec
 x6100mb/data/
+
+# the talking menu's local build (extras/talk/build.sh), never committed
+extras/talk/work/
+extras/talk/out/
