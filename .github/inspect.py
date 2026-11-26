@@ -30,9 +30,41 @@ def dump(raw):
                     if n.lower().endswith((".scr", ".cmd", ".env", ".txt", ".bak")):
                         data = fat.read_file(n)
                         text = parse_script_image(data) if n.lower().endswith(".scr") else data.decode(errors="replace")
-                        print("  ---- p%d/%s:\n%s" % (p[0], n, "\n".join("    | " + l for l in text.splitlines()[:80])))
+                        print("  ---- p%d/%s:\n%s" % (p[0], n, "\n".join("    | " + l for l in text.splitlines()[:400])))
             except Exception as e:
                 print("  p%d %s (not FAT: %s)" % (p[0], kind, type(e).__name__))
+                if kind == "ext":
+                    ext_look(f, raw, p)
+
+
+def ext_look(f, raw, p):
+    """An ext partition: its /boot, and the places that write a boot loader to the card (dd to the
+    card at 8 KiB, u-boot files, the loader's marker)"""
+    import re
+    import subprocess
+    from x6100mb.image import SECTOR
+    part = raw + ".p%d" % p[0]
+    with open(part, "wb") as out:
+        f.seek(p[2] * SECTOR)
+        left = p[3] * SECTOR
+        while left > 0:
+            d = f.read(min(left, 8 << 20))
+            if not d:
+                break
+            out.write(d)
+            left -= len(d)
+    for cmd in ("ls -l /boot", "ls -l /usr/share/x6100-link", "ls -l /usr/lib/x6100-link", "ls -l /opt"):
+        r = subprocess.run(["debugfs", "-R", cmd, part], capture_output=True, text=True)
+        if r.stdout.strip():
+            print("  p%d %s:\n%s" % (p[0], cmd, "\n".join("    " + l for l in r.stdout.splitlines()[:40])))
+    r = subprocess.run(["strings", "-n", "8", part], capture_output=True, text=True)
+    pat = re.compile(r"(seek=8\b|seek=16\b|bs=1024 seek|u-boot-sunxi|x6100ub|mmcblk0 .*seek|of=/dev/mmcblk0\b|"
+                     r"boot ?loader|bootloader|flash_uboot|uboot\.bin|u-boot\.bin|spl)", re.I)
+    hits = sorted({l.strip()[:200] for l in r.stdout.splitlines() if pat.search(l)})
+    print("  p%d strings about writing a boot loader (%d):" % (p[0], len(hits)))
+    for l in hits[:80]:
+        print("    ~ " + l)
+    os.remove(part)
 
 
 specs = sys.argv[1:]
