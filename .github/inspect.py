@@ -154,7 +154,42 @@ def card(order, extras=()):
         print("  FAIL %-60s %s: %s" % (label, type(e).__name__, e))
 
 
+def deep(order):
+    """A whole card with IU1WXY 0.2.4+ written out and read back: what the radio will find on it"""
+    import io
+    import re
+    from x6100mb.fat import FatReader
+    from x6100mb.image import SECTOR, parse_script_image, read_mbr
+    from x6100mb.writer import write_image_file
+    ents = [{"kind": "sd", "name": systems[k].name, "base": systems[k].name, "sys": systems[k]} for k in order]
+    name_entries(ents)
+    out = os.path.join(cache_dir(), "deep.img")
+    try:
+        write_image_file(compose(ents, default=0, data_mb=64, data_mode="separate"), out)
+        with open(out, "rb") as f:
+            parts = read_mbr(f)
+            print("  card partitions:", parts)
+            boot = FatReader(f, parts[0][2] * SECTOR)
+            print("  BOOT:", [e[0] for e in boot.listdir()], "MENU:", [e[0] for e in boot.listdir(boot.find("MENU")[2])])
+            menu = parse_script_image(boot.read_file("MENU/MENU.SCR"))
+            own = parse_script_image(boot.read_file("boot.scr"))
+            print("  boot.scr is the menu:", "bm_boot" in own, "| IU1WXY's:", "PARTUUID=58363130" in own)
+            for i, e in enumerate(ents):
+                t = boot.read_file(e["dir"] + "/MBR.BIN")
+                print("  %s %s: signature %s, table %s" % (e["dir"], e["name"], t[440:444].hex(),
+                                                        read_mbr(io.BytesIO(t))))
+                m = re.search(r"setenv bm_boot%d '([^']*)'" % (i + 1), menu)
+                print("    bm_boot%d: %s" % (i + 1, m.group(1) if m else None))
+        os.remove(out)
+    except Exception:
+        traceback.print_exc()
+
+
 print("=" * 70, "\ncards", flush=True)
+for sid in [k for k in systems if getattr(systems[k], "ab_v2", False)]:
+    print("deep", sid, flush=True)
+    deep(["openx6x00", sid])
+    deep([sid, "openx6x00"])
 for sid in [k for k in systems if k != "openx6x00"]:
     card([sid])
     card([sid, "openx6x00"])
