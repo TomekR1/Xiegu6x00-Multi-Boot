@@ -53,7 +53,8 @@ def ext_look(f, raw, p):
                 break
             out.write(d)
             left -= len(d)
-    for cmd in ("ls -l /boot", "ls -l /usr/share/x6100-link", "ls -l /usr/lib/x6100-link", "ls -l /opt"):
+    for cmd in ("ls -l /boot", "ls -l /usr/share/x6100/uboot", "ls -l /usr/libexec", "cat /usr/libexec/x6100-finddisk",
+                "cat /usr/share/x6100/uboot/meta"):
         r = subprocess.run(["debugfs", "-R", cmd, part], capture_output=True, text=True)
         if r.stdout.strip():
             print("  p%d %s:\n%s" % (p[0], cmd, "\n".join("    " + l for l in r.stdout.splitlines()[:40])))
