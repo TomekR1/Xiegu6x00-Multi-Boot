@@ -26,7 +26,7 @@ bootz 0x46000000 - 0x49000000
 """
 
 
-def fake_card(path, kernel=b"K" * 3000, root_mb=8):
+def fake_card(path, kernel=b"K" * 3000, root_mb=8, script=None, extra=None):
     boot_lba, boot_size = 2048, 40 * MIB
     root_lba = boot_lba + boot_size // SECTOR
     size = root_lba * SECTOR + root_mb * MIB
@@ -41,7 +41,9 @@ def fake_card(path, kernel=b"K" * 3000, root_mb=8):
     fat = Fat32Builder(boot_size, boot_lba, label="BOOT")
     fat.add_file("zImage".upper(), kernel)
     fat.add_file("x6100.dtb".upper(), b"D" * 700)
-    fat.add_file("boot.scr".upper(), make_script_image(SCRIPT))
+    fat.add_file("boot.scr".upper(), make_script_image(script or SCRIPT))
+    for name, data in (extra or {}).items():
+        fat.add_file(name, data)
     for off, p in fat.extents():
         plan.add(boot_lba * SECTOR + off, p)
     sb = bytearray(MIB)
@@ -446,6 +448,18 @@ fi
         self.assertTrue(os.path.basename(raw).startswith("sdcard-1KO125-1.2.img"))
         s = SourceSystem(z, raw)
         self.assertIn("kernel", s.files)
+
+    def test_iu1wxy_0_2_4_said_plainly(self):
+        """IU1WXY 0.2.4+ (X6100 Link) finds its root by the disk signature and rewrites the card's boot
+        script and loader: refused with a plain reason, not a puzzling one"""
+        from x6100mb.image import ImageError
+        p = os.path.join(self.tmp, "x6100-link-0.2.5-sdcard.img")
+        fake_card(p, script='setenv kaddr 0x46000000\nif ext4load mmc 0:2 ${kaddr} /boot/zImage; then '
+                            'setenv bootargs "root=PARTUUID=58363130-02 rw"; bootz ${kaddr} - ${daddr}; fi\n',
+                  extra={"AB.ENV": b"slot=a\nzend=1\n", "AB.BAK": b"slot=a\nzend=1\n"})
+        with self.assertRaises(ImageError) as cm:
+            SourceSystem(p, p)
+        self.assertIn("0.2.3", str(cm.exception))
 
     def test_names_without_versions(self):
         """Menu names without version numbers (systems update themselves); two of one project keep

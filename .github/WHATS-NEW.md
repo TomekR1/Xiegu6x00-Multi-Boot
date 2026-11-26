@@ -1,5 +1,7 @@
-- Nazwy w menu radia bez numerów wersji: system aktualizuje się sam z radia, a menu pokazywało stary numer. Wersja jest widoczna w aplikacji pod podglądem menu; dwie wersje tego samego systemu na jednej karcie dalej mają numery.
-- Naprawione wcześniej (0.3.8): przy osobnej DATA i Doomie lub NES stojącym w menu przed systemem, z którego bierze jądro, ten system mógł startować z cudzą DATA. Patrz ostrzeżenie poniżej.
+- 1KO125 1.2 dodaje się znowu („expected one .img inside the zip, found 2”: w jego archiwum był pusty plik z Maca). Gdy w archiwum jest kilka obrazów, aplikacja sama wybiera obraz karty X6100.
+- Zmiana nazwy pliku przez autora systemu nie ukrywa już jego nowych wersji: aplikacja sama znajduje obraz karty X6100 w wydaniu (tak znalazła IU1WXY 0.2.4 i 0.2.5, które zmieniły nazwę na „X6100 Link”).
+- IU1WXY 0.2.4 i nowsze zmieniły sposób startu: po pierwszym uruchomieniu nadpisałyby menu karty multiboot, więc aplikacja ich jeszcze nie dodaje i mówi to wprost. Dodaj IU1WXY 0.2.3: na karcie można go potem zaktualizować z radia.
 ---
-- Menu names without version numbers: a system updates itself from the radio, and the menu kept showing the old number. The version is shown in the app under the menu preview; two versions of one system on a card still carry their numbers.
-- Fixed earlier (0.3.8): with one DATA per system and Doom or NES placed before the system it takes its kernel from, that system could start with another system's DATA. See the notice below.
+- 1KO125 1.2 can be added again ("expected one .img inside the zip, found 2": its archive held an empty file from a Mac). With several images in an archive, the app picks the X6100 card image itself.
+- A project renaming its file no longer hides its new versions: the app finds the X6100 card image in the release itself (as it found IU1WXY 0.2.4 and 0.2.5, renamed "X6100 Link").
+- IU1WXY 0.2.4 and newer changed the way they start: after their first start they would overwrite a multi-boot card's menu, so the app does not add them yet and says so. Add IU1WXY 0.2.3: on the card it can then be updated from the radio.

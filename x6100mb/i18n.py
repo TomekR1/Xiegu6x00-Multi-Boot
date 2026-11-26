@@ -451,6 +451,10 @@ EN = {
     "Na karcie może być tylko jedna wersja IU1WXY 0.2.2 lub nowsza (z partycjami A/B): obie trzymają stan w tym samym pliku ab.env.":
         "Only one IU1WXY 0.2.2 or newer (with A/B partitions) can be on a card: both keep their state in the same "
         "ab.env file.",
+    "IU1WXY 0.2.4 i nowsze (X6100 Link) zmieniły sposób startu i nie działają jeszcze na karcie multiboot (po pierwszym starcie nadpisałyby menu). Dodaj IU1WXY 0.2.3: na karcie można go potem zaktualizować z radia.":
+        "IU1WXY 0.2.4 and newer (X6100 Link) changed the way they start and do not work on a multi-boot card yet "
+        "(after their first start they would overwrite the menu). Add IU1WXY 0.2.3: on the card it can then be "
+        "updated from the radio.",
     # the NES emulator
     "+ Emulator NES": "+ NES emulator",
     "Gry NES…": "NES games…",
