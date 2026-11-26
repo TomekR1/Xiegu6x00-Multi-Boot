@@ -260,18 +260,14 @@ class SourceSystem:
             self.script = script
             if "x6100-multiboot" in script or "X6100 multiboot menu" in script:
                 raise ImageError(t("to już karta multiboot (z tej aplikacji); dodaj obrazy pojedynczych systemów"))
-            if fat.find("ab.env") is not None and "PARTUUID=58363130" in script:
-                # IU1WXY 0.2.4+ ("X6100 Link"): its system is found by the card's disk signature, and once
-                # started it puts its own boot.scr and boot loader on the card: the multi-boot menu's would go
-                raise ImageError(t("IU1WXY 0.2.4 i nowsze (X6100 Link) zmieniły sposób startu i nie działają jeszcze na "
-                                   "karcie multiboot (po pierwszym starcie nadpisałyby menu). Dodaj IU1WXY 0.2.3: "
-                                   "na karcie można go potem zaktualizować z radia."))
+            # IU1WXY 0.2.4+ ("X6100 Link"): its root is found by the card's disk signature (PARTUUID=58363130-0N),
+            # its script picks the slot with ${part} and keeps its A/B state with fatwrite and mv
+            self.ab_v2 = fat.find("ab.env") is not None and "PARTUUID=58363130" in script
             self.is_ab = (
                 fat.find("ab.env") is not None
                 and fat.find("ab.bak") is not None
-                and "${rootp}" in script
                 and "/boot/zImage" in script
-                and "bootz 0x46000000 - 0x49000000" in script
+                and (self.ab_v2 or ("${rootp}" in script and "bootz 0x46000000 - 0x49000000" in script))
             )
             if self.is_ab:
                 self.ab_env = fat.read_file("ab.env")
@@ -315,11 +311,11 @@ class SourceSystem:
             }
 
         kernel = re.search(
-            r"ext4load\s+mmc\s+0:\$\{rootp\}\s+(\S+)\s+([^;\s]*zImage)",
+            r"ext4load\s+mmc\s+\S+:\$\{(?:rootp|part)\}\s+(\S+)\s+([^;\s]*zImage)",
             self.script,
         )
         fdt = re.search(
-            r"ext4load\s+mmc\s+0:\$\{rootp\}\s+(\S+)\s+([^;\s]+\.dtb)",
+            r"ext4load\s+mmc\s+\S+:\$\{(?:rootp|part)\}\s+(\S+)\s+([^;\s]+\.dtb)",
             self.script,
         )
         bootargs = re.search(

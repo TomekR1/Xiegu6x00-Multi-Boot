@@ -25,7 +25,8 @@ sed 's/^CONFIG_VIDEO_LCD_MODE=.*/CONFIG_VIDEO_LCD_MODE="x:480,y:800,depth:18,pcl
 cat "$HERE/menu.config" >> configs/x6100_menu_defconfig
 export CROSS_COMPILE=arm-linux-gnueabihf-
 make -s x6100_menu_defconfig
-for o in VIDEO_LCD_ST7701S_X6100 CONSOLE_ROTATION VIDEO_FONT_16X32 CMD_GPIO VIDEO_ANSI AXP221_POWER CMD_POWEROFF; do
+for o in VIDEO_LCD_ST7701S_X6100 CONSOLE_ROTATION VIDEO_FONT_16X32 CMD_GPIO VIDEO_ANSI AXP221_POWER CMD_POWEROFF \
+         USE_BOOTCOMMAND FAT_WRITE CMD_FS_GENERIC; do
     grep -q "^CONFIG_$o=y" .config || { echo "CONFIG_$o not set"; exit 1; }
 done
 make -s -j"$(nproc)"
@@ -33,4 +34,5 @@ cp u-boot-sunxi-with-spl.bin "$HERE/out/u-boot-x6100-menu.bin"
 strings "$HERE/out/u-boot-x6100-menu.bin" > "$W/strings.txt"; grep -m1 "U-Boot SPL" "$W/strings.txt"
 grep -q "X6100 POWER key" "$W/strings.txt" || { echo "no pek command"; exit 1; }
 grep -q "base board switches the radio off" "$W/strings.txt" || { echo "no boff command"; exit 1; }
+grep -q "MENU/MENU.SCR" "$W/strings.txt" || { echo "the menu's own script is not in bootcmd"; exit 1; }
 ls -la "$HERE/out"

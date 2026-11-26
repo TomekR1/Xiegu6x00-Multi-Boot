@@ -3,7 +3,7 @@ system's root filesystem, and a DATA partition.
 
 Layout (MBR):
     8 KiB            U-Boot (from the first system, or the one chosen)
-    p1  BOOT  FAT32  boot.scr (the menu), bootmenu.env, SYS1/ ... SYS5/ (kernel, dtb)
+    p1  BOOT  FAT32  MENU/MENU.SCR and boot.scr (the menu; boot.scr is IU1WXY 0.2.4+'s own when it is on the card), bootmenu.env, SYS1/ ... SYS5/ (kernel, dtb)
     p2  rootfs of system 1
     p4  extended:  p5, p6, ... rootfs of systems 2..5
     p3  DATA  FAT32, labelled DATA, at the end (fills the card when written to one)
@@ -22,6 +22,8 @@ from .image import SECTOR, UBOOT_OFFSET, make_ebr, make_mbr, make_script_image
 
 MIB = 1024 * 1024
 ALIGN = MIB // SECTOR
+# IU1WXY 0.2.4+ finds its card and root by this MBR disk signature ("X610": PARTUUID=58363130-0N)
+IU1WXY_DISK_ID = 0x58363130
 
 # Front-panel keys in U-Boot: the X6100 key matrix from the device tree. As in j0ju's
 # x6100-fw-mangler multiboot (used on radios): the row is driven low, the column read (0 = pressed); F1..F5 from OpenX6X00's src/front_keys.c (BTN_TRIGGER_HAPPY13..15, 19, 20)
@@ -393,7 +395,18 @@ def menu_script(entries, default, timeout_s, title="X6100 MULTIBOOT", gfx=False,
                        "if fatload mmc 0:1 0x45100000 %s; then "
                        "if cmp.b 0x45000000 0x45100000 200; then setenv bm_same 1; "
                        "else mmc write 0x45100000 0 1; fi; fi; mmc rescan; " % e["mbr"])
-            if getattr(s_, "is_ab", False):
+            if getattr(s_, "ab_v2", False):
+                # IU1WXY 0.2.4+: its own boot.scr (the radio updates it), else the copy from the image
+                cmd = (
+                    pre +
+                    "setenv devnum 0; "
+                    "if fatload mmc 0:1 ${scriptaddr} boot.scr; then source ${scriptaddr}; "
+                    "else if fatload mmc 0:1 ${scriptaddr} %s/IU1WXY.SCR; then source ${scriptaddr}; fi; fi; "
+                    "setenv stdout serial,vidconsole; "
+                    "echo \"%s did not start\"; sleep 3; setenv stdout serial"
+                    % (d, _ascii(e["name"]))
+                )
+            elif getattr(s_, "is_ab", False):
                 cmd = (
                     pre +
                     "if fatload mmc 0:1 ${scriptaddr} %s/IU1WXY.SCR; then "
@@ -506,7 +519,10 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
     pictures = (len(entries) + 1) * 400 * 1024 if gfx else 0
     boot_size = _up(max(64 * MIB, kernels + pictures + boot_extra_mb * MIB + 4 * MIB) // SECTOR) * SECTOR
 
-    lba = ALIGN                                       # 1 MiB
+    v2 = any(getattr(e["sys"], "ab_v2", False) for e in sd)
+    # BOOT at 1 MiB; with IU1WXY 0.2.4+ at 4 MiB: its x6100-ubootupd replaces the boot loader only on a card
+    # whose first partition starts at 1 MiB (its own layout), so the menu's U-Boot stays
+    lba = ALIGN * (4 if v2 else 1)
     boot_lba = lba
     lba += boot_size // SECTOR
     # Physical root filesystem areas. Ordinary systems have one area.
@@ -597,7 +613,7 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
             (a["type"], a["start"], a["sectors"], False),
             (0x0C, data_at, data_sectors, False),
             (b["type"], b["start"], b["sectors"], False),
-        ], disk_id)
+        ], IU1WXY_DISK_ID if getattr(e["sys"], "ab_v2", False) else disk_id)
 
     for e in sd:
         e["mbr"] = e["dir"] + "/MBR.BIN"
@@ -682,7 +698,11 @@ def compose(entries, default=0, timeout_s=5, data_mb=1024, card_bytes=None, uboo
         systems.append({"key": KEYS[i][0], "name": e["name"], "id": system_id(e["name"]),
                         "kind": "extra" if extra else "sd", "data_lba": at, "data_sectors": data_sectors})
     fat.add_file("MENU/CARD.JSON", json.dumps({"data_mode": data_mode, "systems": systems}, indent=1).encode())
-    fat.add_file("boot.scr", make_script_image(script))
+    # The menu: MENU/MENU.SCR (the menu's U-Boot sources it first) and boot.scr. With IU1WXY 0.2.4+ boot.scr is
+    # IU1WXY's own: the system writes it there when it updates itself (x6100-sysupdate bootscr)
+    fat.add_file("MENU/MENU.SCR", make_script_image(script))
+    ab2 = next((e["sys"] for e in sd if getattr(e["sys"], "ab_v2", False)), None)
+    fat.add_file("boot.scr", ab2.ab_script if ab2 is not None else make_script_image(script))
     fat.add_file("boot.cmd", script.encode())
     fat.add_file("bootmenu.env", env_file(default, timeout_s, xiegu, wait))
     readme = ["x6100-multiboot card", ""]

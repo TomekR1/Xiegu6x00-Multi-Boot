@@ -27,7 +27,7 @@ KNOWN = {"Xiegu-Multi-Patcher-Windows.zip", "Xiegu-Multi-Patcher-macOS.zip", "Xi
 # A former test version kept as a page with a link to the release (links to it went round): pruning leaves it
 MOVED = "<!-- moved-to-main -->"
 # Test versions kept while final releases come out (alphas tested on the radio for longer)
-KEEP_TESTS = ("talk-alpha",)
+KEEP_TESTS = ("talk-alpha", "iu1wxy-alpha")
 
 
 def gh(*args, check=True):
@@ -62,6 +62,24 @@ Uwagi i błędy / Feedback: [Issues](https://github.com/{repo}/issues).
 """
 
 
+IU1WXY_NOTES = """**Wersja alfa: IU1WXY 0.2.4 i nowsze (X6100 Link) na karcie multiboot.** Do testów na radiu; zwykłe wydanie: [Releases](https://github.com/{repo}/releases/latest).
+**Alpha: IU1WXY 0.2.4 and newer (X6100 Link) on a multi-boot card.** For testing on the radio; the regular release: [Releases](https://github.com/{repo}/releases/latest).
+
+Windows {w} · macOS {m} · Linux {l}. Pliki jak w zwykłym wydaniu: `.zip` dla swojego komputera, w środku instrukcja. / The files as in the regular release: the `.zip` for your computer, with the guide inside.
+
+### Co się zmienia / What changes
+- IU1WXY 0.2.4+ znajduje swoją kartę po podpisie dysku i sam zapisuje swój `boot.scr`. Menu jest teraz w `MENU/MENU.SCR`, a U-Boot menu czyta je jako pierwsze, więc aktualizacja IU1WXY z radia nie zabiera menu. / IU1WXY 0.2.4+ finds its card by the disk signature and writes its own `boot.scr`. The menu now lives in `MENU/MENU.SCR`, which the menu's U-Boot reads first, so updating IU1WXY from the radio does not take the menu away.
+- U-Boot menu umie zapisywać na partycji BOOT (`fatwrite`, `mv`): IU1WXY trzyma tam stan A/B. / The menu's U-Boot can write to the BOOT partition (`fatwrite`, `mv`): IU1WXY keeps its A/B state there.
+- Z IU1WXY 0.2.4+ partycja BOOT zaczyna się od 4 MiB: jego aktualizacja programu startowego (x6100-ubootupd) wtedy odmawia i U-Boot menu zostaje. / With IU1WXY 0.2.4+ the BOOT partition starts at 4 MiB: its boot loader update (x6100-ubootupd) then refuses, and the menu's U-Boot stays.
+
+### Do sprawdzenia na radiu / To check on the radio
+- Start IU1WXY z menu, potem ponowne włączenie: menu nadal jest. / IU1WXY from the menu, then power on again: the menu is still there.
+- Aktualizacja IU1WXY z radia, potem start innego systemu z menu. / Update IU1WXY from the radio, then start another system from the menu.
+
+Uwagi i błędy / Feedback: [Issues](https://github.com/{repo}/issues).
+"""
+
+
 def notice():
     """A notice for this release, centred in the middle of its description (.github/NOTICE.md; ""
     without it: take the file away once it no longer applies)"""
@@ -87,6 +105,8 @@ def whats_new():
 def notes(v):
     if TEST and (os.environ.get("GIVEN") or "").startswith("talk-alpha"):
         return TALK_NOTES.format(w=v["windows"], m=v["macos"], l=v["linux"], repo=REPO)
+    if TEST and (os.environ.get("GIVEN") or "").startswith("iu1wxy-alpha"):
+        return IU1WXY_NOTES.format(w=v["windows"], m=v["macos"], l=v["linux"], repo=REPO)
     if TEST:
         return ("**Wersja testowa (pre-release), nie do zwykłego użytku.**\n\n"
                 "**A test version (pre-release), not for everyday use.**\n\n"

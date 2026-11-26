@@ -3,6 +3,7 @@
     python -m unittest discover -s tests
 """
 import os
+import re
 import struct
 import sys
 import tempfile
@@ -26,14 +27,17 @@ bootz 0x46000000 - 0x49000000
 """
 
 
-def fake_card(path, kernel=b"K" * 3000, root_mb=8, script=None, extra=None):
+def fake_card(path, kernel=b"K" * 3000, root_mb=8, script=None, extra=None, slot_b=False):
     boot_lba, boot_size = 2048, 40 * MIB
     root_lba = boot_lba + boot_size // SECTOR
-    size = root_lba * SECTOR + root_mb * MIB
+    size = root_lba * SECTOR + root_mb * MIB * (3 if slot_b else 1)
     plan = Plan(size)
     from x6100mb.extents import Data
+    rs = root_mb * MIB // SECTOR
     plan.add(0, Data(make_mbr([(0x0C, boot_lba, boot_size // SECTOR, True),
-                               (0x83, root_lba, root_mb * MIB // SECTOR, False), None, None], 0x1234)))
+                               (0x83, root_lba, rs, False),
+                               (0x0C, root_lba + rs, rs, False) if slot_b else None,
+                               (0x83, root_lba + 2 * rs, rs, False) if slot_b else None], 0x1234)))
     spl = bytearray(MIB - 8192)
     spl[4:12] = b"eGON.BT0"
     spl[100:130] = b"U-Boot SPL 2026.07 (test)\x00\x00\x00\x00\x00"
@@ -449,17 +453,80 @@ fi
         s = SourceSystem(z, raw)
         self.assertIn("kernel", s.files)
 
-    def test_iu1wxy_0_2_4_said_plainly(self):
-        """IU1WXY 0.2.4+ (X6100 Link) finds its root by the disk signature and rewrites the card's boot
-        script and loader: refused with a plain reason, not a puzzling one"""
-        from x6100mb.image import ImageError
-        p = os.path.join(self.tmp, "x6100-link-0.2.5-sdcard.img")
-        fake_card(p, script='setenv kaddr 0x46000000\nif ext4load mmc 0:2 ${kaddr} /boot/zImage; then '
-                            'setenv bootargs "root=PARTUUID=58363130-02 rw"; bootz ${kaddr} - ${daddr}; fi\n',
+    IU1WXY_V2 = (
+        'if test -z "${devnum}"; then setenv devnum 0; fi\nsetenv kaddr 0x46000000\nsetenv daddr 0x49000000\n'
+        "setenv ab_write 'env export -t -s 256 0x44000000 slot zend && fatwrite mmc ${devnum}:1 0x44000000 ab.tmp "
+        "${filesize} && mv mmc ${devnum}:1 ab.tmp ab.env'\n"
+        'for s in a b; do\n if test "${s}" = a; then setenv part 2; else setenv part 4; fi\n'
+        ' if ext4load mmc ${devnum}:${part} ${kaddr} /boot/zImage; then\n'
+        '  if ext4load mmc ${devnum}:${part} ${daddr} /boot/sun8i-r16-x6100.dtb; then\n'
+        '   setenv bootargs "console=ttyS0,115200 root=PARTUUID=58363130-0${part} rw rootwait x6100.slot=${s}"\n'
+        '   wdt dev watchdog@1c20ca0\n   bootz ${kaddr} - ${daddr}\n  fi\n fi\ndone\n')
+
+    def _v2_image(self, name="x6100-link-0.2.5-sdcard.img"):
+        p = os.path.join(self.tmp, name)
+        fake_card(p, script=self.IU1WXY_V2, slot_b=True,
                   extra={"AB.ENV": b"slot=a\nzend=1\n", "AB.BAK": b"slot=a\nzend=1\n"})
-        with self.assertRaises(ImageError) as cm:
-            SourceSystem(p, p)
-        self.assertIn("0.2.3", str(cm.exception))
+        return SourceSystem(p, p)
+
+    def test_iu1wxy_0_2_4_recognised(self):
+        """IU1WXY 0.2.4+ (X6100 Link): an A/B system whose slots are p2 and p4, found by its disk signature"""
+        s = self._v2_image()
+        self.assertTrue(s.is_ab)
+        self.assertTrue(s.ab_v2)
+        self.assertEqual(sorted(s.ab_slots), ["a", "b"])
+        self.assertEqual(s.kernel_file, "/boot/zImage")
+
+    def test_iu1wxy_0_2_4_card(self):
+        """With IU1WXY 0.2.4+ on the card: the menu in MENU/MENU.SCR (the menu's U-Boot reads it first), boot.scr is
+        IU1WXY's own (it rewrites it when updating), BOOT at 4 MiB (its boot loader update refuses such a card),
+        its table carries the signature 0x58363130 and its slots as p2/p4; the others keep a table of their own"""
+        import io
+        from x6100mb.compose import IU1WXY_DISK_ID
+        for mode in ("separate", "shared"):
+            b = os.path.join(self.tmp, "o-%s.img" % mode)
+            fake_card(b)
+            sa = self._v2_image("v2-%s.img" % mode)
+            entries = [{"kind": "sd", "name": "OpenX6X00", "sys": SourceSystem(b, b)},
+                       {"kind": "sd", "name": "IU1WXY", "sys": sa}]
+            out = os.path.join(self.tmp, "v2card-%s.img" % mode)
+            write_image_file(compose(entries, data_mb=40, data_mode=mode), out)
+            with open(out, "rb") as f:
+                parts = {p[0]: p for p in read_mbr(f)}
+                self.assertEqual(parts[1][2], 4 * 2048, mode)
+                f.seek(440)
+                self.assertNotEqual(f.read(4), b"016X", mode)        # the card itself: not IU1WXY's yet
+                boot = FatReader(f, parts[1][2] * SECTOR)
+                menu = parse_script_image(boot.read_file("MENU/MENU.SCR"))
+                own = parse_script_image(boot.read_file("boot.scr"))
+                ab_mbr = boot.read_file("SYS2/MBR.BIN")
+                other = boot.read_file("SYS1/MBR.BIN")
+                self.assertIsNotNone(boot.find("ab.env"))
+            self.assertIn("bm_boot2", menu)
+            self.assertIn("PARTUUID=58363130", own)
+            self.assertNotIn("bm_boot", own)
+            self.assertEqual(ab_mbr[440:444], b"016X", mode)       # 0x58363130, as x6100-finddisk reads it
+            self.assertEqual(IU1WXY_DISK_ID.to_bytes(4, "little"), b"016X")
+            self.assertNotEqual(other[440:444], b"016X", mode)
+            ab = {p[0]: p for p in read_mbr(io.BytesIO(ab_mbr))}
+            self.assertEqual(ab[1][2], 4 * 2048)
+            self.assertEqual(ab[2][2], parts[5][2], mode)
+            self.assertEqual(ab[4][2], parts[6][2], mode)
+            boot2 = re.search(r"setenv bm_boot2 '([^']*)'", menu).group(1)
+            self.assertIn("fatload mmc 0:1 ${scriptaddr} boot.scr", boot2)
+            self.assertIn("SYS2/IU1WXY.SCR", boot2)
+
+    def test_card_without_iu1wxy_0_2_4(self):
+        """Without IU1WXY 0.2.4+ nothing moves: BOOT at 1 MiB, boot.scr and MENU/MENU.SCR both the menu"""
+        a = os.path.join(self.tmp, "plain.img")
+        fake_card(a)
+        out = os.path.join(self.tmp, "plaincard.img")
+        write_image_file(compose([{"kind": "sd", "name": "A", "sys": SourceSystem(a, a)}], data_mb=40), out)
+        with open(out, "rb") as f:
+            parts = {p[0]: p for p in read_mbr(f)}
+            self.assertEqual(parts[1][2], 2048)
+            boot = FatReader(f, parts[1][2] * SECTOR)
+            self.assertEqual(boot.read_file("boot.scr"), boot.read_file("MENU/MENU.SCR"))
 
     def test_names_without_versions(self):
         """Menu names without version numbers (systems update themselves); two of one project keep
