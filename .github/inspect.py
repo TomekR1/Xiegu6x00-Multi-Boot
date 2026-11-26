@@ -68,7 +68,8 @@ def ext_look(f, raw, p):
     import tempfile
     root = tempfile.mkdtemp()
     subprocess.run(["debugfs", "-R", "rdump / " + root, part], capture_output=True)
-    r = subprocess.run(["grep", "-rlI", "-e", "ubootupd", "-e", "PONTE", "-e", "x6100ub", root],
+    r = subprocess.run(["grep", "-rlI", "-e", "boot.scr", "-e", "/dev/mmcblk0p1", "-e", "ab.env", root + "/usr/sbin",
+                        root + "/usr/libexec", root + "/etc/init.d", root + "/usr/bin"],
                        capture_output=True, text=True)
     for fn in sorted(set(r.stdout.split()))[:12]:
         try:
@@ -76,7 +77,10 @@ def ext_look(f, raw, p):
         except OSError:
             continue
         print("  ==== p%d file %s (%d lines)" % (p[0], fn[len(root):], text.count("\n")))
-        print("\n".join("    : " + l for l in text.splitlines()[:700]))
+        lines = text.splitlines()
+        keep = [i for i, l in enumerate(lines) if re.search(r"boot\.scr|mmcblk0p1|ab\.env|/boot|fatwrite|mount", l)]
+        shown = sorted({j for i in keep for j in range(max(0, i - 3), min(len(lines), i + 4))})
+        print("\n".join("    %4d: %s" % (j + 1, lines[j]) for j in shown[:220]))
     shutil.rmtree(root, ignore_errors=True)
     os.remove(part)
 
