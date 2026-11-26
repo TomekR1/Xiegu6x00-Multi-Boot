@@ -35,7 +35,8 @@ SOURCES = [
      "feeds": [("TheMurusTeam/x6100_gui", r"^sdcard-1KO125-[\w.\-]+\.img\.zip$")],
      "about": "1KO125 (na bazie OpenX6100): WEFAX, SSTV, NAVTEX, DSC, FT8 CB; na razie wersje testowe"},
     {"id": "iu1wxy", "name": "IU1WXY",
-     "feeds": [("IU1WXY/X6100-IU1WXY", r"^x6100-iu1wxy-[\d.]+-sdcard\.img$")],
+     # renamed "X6100 Link" from 0.2.4 on: x6100-link-0.2.5-sdcard.img.xz (before: x6100-iu1wxy-0.2.3-sdcard.img)
+     "feeds": [("IU1WXY/X6100-IU1WXY", r"^x6100-(iu1wxy|link)-[\d.]+-sdcard\.img(\.xz)?$")],
      "about": "IU1WXY (X6100 Link): oprogramowanie zamknięte, na warunkach autora (LICENSE w jego repo)",
      "no_logo": True},
     {"id": "r1cbu", "name": "R1CBU",

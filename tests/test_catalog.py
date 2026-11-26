@@ -157,3 +157,16 @@ class SafeNameTest(unittest.TestCase):
         self.assertEqual(catalog._safe_name("OpenX6X00-x6100-v0.3.9-sdcard.img.zip"),
                          "OpenX6X00-x6100-v0.3.9-sdcard.img.zip")
         self.assertEqual(catalog._safe_name("v1.2 beta"), "v1.2_beta")
+
+
+class Iu1wxyNamesTest(unittest.TestCase):
+    def test_old_and_new_file_names(self):
+        """IU1WXY renamed its card image with 0.2.4 ("X6100 Link", .img.xz): both are found"""
+        src = next(x for x in catalog.SOURCES if x["id"] == "iu1wxy")
+        answer = [{"tag_name": "v0.2.5", "published_at": "2026-11-20T00:00:00Z", "assets": [
+                      {"name": "x6100-link-0.2.5-update.tar.gz", "size": 1, "browser_download_url": "upd"},
+                      {"name": "x6100-link-0.2.5-sdcard.img.xz", "size": 1, "browser_download_url": "new"}]},
+                  {"tag_name": "v0.2.3", "published_at": "2026-11-10T00:00:00Z", "assets": [
+                      {"name": "x6100-iu1wxy-0.2.3-sdcard.img", "size": 1, "browser_download_url": "old"}]}]
+        rels = catalog.releases(src, fetch=lambda url: answer)
+        self.assertEqual([(r["tag"], r["url"]) for r in rels], [("v0.2.5", "new"), ("v0.2.3", "old")])
