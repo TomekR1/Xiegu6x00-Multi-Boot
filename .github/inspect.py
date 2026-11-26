@@ -68,8 +68,7 @@ def ext_look(f, raw, p):
     import tempfile
     root = tempfile.mkdtemp()
     subprocess.run(["debugfs", "-R", "rdump / " + root, part], capture_output=True)
-    r = subprocess.run(["grep", "-rlI", "-e", "boot.scr", "-e", "/dev/mmcblk0p1", "-e", "ab.env", root + "/usr/sbin",
-                        root + "/usr/libexec", root + "/etc/init.d", root + "/usr/bin"],
+    r = subprocess.run(["grep", "-rlI", "-e", "sigstamp", "-e", "bootscr", "-e", "x6100-sysupdate", root + "/usr/libexec", root + "/etc/init.d"],
                        capture_output=True, text=True)
     for fn in sorted(set(r.stdout.split()))[:12]:
         try:
@@ -78,7 +77,8 @@ def ext_look(f, raw, p):
             continue
         print("  ==== p%d file %s (%d lines)" % (p[0], fn[len(root):], text.count("\n")))
         lines = text.splitlines()
-        keep = [i for i, l in enumerate(lines) if re.search(r"boot\.scr|mmcblk0p1|ab\.env|/boot|fatwrite|mount", l)]
+        whole = len(lines) < 120 or "sigstamp" in fn or "S00" in fn
+        keep = range(len(lines)) if whole else [i for i, l in enumerate(lines) if re.search(r"boot\.scr|mmcblk0p1|ab\.env|/boot|fatwrite|mount|bootscr", l)]
         shown = sorted({j for i in keep for j in range(max(0, i - 3), min(len(lines), i + 4))})
         print("\n".join("    %4d: %s" % (j + 1, lines[j]) for j in shown[:220]))
     shutil.rmtree(root, ignore_errors=True)
