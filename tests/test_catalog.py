@@ -170,3 +170,21 @@ class Iu1wxyNamesTest(unittest.TestCase):
                       {"name": "x6100-iu1wxy-0.2.3-sdcard.img", "size": 1, "browser_download_url": "old"}]}]
         rels = catalog.releases(src, fetch=lambda url: answer)
         self.assertEqual([(r["tag"], r["url"]) for r in rels], [("v0.2.5", "new"), ("v0.2.3", "old")])
+
+
+class RenamedFileTest(unittest.TestCase):
+    def test_a_renamed_image_is_still_found(self):
+        """A project renaming its card image does not hide its new releases: the X6100 image is
+        taken by its kind (never an X6200's, never an update bundle), marked as guessed"""
+        src = catalog.SOURCES[0]                       # OpenX6X00
+        answer = [{"tag_name": "v0.4.0", "published_at": "2026-12-01T00:00:00Z", "assets": [
+                      {"name": "NewName-x6200-v0.4.0-card.img.xz", "size": 1, "browser_download_url": "x6200"},
+                      {"name": "NewName-v0.4.0-update.tar.gz", "size": 1, "browser_download_url": "upd"},
+                      {"name": "NewName-x6100-v0.4.0-card.img.xz", "size": 1, "browser_download_url": "x6100"}]},
+                  {"tag_name": "v0.3.13", "published_at": "2026-11-21T00:00:00Z", "assets": [
+                      {"name": "OpenX6X00-x6100-v0.3.13-sdcard.img.zip", "size": 1, "browser_download_url": "usual"}]},
+                  {"tag_name": "v0.3.12", "published_at": "2026-11-14T00:00:00Z", "assets": [
+                      {"name": "notes.txt", "size": 1, "browser_download_url": "n"}]}]
+        rels = catalog.releases(src, fetch=lambda url: answer)
+        self.assertEqual([(r["tag"], r["url"], r["guessed"]) for r in rels],
+                         [("v0.4.0", "x6100", True), ("v0.3.13", "usual", False)])

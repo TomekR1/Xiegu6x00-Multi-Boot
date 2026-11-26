@@ -98,7 +98,8 @@ def cli(argv):
             print(f"{src['id']:10s} {src['name']} ({', '.join(r for r, _ in src['feeds'])})")
             try:
                 for r in catalog.releases(src)[:5]:
-                    print(f"    {r['tag']:12s} {r['date']}  {r['size'] >> 20} MB{'  (test)' if r['prerelease'] else ''}")
+                    print(f"    {r['tag']:12s} {r['date']}  {r['size'] >> 20} MB{'  (test)' if r['prerelease'] else ''}"
+                          + (f"  (file name guessed: {r['asset']})" if r.get("guessed") else ""))
             except catalog.CatalogError as e:
                 print(f"    error: {e}")
         return 0

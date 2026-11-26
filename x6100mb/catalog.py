@@ -222,37 +222,50 @@ def kept_since(source):
     return min(times) if times else None
 
 
+def _pick_image(assets, pat=None):
+    """The release's X6100 card image: by the project's own file name (pat) when it has one, else,
+    whatever it is called (a project renamed its file, or a repository of the user's), an .img,
+    .img.zip or .img.xz, the X6100's before any other, never an X6200's. (asset, guessed) or (None, _)"""
+    if pat is not None:
+        for a in assets:
+            if pat.search(a.get("name", "")):
+                return a, False
+    anyimg = re.compile(ANY_IMAGE, re.I)
+    for a in sorted((a for a in assets if "x6200" not in a.get("name", "").lower()),
+                    key=lambda a: _rank(a.get("name", ""))):
+        if anyimg.search(a.get("name", "")):
+            return a, pat is not None
+    return None, False
+
+
 def releases(source, n=15, fetch=_get):
-    """[{"tag", "date", "prerelease", "asset", "size", "url", "sha256", "repo"}] newest first,
-    from every repository the source publishes in"""
+    """[{"tag", "date", "prerelease", "asset", "size", "url", "sha256", "repo", "guessed"}] newest
+    first, from every repository the source publishes in. "guessed": the file's name was not the
+    project's usual one (it renamed it): the image was found anyway, and the pattern wants updating."""
     out = []
     for repo, asset in source["feeds"]:
         data = fetch(API.format(repo=repo, n=n))
         if not isinstance(data, list):
             raise CatalogError(t("nieoczekiwana odpowiedź GitHuba"))
-        pat = re.compile(asset or ANY_IMAGE, re.I)
+        pat = re.compile(asset, re.I) if asset else None
         for r in data:
             if r.get("draft"):
                 continue
-            assets = r.get("assets", [])
-            if asset is None:           # a repository of the user's: its X6100 card image, whatever its name
-                assets = sorted((a for a in assets if "x6200" not in a.get("name", "").lower()),
-                                key=lambda a: _rank(a.get("name", "")))
-            for a in assets:
-                if not pat.search(a.get("name", "")):
-                    continue
-                digest = a.get("digest") or ""
-                out.append({
-                    "tag": r.get("tag_name", "?"),
-                    "date": (r.get("published_at") or "")[:10],
-                    "prerelease": bool(r.get("prerelease")),
-                    "asset": a["name"],
-                    "size": int(a.get("size") or 0),
-                    "url": a["browser_download_url"],
-                    "sha256": digest[7:] if digest.startswith("sha256:") else None,
-                    "repo": repo,
-                })
-                break
+            a, guessed = _pick_image(r.get("assets", []), pat)
+            if a is None:
+                continue
+            digest = a.get("digest") or ""
+            out.append({
+                "tag": r.get("tag_name", "?"),
+                "date": (r.get("published_at") or "")[:10],
+                "prerelease": bool(r.get("prerelease")),
+                "asset": a["name"],
+                "size": int(a.get("size") or 0),
+                "url": a["browser_download_url"],
+                "sha256": digest[7:] if digest.startswith("sha256:") else None,
+                "repo": repo,
+                "guessed": guessed,
+            })
     out.sort(key=lambda x: x["date"], reverse=True)
     return out
 
