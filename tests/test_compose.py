@@ -431,6 +431,22 @@ fi
         self.assertEqual(sum(n.upper() == "MBR.BIN" for n in sys2), 1)
         self.assertNotEqual(table[3][2], other[3][2])             # OpenX6X00's own DATA, not R1CBU's
 
+    def test_zip_with_several_images(self):
+        """1KO125 1.2: two .img in its .zip; the card image is picked (partition table, X6100's, largest)"""
+        import zipfile
+        from x6100mb.image import open_source
+        card = os.path.join(self.tmp, "card.img")
+        fake_card(card)
+        z = os.path.join(self.tmp, "sdcard-1KO125-1.2.img.zip")
+        with zipfile.ZipFile(z, "w") as f:
+            f.writestr("extra/wefax.img", b"\0" * 4096)                    # no partition table
+            f.writestr("sdcard-x6200.img", open(card, "rb").read())        # another radio's card
+            f.write(card, "sdcard-1KO125-1.2.img")
+        raw = open_source(z, os.path.join(self.tmp, "cache"))
+        self.assertTrue(os.path.basename(raw).startswith("sdcard-1KO125-1.2.img"))
+        s = SourceSystem(z, raw)
+        self.assertIn("kernel", s.files)
+
     def test_names_without_versions(self):
         """Menu names without version numbers (systems update themselves); two of one project keep
         theirs; a name the user typed is kept"""

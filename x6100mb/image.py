@@ -159,6 +159,28 @@ def _unxz(path, cache_dir, progress=None):
     return out
 
 
+def _card_in_zip(z, imgs, path):
+    """The card image among several in a zip (1KO125 1.2 put two in its .zip): one that starts with a
+    partition table, the X6100's (by its name) before any other and never an X6200's, else the
+    largest; whatever the project calls its files"""
+    def has_table(info):
+        try:
+            with z.open(info) as f:
+                return f.read(SECTOR)[510:512] == b"\x55\xaa"
+        except Exception:
+            return False
+    cards = [i for i in imgs if has_table(i)]
+    x6100 = [i for i in cards if "x6200" not in i.filename.lower()]
+    pool = x6100 or cards
+    if not pool:
+        raise ImageError(f"{os.path.basename(path)}: none of the {len(imgs)} images inside the zip is a card image")
+
+    def rank(i):
+        n = os.path.basename(i.filename).lower()
+        return (0 if "x6100" in n else 1, 0 if "sdcard" in n or "card" in n else 1, -i.file_size)
+    return sorted(pool, key=rank)[0]
+
+
 def open_source(path, cache_dir, progress=None):
     """The raw image's path: a .zip or .xz is unpacked into cache_dir first (once)"""
     with open(path, "rb") as f:
@@ -168,10 +190,10 @@ def open_source(path, cache_dir, progress=None):
     if not zipfile.is_zipfile(path):
         return path
     with zipfile.ZipFile(path) as z:
-        imgs = [i for i in z.infolist() if i.filename.lower().endswith((".img", ".bin", ".raw"))]
-        if len(imgs) != 1:
-            raise ImageError(f"{os.path.basename(path)}: expected one .img inside the zip, found {len(imgs)}")
-        info = imgs[0]
+        imgs = [i for i in z.infolist() if not i.is_dir() and i.filename.lower().endswith((".img", ".bin", ".raw"))]
+        if not imgs:
+            raise ImageError(f"{os.path.basename(path)}: no .img inside the zip")
+        info = imgs[0] if len(imgs) == 1 else _card_in_zip(z, imgs, path)
         os.makedirs(cache_dir, exist_ok=True)
         st = os.stat(path)
         out = os.path.join(cache_dir, f"{os.path.basename(info.filename)}.{int(st.st_mtime)}.{st.st_size}")
