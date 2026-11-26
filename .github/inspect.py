@@ -11,6 +11,30 @@ from x6100mb import catalog                                   # noqa: E402
 from x6100mb.compose import compose, kernel_donor, name_entries  # noqa: E402
 from x6100mb.image import SourceSystem, cache_dir, open_source   # noqa: E402
 
+def dump(raw):
+    """The image's partitions, each FAT's files and every boot script, whatever the app makes of it"""
+    from x6100mb.fat import FatReader
+    from x6100mb.image import SECTOR, parse_script_image, read_mbr
+    with open(raw, "rb") as f:
+        parts = read_mbr(f)
+        print("  partitions (n, type, start, sectors, boot):", parts)
+        for p in parts:
+            f.seek(p[2] * SECTOR + 1024)
+            sb = f.read(1024)
+            kind = "ext" if sb[56:58] == b"\x53\xef" else ""
+            try:
+                fat = FatReader(f, p[2] * SECTOR)
+                names = [e[0] for e in fat.listdir()]
+                print("  p%d FAT: %s" % (p[0], names))
+                for n in names:
+                    if n.lower().endswith((".scr", ".cmd", ".env", ".txt", ".bak")):
+                        data = fat.read_file(n)
+                        text = parse_script_image(data) if n.lower().endswith(".scr") else data.decode(errors="replace")
+                        print("  ---- p%d/%s:\n%s" % (p[0], n, "\n".join("    | " + l for l in text.splitlines()[:80])))
+            except Exception as e:
+                print("  p%d %s (not FAT: %s)" % (p[0], kind, type(e).__name__))
+
+
 specs = sys.argv[1:]
 systems = {}
 for spec in specs:
@@ -34,6 +58,7 @@ for spec in specs:
                           head[510:512] == b"\x55\xaa"))
         raw = open_source(path, cache_dir())
         print("  image used:", os.path.basename(raw))
+        dump(raw)
         s = SourceSystem(path, raw)
         print("  partitions:", s.parts)
         print("  boot files:", getattr(s, "boot_files", None))

@@ -190,7 +190,9 @@ def open_source(path, cache_dir, progress=None):
     if not zipfile.is_zipfile(path):
         return path
     with zipfile.ZipFile(path) as z:
-        imgs = [i for i in z.infolist() if not i.is_dir() and i.filename.lower().endswith((".img", ".bin", ".raw"))]
+        # (a Mac's Finder adds __MACOSX/._name next to each file: no image, left out)
+        imgs = [i for i in z.infolist() if not i.is_dir() and i.filename.lower().endswith((".img", ".bin", ".raw"))
+                and not i.filename.startswith("__MACOSX/") and not os.path.basename(i.filename).startswith("._")]
         if not imgs:
             raise ImageError(f"{os.path.basename(path)}: no .img inside the zip")
         info = imgs[0] if len(imgs) == 1 else _card_in_zip(z, imgs, path)
