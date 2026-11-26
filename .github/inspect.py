@@ -61,9 +61,22 @@ def ext_look(f, raw, p):
     pat = re.compile(r"(seek=8\b|seek=16\b|bs=1024 seek|u-boot-sunxi|x6100ub|mmcblk0 .*seek|of=/dev/mmcblk0\b|"
                      r"boot ?loader|bootloader|flash_uboot|uboot\.bin|u-boot\.bin|spl)", re.I)
     hits = sorted({l.strip()[:200] for l in r.stdout.splitlines() if pat.search(l)})
-    print("  p%d strings about writing a boot loader (%d):" % (p[0], len(hits)))
-    for l in hits[:80]:
-        print("    ~ " + l)
+    print("  p%d strings about writing a boot loader: %d" % (p[0], len(hits)))
+    # the files behind it, whole: the boot loader's updater and what starts it
+    import shutil
+    import tempfile
+    root = tempfile.mkdtemp()
+    subprocess.run(["debugfs", "-R", "rdump / " + root, part], capture_output=True)
+    r = subprocess.run(["grep", "-rlI", "-e", "ubootupd", "-e", "PONTE", "-e", "x6100ub", root],
+                       capture_output=True, text=True)
+    for fn in sorted(set(r.stdout.split()))[:12]:
+        try:
+            text = open(fn, errors="replace").read()
+        except OSError:
+            continue
+        print("  ==== p%d file %s (%d lines)" % (p[0], fn[len(root):], text.count("\n")))
+        print("\n".join("    : " + l for l in text.splitlines()[:700]))
+    shutil.rmtree(root, ignore_errors=True)
     os.remove(part)
 
 
