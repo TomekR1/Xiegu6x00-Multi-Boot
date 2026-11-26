@@ -27,7 +27,7 @@ KNOWN = {"Xiegu-Multi-Patcher-Windows.zip", "Xiegu-Multi-Patcher-macOS.zip", "Xi
 # A former test version kept as a page with a link to the release (links to it went round): pruning leaves it
 MOVED = "<!-- moved-to-main -->"
 # Test versions kept while final releases come out (alphas tested on the radio for longer)
-KEEP_TESTS = ("talk-alpha",)
+KEEP_TESTS = ("talk-alpha", "iu1wxy-alpha")
 
 
 def gh(*args, check=True):
